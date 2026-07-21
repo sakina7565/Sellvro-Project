@@ -18,7 +18,7 @@ export default {
           900: '#28327f',
         },
         surface: {
-          bg: '#ece8e1',
+          bg: '#ffffff',
           card: '#ffffff',
         },
       },

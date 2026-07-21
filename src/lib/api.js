@@ -10,14 +10,25 @@ export class ApiError extends Error {
 }
 
 function fallbackMessage(status) {
+  const liveMissingApi =
+    import.meta.env.PROD && !import.meta.env.VITE_API_URL
+
   if (status === 0) {
-    return 'Cannot connect to the server. Start the API with `npm run dev:server` and allow your IP in MongoDB Atlas → Network Access.'
+    return liveMissingApi
+      ? 'Cannot reach API. On Vercel set VITE_API_URL to your Railway URL ending with /api, then redeploy.'
+      : 'Backend is not running. Open a second terminal and run: npm run dev:server (then keep both npm run dev and npm run dev:server open).'
   }
   if (status === 401) return 'Invalid email or password.'
   if (status === 403) return 'You do not have permission to do that.'
-  if (status === 404) return 'API route not found. Is the backend running?'
+  if (status === 404) {
+    return liveMissingApi
+      ? 'API not found on this site. Set Vercel env VITE_API_URL=https://YOUR-RAILWAY-URL/api and redeploy.'
+      : 'API route not found. Is the backend running on port 5001?'
+  }
   if (status === 500 || status === 502 || status === 503 || status === 504) {
-    return 'Server error. The API may be down or MongoDB Atlas is blocking this IP. Check Network Access in Atlas and run `npm run dev:server`.'
+    return liveMissingApi
+      ? 'Live frontend is not connected to Railway. Set VITE_API_URL on Vercel (https://YOUR-RAILWAY.app/api) and redeploy.'
+      : 'Cannot reach API on port 5001. Run `npm run dev:server` in a separate terminal, wait for "Server running on port 5001", then try login again.'
   }
   return `Request failed (HTTP ${status}).`
 }

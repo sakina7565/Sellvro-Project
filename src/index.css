@@ -3,9 +3,11 @@
 @tailwind utilities;
 
 html,
-body {
+body,
+#root {
   font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
-  background-color: #ece8e1;
+  background-color: #ffffff;
+  min-height: 100%;
 }
 
 * {

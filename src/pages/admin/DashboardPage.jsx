@@ -1,58 +1,38 @@
-import { SlidersHorizontal, Users, Truck, ShoppingBag, DollarSign, CreditCard, AlertTriangle, PackageSearch } from 'lucide-react'
+import { Truck, FileText, Coins, Scale, AlertTriangle, Clock, Wallet } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
-import PageHeader from '../../components/admin/PageHeader.jsx'
-import StatCard from '../../components/dashboard/StatCard.jsx'
-import RevenueChart from '../../components/dashboard/RevenueChart.jsx'
-import Card from '../../components/ui/Card.jsx'
-import Button from '../../components/ui/Button.jsx'
+import PanelDashboard from '../../components/dashboard/PanelDashboard.jsx'
+import { useAuth } from '../../context/AuthContext.jsx'
+import { FEATURED_MODULE, GRID_MODULES } from '../../lib/adminDashboardModules.js'
 
 const OVERVIEW_STATS = [
-  { label: 'Total Users', value: 10, icon: Users, tone: 'yellow' },
-  { label: 'Total Suppliers', value: 15, icon: Truck, tone: 'blue' },
-  { label: 'Total Orders', value: 3, icon: ShoppingBag, tone: 'pink' },
-  { label: 'Total Revenue', value: '$0', icon: DollarSign, tone: 'teal' },
-  { label: 'Payments', value: 400, icon: CreditCard, tone: 'red' },
-  { label: 'Disputes', value: 2, icon: AlertTriangle, tone: 'teal' },
+  { label: 'Total Orders', value: 3, icon: Truck, tone: 'yellow' },
+  { label: 'Pending Orders', value: 0, icon: FileText, tone: 'blue' },
+  { label: 'Total Revenue', value: '$0', icon: Coins, tone: 'pink' },
+  { label: 'Payments', value: '$400', icon: Scale, tone: 'teal' },
 ]
 
 const PENDING_TASKS = [
-  { label: 'Pending Users', value: 5, icon: Users, tone: 'yellow' },
-  { label: 'Pending Suppliers', value: 12, icon: PackageSearch, tone: 'blue' },
-  { label: 'Pending Payout', value: 2, icon: DollarSign, tone: 'pink' },
-  { label: 'Pending Request', value: 1, icon: AlertTriangle, tone: 'teal' },
+  { label: 'Disputes', value: 2, icon: AlertTriangle, tone: 'red' },
+  { label: 'Pending Suppliers', value: 12, icon: Clock, tone: 'yellow' },
+  { label: 'Pending Payout', value: '$0', icon: Wallet, tone: 'teal' },
 ]
 
 function DashboardPage() {
+  const { user } = useAuth()
+  const displayName = user?.fullName || 'Admin'
+
   return (
     <AdminLayout>
-      <PageHeader
-        title="Overview"
-        action={
-          <Button variant="outline" size="sm" className="border border-slate-200">
-            <SlidersHorizontal className="h-4 w-4" />
-            Filter
-          </Button>
-        }
+      <PanelDashboard
+        panelLabel="Admin Panel"
+        displayName={displayName}
+        welcomeTitle={`Hi! ${displayName}, Manage your Warehouse With Ease!`}
+        welcomeSubtitle="Where Smart Inventory Meets Powerful Logistics — track products, orders, suppliers and finances from one place."
+        featuredModule={FEATURED_MODULE}
+        gridModules={GRID_MODULES}
+        overviewStats={OVERVIEW_STATS}
+        pendingTasks={PENDING_TASKS}
       />
-
-
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {OVERVIEW_STATS.map((stat) => (
-          <StatCard key={stat.label} {...stat} />
-        ))}
-      </div>
-
-      <h2 className="mb-3 mt-8 text-base font-bold text-slate-900">Pending Tasks</h2>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {PENDING_TASKS.map((task) => (
-          <StatCard key={task.label} {...task} />
-        ))}
-      </div>
-
-      <h2 className="mb-3 mt-8 text-base font-bold text-slate-900">Monthly Revenue</h2>
-      <Card className="shadow-soft p-5">
-        <RevenueChart />
-      </Card>
     </AdminLayout>
   )
 }

@@ -69,8 +69,8 @@ function NavItem({ item }) {
 }
 
 /**
- * Generic left navigation shell shared by every dashboard-style panel
- * (Admin, Supplier, User).
+ * Mobile-only left navigation drawer. Hidden on desktop (md+);
+ * desktop uses HorizontalNav instead.
  */
 function Sidebar({ navItems, homeTo, isOpen = false, onClose = () => {} }) {
   return (
@@ -84,7 +84,7 @@ function Sidebar({ navItems, homeTo, isOpen = false, onClose = () => {} }) {
       />
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex h-screen w-56 shrink-0 flex-col overflow-y-auto border-r border-slate-100 bg-surface-card transition-transform duration-200 ease-in-out md:static md:z-0 md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex h-screen w-56 shrink-0 flex-col overflow-y-auto border-r border-slate-100 bg-surface-card transition-transform duration-200 ease-in-out md:hidden ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

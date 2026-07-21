@@ -7,13 +7,21 @@ import logoSrc from '../../assets/logo.png'
  */
 function Logo({ size = 'md', className = '' }) {
   const heights = {
-    sm: 22,
-    md: 29,
-    lg: 36,
+    sm: 20,
+    md: 26,
+    lg: 32,
   }
   const height = heights[size] || heights.md
 
-  return <img src={logoSrc} alt="Urbanoas" height={height} style={{ height }} className={`w-auto ${className}`} />
+  return (
+    <img
+      src={logoSrc}
+      alt="Urbanoas"
+      height={height}
+      style={{ height, width: 'auto', maxWidth: '100%' }}
+      className={`w-auto object-contain ${className}`}
+    />
+  )
 }
 
 export default Logo

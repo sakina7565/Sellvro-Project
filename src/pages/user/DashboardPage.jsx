@@ -1,61 +1,38 @@
-import {
-  SlidersHorizontal,
-  Wallet,
-  UserPlus,
-  FileText,
-  Crosshair,
-  User,
-  Briefcase,
-  BarChart3,
-} from 'lucide-react'
+import { Truck, FileText, Coins, Scale, AlertTriangle, Clock, Wallet } from 'lucide-react'
 import UserLayout from '../../components/layout/UserLayout.jsx'
-import PageHeader from '../../components/admin/PageHeader.jsx'
-import StatCard from '../../components/dashboard/StatCard.jsx'
-import MonthlyRevenueChart from '../../components/dashboard/MonthlyRevenueChart.jsx'
-import Button from '../../components/ui/Button.jsx'
+import PanelDashboard from '../../components/dashboard/PanelDashboard.jsx'
+import { useAuth } from '../../context/AuthContext.jsx'
+import { USER_FEATURED_MODULE, USER_GRID_MODULES } from '../../lib/userDashboardModules.js'
 
 const OVERVIEW_STATS = [
-  { label: 'Total Wallet', value: '$0.00', icon: Wallet, tone: 'yellow' },
-  { label: 'Purchased', value: '$0.00', icon: UserPlus, tone: 'blue' },
-  { label: 'Total Orders', value: 0, icon: FileText, tone: 'pink' },
-  { label: 'Pending Amount', value: '$0.00', icon: Crosshair, tone: 'teal' },
+  { label: 'Fulfillment Orders', value: 0, icon: Truck, tone: 'yellow' },
+  { label: 'Pending Orders', value: 0, icon: FileText, tone: 'blue' },
+  { label: 'Total Invoices', value: 0, icon: Coins, tone: 'pink' },
+  { label: 'Billing (Paid)', value: '$0', icon: Scale, tone: 'teal' },
 ]
 
 const PENDING_TASKS = [
-  { label: 'Disputes', value: 0, icon: User, tone: 'blue' },
-  { label: 'Pending Orders', value: 0, icon: Briefcase, tone: 'yellow' },
-  { label: 'Orders InProcess', value: 0, icon: BarChart3, tone: 'pink' },
+  { label: 'Disputes', value: 0, icon: AlertTriangle, tone: 'red' },
+  { label: 'Pending Fulfillment', value: 0, icon: Clock, tone: 'yellow' },
+  { label: 'Pending Amount', value: '$0', icon: Wallet, tone: 'teal' },
 ]
 
 function UserDashboardPage() {
+  const { user } = useAuth()
+  const displayName = user?.fullName || 'User'
+
   return (
     <UserLayout>
-      <PageHeader
-        eyebrow="User Panel"
-        title="Overview"
-        action={
-          <Button variant="outline" size="sm" className="border border-slate-200">
-            <SlidersHorizontal className="h-4 w-4" />
-            Filter
-          </Button>
-        }
+      <PanelDashboard
+        panelLabel="Client Panel"
+        displayName={displayName}
+        welcomeTitle={`Hi! ${displayName}, Manage your Warehouse With Ease!`}
+        welcomeSubtitle="You Are Just A Step Ahead In Finding Your Inventory Control Strategies."
+        featuredModule={USER_FEATURED_MODULE}
+        gridModules={USER_GRID_MODULES}
+        overviewStats={OVERVIEW_STATS}
+        pendingTasks={PENDING_TASKS}
       />
-
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {OVERVIEW_STATS.map((stat) => (
-          <StatCard key={stat.label} {...stat} />
-        ))}
-      </div>
-
-      <h2 className="mb-3 mt-8 text-base font-bold text-slate-900">Pending Tasks</h2>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-        {PENDING_TASKS.map((task) => (
-          <StatCard key={task.label} {...task} />
-        ))}
-      </div>
-
-      <h2 className="mb-3 mt-8 text-base font-bold text-slate-900">Monthly Revenue</h2>
-      <MonthlyRevenueChart />
     </UserLayout>
   )
 }

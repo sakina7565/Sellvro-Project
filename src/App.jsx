@@ -7,6 +7,8 @@ import RegisterPage from './pages/RegisterPage.jsx'
 import DashboardPage from './pages/admin/DashboardPage.jsx'
 import ProductsListPage from './pages/admin/ProductsListPage.jsx'
 import AddProductPage from './pages/admin/AddProductPage.jsx'
+import AdminSkuReportingPage from './pages/admin/SkuReportingPage.jsx'
+import AdminBusinessReportingPage from './pages/admin/BusinessReportingPage.jsx'
 import CategoriesPage from './pages/admin/CategoriesPage.jsx'
 import AllSuppliersPage from './pages/admin/AllSuppliersPage.jsx'
 import PendingSuppliersPage from './pages/admin/PendingSuppliersPage.jsx'
@@ -25,6 +27,8 @@ import SupplierBusinessDetailsPage from './pages/supplier/BusinessDetailsPage.js
 import SupplierDashboardPage from './pages/supplier/DashboardPage.jsx'
 import SupplierProductsPage from './pages/supplier/ProductsPage.jsx'
 import SupplierAddProductPage from './pages/supplier/AddProductPage.jsx'
+import SupplierSkuReportingPage from './pages/supplier/SkuReportingPage.jsx'
+import SupplierBusinessReportingPage from './pages/supplier/BusinessReportingPage.jsx'
 import SupplierViewOrdersPage from './pages/supplier/ViewOrdersPage.jsx'
 import SupplierFinancePage from './pages/supplier/FinancePage.jsx'
 import UserBusinessDetailsPage from './pages/user/BusinessDetailsPage.jsx'
@@ -32,6 +36,8 @@ import UserDashboardPage from './pages/user/DashboardPage.jsx'
 import UserProductsPage from './pages/user/ProductsPage.jsx'
 import UserOrdersPage from './pages/user/OrdersPage.jsx'
 import UserWalletPage from './pages/user/WalletPage.jsx'
+import UserSkuReportingPage from './pages/user/SkuReportingPage.jsx'
+import UserBusinessReportingPage from './pages/user/BusinessReportingPage.jsx'
 
 function AdminRoute({ children }) {
   return <ProtectedRoute roles={['admin']}>{children}</ProtectedRoute>
@@ -69,6 +75,8 @@ function App() {
       <Route path="/admin/dashboard" element={<AdminRoute><DashboardPage /></AdminRoute>} />
       <Route path="/admin/products" element={<AdminRoute><ProductsListPage /></AdminRoute>} />
       <Route path="/admin/product/create" element={<AdminRoute><AddProductPage /></AdminRoute>} />
+      <Route path="/admin/inventory/sku-reporting" element={<AdminRoute><AdminSkuReportingPage /></AdminRoute>} />
+      <Route path="/admin/inventory/my-reporting" element={<AdminRoute><AdminBusinessReportingPage /></AdminRoute>} />
       <Route path="/admin/categories" element={<AdminRoute><CategoriesPage /></AdminRoute>} />
       <Route path="/admin/suppliers" element={<AdminRoute><AllSuppliersPage /></AdminRoute>} />
       <Route path="/admin/suppliers/pending" element={<AdminRoute><PendingSuppliersPage /></AdminRoute>} />
@@ -95,6 +103,8 @@ function App() {
       <Route path="/supplier/dashboard" element={<SupplierRoute><SupplierDashboardPage /></SupplierRoute>} />
       <Route path="/supplier/products" element={<SupplierRoute><SupplierProductsPage /></SupplierRoute>} />
       <Route path="/supplier/product/create" element={<SupplierRoute><SupplierAddProductPage /></SupplierRoute>} />
+      <Route path="/supplier/inventory/sku-reporting" element={<SupplierRoute><SupplierSkuReportingPage /></SupplierRoute>} />
+      <Route path="/supplier/inventory/my-reporting" element={<SupplierRoute><SupplierBusinessReportingPage /></SupplierRoute>} />
       <Route path="/supplier/sales/details" element={<SupplierRoute><SupplierViewOrdersPage /></SupplierRoute>} />
       <Route path="/supplier/finance/index" element={<SupplierRoute><SupplierFinancePage /></SupplierRoute>} />
 
@@ -108,6 +118,8 @@ function App() {
       />
       <Route path="/user/dashboard" element={<UserRoute><UserDashboardPage /></UserRoute>} />
       <Route path="/user/products" element={<UserRoute><UserProductsPage /></UserRoute>} />
+      <Route path="/user/inventory/sku-reporting" element={<UserRoute><UserSkuReportingPage /></UserRoute>} />
+      <Route path="/user/inventory/my-reporting" element={<UserRoute><UserBusinessReportingPage /></UserRoute>} />
       <Route path="/user/orders" element={<UserRoute><UserOrdersPage /></UserRoute>} />
       <Route path="/user/wallet" element={<UserRoute><UserWalletPage /></UserRoute>} />
 

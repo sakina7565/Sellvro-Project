@@ -22,6 +22,8 @@ export const ADMIN_NAV_ITEMS = [
     children: [
       { label: 'All Products', to: '/admin/products' },
       { label: 'Add Products', to: '/admin/product/create' },
+      { label: 'SKU Reporting', to: '/admin/inventory/sku-reporting' },
+      { label: 'My Reporting', to: '/admin/inventory/my-reporting' },
       { label: 'Categories', to: '/admin/categories' },
     ],
   },

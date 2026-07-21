@@ -1,9 +1,8 @@
-import { SlidersHorizontal, Wallet, Box, ShoppingBag, DollarSign, Inbox, BarChart3, Banknote } from 'lucide-react'
+import { Wallet, Box, ShoppingBag, DollarSign, Inbox, BarChart3, Banknote } from 'lucide-react'
 import SupplierLayout from '../../components/layout/SupplierLayout.jsx'
-import PageHeader from '../../components/admin/PageHeader.jsx'
-import StatCard from '../../components/dashboard/StatCard.jsx'
-import CustomerChart from '../../components/dashboard/CustomerChart.jsx'
-import Button from '../../components/ui/Button.jsx'
+import PanelDashboard from '../../components/dashboard/PanelDashboard.jsx'
+import { useAuth } from '../../context/AuthContext.jsx'
+import { SUPPLIER_FEATURED_MODULE, SUPPLIER_GRID_MODULES } from '../../lib/supplierDashboardModules.js'
 
 const OVERVIEW_STATS = [
   { label: 'Approved', value: 0, icon: Wallet, tone: 'yellow' },
@@ -19,34 +18,21 @@ const PENDING_TASKS = [
 ]
 
 function SupplierDashboardPage() {
+  const { user } = useAuth()
+  const displayName = user?.fullName || 'Supplier'
+
   return (
     <SupplierLayout>
-      <PageHeader
-        eyebrow="Supplier Panel"
-        title="Overview"
-        action={
-          <Button variant="outline" size="sm" className="border border-slate-200">
-            <SlidersHorizontal className="h-4 w-4" />
-            Filter
-          </Button>
-        }
+      <PanelDashboard
+        panelLabel="Supplier Panel"
+        displayName={displayName}
+        welcomeTitle={`Hi! ${displayName}, Manage your Warehouse With Ease!`}
+        welcomeSubtitle="Track your products, orders, inventory and finances from one powerful supplier dashboard."
+        featuredModule={SUPPLIER_FEATURED_MODULE}
+        gridModules={SUPPLIER_GRID_MODULES}
+        overviewStats={OVERVIEW_STATS}
+        pendingTasks={PENDING_TASKS}
       />
-
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {OVERVIEW_STATS.map((stat) => (
-          <StatCard key={stat.label} {...stat} />
-        ))}
-      </div>
-
-      <h2 className="mb-3 mt-8 text-base font-bold text-slate-900">Pending Tasks</h2>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-        {PENDING_TASKS.map((task) => (
-          <StatCard key={task.label} {...task} />
-        ))}
-      </div>
-
-      <h2 className="mb-3 mt-8 text-base font-bold text-slate-900">Monthly Revenue</h2>
-      <CustomerChart />
     </SupplierLayout>
   )
 }
