@@ -1,4 +1,4 @@
-import { Pencil, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import Pagination from '../../components/admin/Pagination.jsx'
@@ -9,48 +9,166 @@ import Input from '../../components/ui/Input.jsx'
 import Select from '../../components/ui/Select.jsx'
 import Button from '../../components/ui/Button.jsx'
 import Badge from '../../components/ui/Badge.jsx'
-import IconAction from '../../components/ui/IconAction.jsx'
-import { SETTINGS_USERS } from '../../lib/mockData.js'
-
-function UserRowActions() {
-  return (
-    <>
-      <IconAction icon={Pencil} tone="primary" aria-label="Edit user" />
-      <IconAction icon={Trash2} tone="danger" aria-label="Delete user" />
-    </>
-  )
-}
+import { adminApi, getErrorMessage } from '../../lib/api.js'
+import { isSuperAdmin } from '../../lib/permissions.js'
+import { useAuth } from '../../context/AuthContext.jsx'
 
 function CreateUserPage() {
+  const { user: currentUser } = useAuth()
+  const canCreateSuperAdmin = isSuperAdmin(currentUser)
+
+  const [users, setUsers] = useState([])
+  const [roles, setRoles] = useState([])
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [adminRoleId, setAdminRoleId] = useState('')
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  const loadData = async () => {
+    setError('')
+    try {
+      const [usersRes, rolesRes] = await Promise.all([adminApi.adminUsers(), adminApi.roles()])
+      setUsers(usersRes.data || [])
+      setRoles(rolesRes.data || [])
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to load admin users.'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const resetForm = () => {
+    setFullName('')
+    setEmail('')
+    setPassword('')
+    setAdminRoleId('')
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    setError('')
+    setSuccess('')
+
+    if (!fullName.trim() || !email.trim() || !password) {
+      setError('Name, email, and password are required.')
+      return
+    }
+
+    if (!canCreateSuperAdmin && !adminRoleId) {
+      setError('Please select a role for the new admin user.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const payload = {
+        fullName: fullName.trim(),
+        email: email.trim(),
+        password,
+      }
+      if (adminRoleId) payload.adminRoleId = adminRoleId
+
+      await adminApi.createAdminUser(payload)
+      setSuccess('Admin user created.')
+      resetForm()
+      await loadData()
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to create admin user.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <AdminLayout>
       <PageHeader title="Users" />
 
       <Card className="mb-6 p-5 shadow-soft">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-sm font-bold text-slate-900">Add User</h2>
-          <Button type="submit" form="add-user-form" size="sm" className="w-full sm:w-auto">
-            Save
+          <h2 className="text-sm font-bold text-slate-900">Add Admin User</h2>
+          <Button
+            type="submit"
+            form="add-user-form"
+            size="sm"
+            className="w-full sm:w-auto"
+            disabled={saving}
+          >
+            {saving ? 'Saving…' : 'Save'}
           </Button>
         </div>
-        <form id="add-user-form" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" onSubmit={(e) => e.preventDefault()}>
-          <Input id="userName" label="Name *" placeholder="Enter name" />
-          <Input id="userEmail" label="Email *" type="email" placeholder="Enter email" />
-          <Input id="userPassword" label="Password" type="password" placeholder="Enter password" />
-          <Select id="userRole" label="Role *" defaultValue="">
-            <option value="" disabled>
-              Select Role
-            </option>
-            <option value="user">user</option>
-            <option value="supplier">supplier</option>
+        <form
+          id="add-user-form"
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          onSubmit={handleSubmit}
+        >
+          <Input
+            id="userName"
+            label="Name *"
+            placeholder="Enter name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+          />
+          <Input
+            id="userEmail"
+            label="Email *"
+            type="email"
+            placeholder="Enter email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <Input
+            id="userPassword"
+            label="Password *"
+            type="password"
+            placeholder="Enter password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <Select
+            id="userRole"
+            label="Admin Role *"
+            value={adminRoleId}
+            onChange={(e) => setAdminRoleId(e.target.value)}
+          >
+            {canCreateSuperAdmin && (
+              <option value="">Super Admin (full access)</option>
+            )}
+            {!canCreateSuperAdmin && (
+              <option value="" disabled>
+                Select role
+              </option>
+            )}
+            {roles.map((role) => (
+              <option key={role.id} value={role.id}>
+                {role.name}
+              </option>
+            ))}
           </Select>
         </form>
+
+        {error && (
+          <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">
+            {error}
+          </p>
+        )}
+        {success && (
+          <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            {success}
+          </p>
+        )}
       </Card>
 
-      <h2 className="mb-3 text-sm font-bold text-slate-900">Manage Users</h2>
+      <h2 className="mb-3 text-sm font-bold text-slate-900">Manage Admin Users</h2>
 
       <Card className="overflow-hidden shadow-soft">
-        {/* Desktop / tablet: full data table */}
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[700px] text-left text-sm">
             <thead>
@@ -58,44 +176,67 @@ function CreateUserPage() {
                 <th className="whitespace-nowrap px-5 py-3 font-medium">Name</th>
                 <th className="whitespace-nowrap px-5 py-3 font-medium">Email</th>
                 <th className="whitespace-nowrap px-5 py-3 font-medium">Role</th>
-                <th className="whitespace-nowrap px-5 py-3 text-right font-medium">Actions</th>
+                <th className="whitespace-nowrap px-5 py-3 font-medium">Joined</th>
               </tr>
             </thead>
             <tbody>
-              {SETTINGS_USERS.map((user) => (
+              {loading && (
+                <tr>
+                  <td colSpan={4} className="px-5 py-10 text-center text-sm text-slate-500">
+                    Loading admin users…
+                  </td>
+                </tr>
+              )}
+              {!loading && users.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-5 py-10 text-center text-sm text-slate-500">
+                    No admin users yet.
+                  </td>
+                </tr>
+              )}
+              {users.map((user) => (
                 <tr key={user.id} className="border-b border-slate-50 last:border-0">
                   <td className="whitespace-nowrap px-5 py-4 font-medium text-slate-800">{user.name}</td>
                   <td className="whitespace-nowrap px-5 py-4 text-slate-500">{user.email}</td>
                   <td className="whitespace-nowrap px-5 py-4">
-                    <Badge tone="solid">{user.role}</Badge>
+                    <Badge tone="solid">{user.roleLabel}</Badge>
                   </td>
-                  <td className="whitespace-nowrap px-5 py-4">
-                    <div className="flex items-center justify-end gap-0.5">
-                      <UserRowActions />
-                    </div>
-                  </td>
+                  <td className="whitespace-nowrap px-5 py-4 text-slate-500">{user.joined}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        {/* Mobile: stacked cards, no horizontal scrolling needed */}
         <div className="divide-y divide-slate-100 md:hidden">
-          {SETTINGS_USERS.map((user) => (
+          {loading && (
+            <p className="px-5 py-8 text-center text-sm text-slate-500">Loading admin users…</p>
+          )}
+          {!loading && users.length === 0 && (
+            <p className="px-5 py-8 text-center text-sm text-slate-500">No admin users yet.</p>
+          )}
+          {users.map((user) => (
             <MobileCard
               key={user.id}
               title={user.name}
               subtitle={user.email}
-              badge={<Badge tone="solid">{user.role}</Badge>}
-              actions={<UserRowActions />}
+              badge={<Badge tone="solid">{user.roleLabel}</Badge>}
             >
-              <DetailRow label="Role" value={user.role} full />
+              <DetailRow label="Joined" value={user.joined} full />
             </MobileCard>
           ))}
         </div>
 
-        <Pagination from={1} to={SETTINGS_USERS.length} total={33} resultsLabel="results" page={1} pages={[1, 2, 3, 4]} />
+        {!loading && users.length > 0 && (
+          <Pagination
+            from={1}
+            to={users.length}
+            total={users.length}
+            resultsLabel="results"
+            page={1}
+            pages={[1]}
+          />
+        )}
       </Card>
     </AdminLayout>
   )

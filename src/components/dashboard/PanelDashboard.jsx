@@ -9,6 +9,14 @@ import Button from '../ui/Button.jsx'
 
 const PERIOD_TABS = ['Today', 'This Week', 'This Month', 'All', 'Custom']
 
+const PERIOD_QUERY = {
+  Today: 'today',
+  'This Week': 'week',
+  'This Month': 'month',
+  All: 'all',
+  Custom: 'all',
+}
+
 const DEFAULT_HERO_IMAGE =
   'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1200&q=80'
 
@@ -27,8 +35,15 @@ function PanelDashboard({
   pendingTasks = [],
   heroImage = DEFAULT_HERO_IMAGE,
   showCommunication = true,
+  onPeriodChange,
+  statsLoading = false,
 }) {
   const [activePeriod, setActivePeriod] = useState('All')
+
+  const handlePeriodClick = (tab) => {
+    setActivePeriod(tab)
+    onPeriodChange?.(PERIOD_QUERY[tab] || 'all', tab)
+  }
 
   return (
     <>
@@ -47,7 +62,7 @@ function PanelDashboard({
         )}
       </div>
 
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start">
+      <div className="mb-6 flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start">
         <div className="overflow-hidden rounded-2xl lg:flex-[2]">
           <img
             src={heroImage}
@@ -80,20 +95,26 @@ function PanelDashboard({
         </div>
       )}
 
-      {overviewStats.length > 0 && (
+      {(overviewStats.length > 0 || onPeriodChange) && (
         <div className="mb-8">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{panelLabel}</p>
               <h2 className="text-xl font-bold text-slate-900">Overview</h2>
-              <p className="text-xs text-slate-400">{activePeriod === 'All' ? 'All time' : activePeriod}</p>
+              <p className="text-xs text-slate-400">
+                {statsLoading
+                  ? 'Loading…'
+                  : activePeriod === 'All' || activePeriod === 'Custom'
+                    ? 'All time'
+                    : activePeriod}
+              </p>
             </div>
             <div className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white p-1">
               {PERIOD_TABS.map((tab) => (
                 <button
                   key={tab}
                   type="button"
-                  onClick={() => setActivePeriod(tab)}
+                  onClick={() => handlePeriodClick(tab)}
                   className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors sm:px-3 ${
                     activePeriod === tab
                       ? 'bg-primary text-white'
@@ -134,7 +155,7 @@ function PanelDashboard({
 
       <div>
         <h2 className="mb-4 text-xl font-bold text-slate-900">Monthly Revenue</h2>
-        <Card className="p-5 shadow-soft">
+        <Card className="min-w-0 overflow-hidden p-5 shadow-soft">
           <RevenueChart />
         </Card>
       </div>

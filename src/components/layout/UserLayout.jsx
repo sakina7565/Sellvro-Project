@@ -10,12 +10,12 @@ function UserLayout({ children, topbarName }) {
   const { user } = useAuth()
 
   return (
-    <div className="flex min-h-screen bg-white">
+    <div className="flex min-h-screen overflow-x-hidden bg-white">
       <UserSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="flex min-h-screen flex-1 flex-col bg-white">
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col overflow-x-hidden bg-white">
         <AdminTopbar name={topbarName || user?.fullName || 'User'} onMenuClick={() => setSidebarOpen(true)} />
         <HorizontalNav navItems={USER_NAV_ITEMS} />
-        <main className="flex-1 bg-white px-4 py-6 md:px-8">{children}</main>
+        <main className="min-w-0 flex-1 overflow-x-hidden bg-white px-4 py-6 md:px-8">{children}</main>
       </div>
     </div>
   )

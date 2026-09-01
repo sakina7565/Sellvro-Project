@@ -39,7 +39,7 @@ function LoginPage() {
 
   return (
     <AuthLayout>
-      <h1 className="mt-3 text-center text-xl font-bold text-slate-900">Welcome Back</h1>
+      <h1 className="text-center text-xl font-bold text-slate-900">Welcome Back</h1>
       <p className="mt-1 text-center text-sm text-slate-500">Please sign in to your Ezone account</p>
 
       <form className="mt-6 space-y-4" onSubmit={handleSubmit}>

@@ -36,7 +36,7 @@ export const SUPPLIER_DASHBOARD_MODULES = [
   {
     title: 'Disputes',
     description: 'Review and resolve order or product disputes.',
-    links: [{ label: 'View Disputes', to: '/supplier/dashboard' }],
+    links: [{ label: 'View Disputes', to: '/supplier/disputes' }],
   },
   {
     title: 'Communication',

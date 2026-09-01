@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, LogOut, Menu, Scale, Search, User } from 'lucide-react'
+import { ArrowLeft, Bell, LogOut, Menu, Search, User } from 'lucide-react'
 import Logo from '../ui/Logo.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
+import { useDisputeNotifications } from '../../context/DisputeNotificationContext.jsx'
 import { getRedirectForUser } from '../../lib/authRedirect.js'
 
 /**
@@ -18,6 +19,7 @@ function AdminTopbar({ name, onMenuClick = () => {}, showMenuButton = true }) {
   const menuRef = useRef(null)
   const displayName = name || user?.fullName || 'User'
   const homePath = getRedirectForUser(user) || '/'
+  const { unreadCount } = useDisputeNotifications()
 
   useEffect(() => {
     if (!menuOpen) return undefined
@@ -40,9 +42,9 @@ function AdminTopbar({ name, onMenuClick = () => {}, showMenuButton = true }) {
     }
   }, [menuOpen])
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setMenuOpen(false)
-    logout()
+    await logout()
     navigate('/login', { replace: true })
   }
 
@@ -56,7 +58,7 @@ function AdminTopbar({ name, onMenuClick = () => {}, showMenuButton = true }) {
   }
 
   return (
-    <header className="border-b border-slate-200 bg-white">
+    <header className="overflow-x-hidden border-b border-slate-200 bg-white">
       {/* Top utility row */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-slate-100 px-4 py-2 text-xs text-slate-500 sm:text-sm md:px-8">
         <button
@@ -86,7 +88,7 @@ function AdminTopbar({ name, onMenuClick = () => {}, showMenuButton = true }) {
       </div>
 
       {/* Main row: logo + full-width search + actions */}
-      <div className="flex items-center gap-3 px-4 py-3 md:gap-4 md:px-8">
+      <div className="flex min-w-0 items-center gap-2 overflow-hidden px-4 py-3 sm:gap-3 md:gap-4 md:px-8">
         <div className="flex shrink-0 items-center gap-2">
           {showMenuButton && (
             <button
@@ -117,9 +119,10 @@ function AdminTopbar({ name, onMenuClick = () => {}, showMenuButton = true }) {
             </div>
             <button
               type="submit"
-              className="h-10 shrink-0 bg-primary px-5 text-sm font-semibold text-white transition-colors hover:bg-primary-700"
+              className="h-10 shrink-0 bg-primary px-3 text-sm font-semibold text-white transition-colors hover:bg-primary-700 sm:px-5"
             >
-              Search
+              <span className="hidden sm:inline">Search</span>
+              <Search className="h-4 w-4 sm:hidden" />
             </button>
           </div>
         </form>
@@ -130,10 +133,12 @@ function AdminTopbar({ name, onMenuClick = () => {}, showMenuButton = true }) {
             className="relative rounded-full p-1.5 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
             aria-label="Notifications"
           >
-            <Scale className="h-6 w-6" strokeWidth={1.75} />
-            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white">
-              5
-            </span>
+            <Bell className="h-6 w-6" strokeWidth={1.75} />
+            {unreadCount > 0 ? (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            ) : null}
           </button>
 
           <div className="relative" ref={menuRef}>

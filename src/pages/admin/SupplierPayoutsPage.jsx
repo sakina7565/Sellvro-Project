@@ -1,4 +1,5 @@
-import { UserRound, Lock, ArrowDownToLine, Eye, AlertTriangle } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { UserRound, Lock, ArrowDownToLine, Check } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import FilterBar from '../../components/admin/FilterBar.jsx'
@@ -8,14 +9,7 @@ import DetailRow from '../../components/admin/DetailRow.jsx'
 import StatCard from '../../components/dashboard/StatCard.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Badge from '../../components/ui/Badge.jsx'
-import IconAction from '../../components/ui/IconAction.jsx'
-import { SUPPLIER_PAYOUTS } from '../../lib/mockData.js'
-
-const SUMMARY_STATS = [
-  { label: 'Pending Payouts', value: 0, icon: UserRound, tone: 'purple' },
-  { label: 'Pending Amount', value: '$0.00', icon: Lock, tone: 'yellow', active: true },
-  { label: 'Processed Total', value: '$200.00', icon: ArrowDownToLine, tone: 'blue' },
-]
+import { adminApi, getErrorMessage } from '../../lib/api.js'
 
 const FILTERS = [
   { label: 'All Requests', options: ['Pending', 'Processed'] },
@@ -24,30 +18,81 @@ const FILTERS = [
 
 const TABLE_HEAD = ['Supplier', 'Email', 'Payout', 'Held', 'Bank Details', 'Commission', 'Status', 'Actions']
 
-function PayoutActions() {
-  return (
-    <>
-      <IconAction icon={Eye} tone="success" aria-label="View payout" />
-      <IconAction icon={AlertTriangle} tone="warning" aria-label="Flag payout" />
-    </>
-  )
-}
-
 function SupplierPayoutsPage() {
+  const [payouts, setPayouts] = useState([])
+  const [summary, setSummary] = useState({ pendingCount: 0, pendingAmount: 0, processedTotal: 0 })
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [busyId, setBusyId] = useState('')
+
+  const loadPayouts = async () => {
+    setError('')
+    try {
+      const data = await adminApi.payouts()
+      setPayouts(data.data || [])
+      setSummary(data.summary || { pendingCount: 0, pendingAmount: 0, processedTotal: 0 })
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to load payouts.'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadPayouts()
+  }, [])
+
+  const stats = useMemo(
+    () => [
+      { label: 'Pending Payouts', value: summary.pendingCount || 0, icon: UserRound, tone: 'purple' },
+      {
+        label: 'Pending Amount',
+        value: `$${Number(summary.pendingAmount || 0).toFixed(2)}`,
+        icon: Lock,
+        tone: 'yellow',
+        active: true,
+      },
+      {
+        label: 'Processed Total',
+        value: `$${Number(summary.processedTotal || 0).toFixed(2)}`,
+        icon: ArrowDownToLine,
+        tone: 'blue',
+      },
+    ],
+    [summary],
+  )
+
+  const handleProcess = async (payout) => {
+    if (!payout.supplierId || payout.statusRaw !== 'pending') return
+    setBusyId(payout.id)
+    setError('')
+    try {
+      await adminApi.processPayout(payout.supplierId)
+      await loadPayouts()
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to process payout.'))
+    } finally {
+      setBusyId('')
+    }
+  }
+
   return (
     <AdminLayout>
       <PageHeader title="Supplier Payouts" />
 
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {SUMMARY_STATS.map((stat) => (
+        {stats.map((stat) => (
           <StatCard key={stat.label} {...stat} shape="circle" />
         ))}
       </div>
 
       <FilterBar filters={FILTERS} />
 
+      {error && (
+        <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>
+      )}
+
       <Card className="overflow-hidden shadow-soft">
-        {/* Desktop / tablet: full data table */}
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead>
@@ -60,7 +105,14 @@ function SupplierPayoutsPage() {
               </tr>
             </thead>
             <tbody>
-              {SUPPLIER_PAYOUTS.map((payout) => (
+              {!loading && payouts.length === 0 && (
+                <tr>
+                  <td colSpan={TABLE_HEAD.length} className="px-5 py-10 text-center text-sm text-slate-500">
+                    No payouts yet.
+                  </td>
+                </tr>
+              )}
+              {payouts.map((payout) => (
                 <tr key={payout.id} className="border-b border-slate-50 last:border-0">
                   <td className="whitespace-nowrap px-5 py-4 font-medium text-slate-800">{payout.supplier}</td>
                   <td className="whitespace-nowrap px-5 py-4 text-slate-500">{payout.email}</td>
@@ -69,12 +121,22 @@ function SupplierPayoutsPage() {
                   <td className="whitespace-nowrap px-5 py-4 text-slate-500">{payout.bankDetails}</td>
                   <td className="whitespace-nowrap px-5 py-4 text-slate-500">{payout.cardDate}</td>
                   <td className="whitespace-nowrap px-5 py-4">
-                    <Badge tone="warning">{payout.status}</Badge>
+                    <Badge tone={payout.status === 'Processed' ? 'success' : 'warning'}>{payout.status}</Badge>
                   </td>
                   <td className="whitespace-nowrap px-5 py-4">
-                    <div className="flex items-center gap-0.5">
-                      <PayoutActions />
-                    </div>
+                    {payout.statusRaw === 'pending' ? (
+                      <button
+                        type="button"
+                        disabled={busyId === payout.id}
+                        onClick={() => handleProcess(payout)}
+                        className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        Process
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -82,15 +144,24 @@ function SupplierPayoutsPage() {
           </table>
         </div>
 
-        {/* Mobile: stacked cards, no horizontal scrolling needed */}
         <div className="divide-y divide-slate-100 md:hidden">
-          {SUPPLIER_PAYOUTS.map((payout) => (
+          {payouts.map((payout) => (
             <MobileCard
               key={payout.id}
               title={payout.supplier}
               subtitle={payout.email}
-              badge={<Badge tone="warning">{payout.status}</Badge>}
-              actions={<PayoutActions />}
+              badge={<Badge tone={payout.status === 'Processed' ? 'success' : 'warning'}>{payout.status}</Badge>}
+              actions={
+                payout.statusRaw === 'pending' ? (
+                  <button
+                    type="button"
+                    onClick={() => handleProcess(payout)}
+                    className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700"
+                  >
+                    Process
+                  </button>
+                ) : null
+              }
             >
               <DetailRow label="Payout" value={payout.payout} />
               <DetailRow label="Held" value={payout.held} />
@@ -100,7 +171,7 @@ function SupplierPayoutsPage() {
           ))}
         </div>
 
-        <Pagination from={1} to={SUPPLIER_PAYOUTS.length} total={SUPPLIER_PAYOUTS.length} prevLabel="Previous" />
+        <Pagination from={payouts.length ? 1 : 0} to={payouts.length} total={payouts.length} prevLabel="Previous" />
       </Card>
     </AdminLayout>
   )

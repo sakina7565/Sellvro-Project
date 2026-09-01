@@ -37,6 +37,17 @@ const userSchema = new mongoose.Schema(
       enum: ['pending_details', 'pending_approval', 'approved', 'suspended', 'rejected'],
       default: 'pending_details',
     },
+    walletBalance: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    /** Custom admin role (sub-admin). Null = super admin with all permissions. */
+    adminRoleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Role',
+      default: null,
+    },
   },
   { timestamps: true },
 )
@@ -51,15 +62,27 @@ userSchema.methods.matchPassword = async function matchPassword(enteredPassword)
   return bcrypt.compare(enteredPassword, this.password)
 }
 
-userSchema.methods.toSafeObject = function toSafeObject() {
-  return {
+userSchema.methods.toSafeObject = function toSafeObject(options = {}) {
+  const base = {
     id: this._id.toString(),
     fullName: this.fullName,
     email: this.email,
     role: this.role,
     status: this.status,
+    walletBalance: this.walletBalance ?? 0,
+    adminRoleId: this.adminRoleId?.toString?.() || this.adminRoleId || null,
     createdAt: this.createdAt,
   }
+
+  if (options.permissions !== undefined) {
+    base.permissions = options.permissions
+  }
+
+  if (options.adminRoleName) {
+    base.adminRoleName = options.adminRoleName
+  }
+
+  return base
 }
 
 const User = mongoose.model('User', userSchema)

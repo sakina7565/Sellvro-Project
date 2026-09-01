@@ -2,7 +2,7 @@ import { SlidersHorizontal } from 'lucide-react'
 import Card from '../ui/Card.jsx'
 
 const controlClasses =
-  'h-10 min-w-[9rem] rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-500 focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100'
+  'h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-500 focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:w-auto sm:min-w-[9rem]'
 
 /**
  * Row of quick-filter controls + a trailing "Filter" action, used
@@ -30,16 +30,43 @@ function FilterBar({ filters = [], onFilterClick = () => {} }) {
             return <input key={filter.label} type="date" aria-label={filter.label} className={controlClasses} />
           }
 
+          if (filter.options?.length) {
+            if (filter.onChange) {
+              return (
+                <select
+                  key={filter.label}
+                  value={filter.value ?? filter.options[0]}
+                  onChange={filter.onChange}
+                  className={`appearance-none ${controlClasses}`}
+                >
+                  {filter.options.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              )
+            }
+
+            return (
+              <select key={filter.label} defaultValue="" className={`appearance-none ${controlClasses}`}>
+                <option value="" disabled>
+                  {filter.label}
+                </option>
+                {filter.options.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            )
+          }
+
           return (
             <select key={filter.label} defaultValue="" className={`appearance-none ${controlClasses}`}>
               <option value="" disabled>
                 {filter.label}
               </option>
-              {filter.options?.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
             </select>
           )
         })}

@@ -67,10 +67,6 @@ const FILTER_INPUT =
   'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100'
 
 const PANEL_COPY = {
-  user: {
-    eyebrow: 'Client Portal',
-    subtitle: 'Search and report on your own product SKUs only.',
-  },
   admin: {
     eyebrow: 'Admin Panel',
     subtitle: 'Search and report on product SKUs across the warehouse.',
@@ -157,14 +153,14 @@ function SectionTable({ title, count, icon: Icon, columns, rows, emptyMessage })
 }
 
 /**
- * Shared SKU Reporting page content — used by user, admin and supplier panels.
+ * Shared SKU Reporting page content — used by admin and supplier panels.
  */
-function SkuReportingContent({ panel = 'user' }) {
+function SkuReportingContent({ panel = 'admin' }) {
   const [skuQuery, setSkuQuery] = useState(SKU_REPORT_PRODUCT.sku)
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const product = SKU_REPORT_PRODUCT
-  const copy = PANEL_COPY[panel] || PANEL_COPY.user
+  const copy = PANEL_COPY[panel] || PANEL_COPY.admin
 
   const handleClear = () => {
     setSkuQuery('')

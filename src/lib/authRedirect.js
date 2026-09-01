@@ -2,10 +2,20 @@
  * Role / approval based landing paths used after login, register,
  * and by protected route guards.
  */
+import { canAccessAdminPath, ADMIN_ROUTE_PERMISSIONS } from './permissions.js'
+
 export function getRedirectForUser(user) {
   if (!user) return '/login'
 
-  if (user.role === 'admin') return '/admin/dashboard'
+  if (user.role === 'admin') {
+    if (canAccessAdminPath(user, '/admin/dashboard')) {
+      return '/admin/dashboard'
+    }
+    const firstAllowed = Object.keys(ADMIN_ROUTE_PERMISSIONS).find((path) =>
+      canAccessAdminPath(user, path),
+    )
+    return firstAllowed || '/admin/dashboard'
+  }
 
   if (user.role === 'supplier') {
     return user.status === 'approved' ? '/supplier/dashboard' : '/supplier/business/details'
@@ -22,7 +32,8 @@ export function canAccessPath(user, path) {
   if (!user) return false
 
   if (path.startsWith('/admin')) {
-    return user.role === 'admin'
+    if (user.role !== 'admin') return false
+    return canAccessAdminPath(user, path)
   }
 
   if (path.startsWith('/supplier')) {

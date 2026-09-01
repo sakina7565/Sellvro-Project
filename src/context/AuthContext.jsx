@@ -4,8 +4,8 @@ import { getRedirectForUser } from '../lib/authRedirect.js'
 
 const AuthContext = createContext(null)
 
-const TOKEN_KEY = 'sellvro_token'
 const USER_KEY = 'sellvro_user'
+const LEGACY_TOKEN_KEY = 'sellvro_token'
 
 function readStoredUser() {
   try {
@@ -16,79 +16,77 @@ function readStoredUser() {
   }
 }
 
+function clearLegacyToken() {
+  localStorage.removeItem(LEGACY_TOKEN_KEY)
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => readStoredUser())
-  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY))
-  const [loading, setLoading] = useState(Boolean(localStorage.getItem(TOKEN_KEY)))
+  const [loading, setLoading] = useState(true)
 
-  const persistSession = useCallback((nextToken, nextUser) => {
-    if (nextToken) localStorage.setItem(TOKEN_KEY, nextToken)
-    else localStorage.removeItem(TOKEN_KEY)
-
+  const persistUser = useCallback((nextUser) => {
     if (nextUser) localStorage.setItem(USER_KEY, JSON.stringify(nextUser))
     else localStorage.removeItem(USER_KEY)
-
-    setToken(nextToken)
     setUser(nextUser)
   }, [])
 
-  const logout = useCallback(() => {
-    persistSession(null, null)
-  }, [persistSession])
+  const logout = useCallback(async () => {
+    try {
+      await authApi.logout()
+    } catch {
+      // Cookie is still cleared locally even if the network call fails.
+    }
+    persistUser(null)
+  }, [persistUser])
 
   const refreshUser = useCallback(async () => {
-    if (!localStorage.getItem(TOKEN_KEY)) {
-      setLoading(false)
-      return null
-    }
-
     try {
       const data = await authApi.me()
-      persistSession(localStorage.getItem(TOKEN_KEY), data.user)
+      persistUser(data.user)
       return data.user
     } catch {
-      persistSession(null, null)
+      persistUser(null)
       return null
     } finally {
       setLoading(false)
     }
-  }, [persistSession])
+  }, [persistUser])
 
   useEffect(() => {
+    clearLegacyToken()
     refreshUser()
   }, [refreshUser])
 
   const login = useCallback(
     async (payload) => {
       const data = await authApi.login(payload)
-      persistSession(data.token, data.user)
+      persistUser(data.user)
       return data
     },
-    [persistSession],
+    [persistUser],
   )
 
   const register = useCallback(
     async (payload) => {
       const data = await authApi.register(payload)
-      persistSession(data.token, data.user)
+      persistUser(data.user)
       return data
     },
-    [persistSession],
+    [persistUser],
   )
 
   const updateUser = useCallback(
     (nextUser) => {
-      persistSession(localStorage.getItem(TOKEN_KEY), nextUser)
+      persistUser(nextUser)
     },
-    [persistSession],
+    [persistUser],
   )
 
   const value = useMemo(
     () => ({
       user,
-      token,
       loading,
-      isAuthenticated: Boolean(user && token),
+      isAuthenticated: Boolean(user),
       login,
       register,
       logout,
@@ -96,7 +94,7 @@ export function AuthProvider({ children }) {
       updateUser,
       getHomePath: () => getRedirectForUser(user),
     }),
-    [user, token, loading, login, register, logout, refreshUser, updateUser],
+    [user, loading, login, register, logout, refreshUser, updateUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

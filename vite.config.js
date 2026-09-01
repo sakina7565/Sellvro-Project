@@ -8,6 +8,11 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:5001',
         changeOrigin: true,
+        cookieDomainRewrite: 'localhost',
+      },
+      '/uploads': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
       },
     },
   },

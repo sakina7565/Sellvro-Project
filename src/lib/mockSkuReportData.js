@@ -1,5 +1,5 @@
 /**
- * Mock data for the user SKU Reporting page.
+ * Mock data for SKU Reporting pages (admin and supplier panels).
  */
 export const SKU_REPORT_PRODUCT = {
   name: 'Software Development Service',

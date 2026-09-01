@@ -1,4 +1,4 @@
-import { Home, Box, FileText, Wallet, Truck, Package, Info, MessageCircle } from 'lucide-react'
+import { Home, Box, FileText, Wallet, Package, Info, MessageCircle } from 'lucide-react'
 
 /**
  * User / client panel navigation with grouped sub-categories
@@ -7,30 +7,17 @@ import { Home, Box, FileText, Wallet, Truck, Package, Info, MessageCircle } from
 export const USER_NAV_ITEMS = [
   { label: 'Dashboard', to: '/user/dashboard', icon: Home },
   {
-    label: 'Inventory',
+    label: 'Store',
     icon: Box,
     children: [
-      { label: 'All Inventory', to: '/user/products' },
-      { label: 'Add Product', to: '/user/products' },
-      { label: 'SKU Reporting', to: '/user/inventory/sku-reporting' },
+      { label: 'Sellvro Products', to: '/user/products' },
       { label: 'My Reporting', to: '/user/inventory/my-reporting' },
     ],
   },
   {
     label: 'Finance',
     icon: Wallet,
-    children: [
-      { label: 'Billing', to: '/user/wallet' },
-      { label: 'My Wallet', to: '/user/wallet' },
-    ],
-  },
-  {
-    label: 'Shipment',
-    icon: Truck,
-    children: [
-      { label: 'All Shipments', to: '/user/orders' },
-      { label: 'Create Shipment', to: '/user/orders' },
-    ],
+    children: [{ label: 'My Wallet', to: '/user/wallet' }],
   },
   {
     label: 'Fulfillment',
@@ -44,8 +31,8 @@ export const USER_NAV_ITEMS = [
     label: 'Disputes',
     icon: Info,
     children: [
-      { label: 'All Disputes', to: '/user/orders' },
-      { label: 'Create Dispute', to: '/user/orders' },
+      { label: 'All Disputes', to: '/user/disputes' },
+      { label: 'Create Dispute', to: '/user/disputes' },
     ],
   },
   {

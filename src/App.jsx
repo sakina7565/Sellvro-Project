@@ -31,12 +31,13 @@ import SupplierSkuReportingPage from './pages/supplier/SkuReportingPage.jsx'
 import SupplierBusinessReportingPage from './pages/supplier/BusinessReportingPage.jsx'
 import SupplierViewOrdersPage from './pages/supplier/ViewOrdersPage.jsx'
 import SupplierFinancePage from './pages/supplier/FinancePage.jsx'
+import SupplierDisputesPortalPage from './pages/supplier/DisputesPage.jsx'
 import UserBusinessDetailsPage from './pages/user/BusinessDetailsPage.jsx'
 import UserDashboardPage from './pages/user/DashboardPage.jsx'
 import UserProductsPage from './pages/user/ProductsPage.jsx'
 import UserOrdersPage from './pages/user/OrdersPage.jsx'
 import UserWalletPage from './pages/user/WalletPage.jsx'
-import UserSkuReportingPage from './pages/user/SkuReportingPage.jsx'
+import UserDisputesPage from './pages/user/DisputesPage.jsx'
 import UserBusinessReportingPage from './pages/user/BusinessReportingPage.jsx'
 
 function AdminRoute({ children }) {
@@ -107,6 +108,7 @@ function App() {
       <Route path="/supplier/inventory/my-reporting" element={<SupplierRoute><SupplierBusinessReportingPage /></SupplierRoute>} />
       <Route path="/supplier/sales/details" element={<SupplierRoute><SupplierViewOrdersPage /></SupplierRoute>} />
       <Route path="/supplier/finance/index" element={<SupplierRoute><SupplierFinancePage /></SupplierRoute>} />
+      <Route path="/supplier/disputes" element={<SupplierRoute><SupplierDisputesPortalPage /></SupplierRoute>} />
 
       <Route
         path="/user/business/detail"
@@ -118,10 +120,10 @@ function App() {
       />
       <Route path="/user/dashboard" element={<UserRoute><UserDashboardPage /></UserRoute>} />
       <Route path="/user/products" element={<UserRoute><UserProductsPage /></UserRoute>} />
-      <Route path="/user/inventory/sku-reporting" element={<UserRoute><UserSkuReportingPage /></UserRoute>} />
       <Route path="/user/inventory/my-reporting" element={<UserRoute><UserBusinessReportingPage /></UserRoute>} />
       <Route path="/user/orders" element={<UserRoute><UserOrdersPage /></UserRoute>} />
       <Route path="/user/wallet" element={<UserRoute><UserWalletPage /></UserRoute>} />
+      <Route path="/user/disputes" element={<UserRoute><UserDisputesPage /></UserRoute>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

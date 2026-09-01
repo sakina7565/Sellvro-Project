@@ -37,7 +37,7 @@ export const SUPPLIER_NAV_ITEMS = [
   {
     label: 'Disputes',
     icon: Info,
-    children: [{ label: 'View Disputes', to: '/supplier/dashboard' }],
+    children: [{ label: 'View Disputes', to: '/supplier/disputes' }],
   },
   {
     label: 'Communication',

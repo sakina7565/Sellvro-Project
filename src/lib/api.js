@@ -48,14 +48,11 @@ export function getErrorMessage(err, fallback = 'Something went wrong. Please tr
   return fallback
 }
 
-export async function apiRequest(path, { method = 'GET', body, token } = {}) {
-  const headers = {
-    'Content-Type': 'application/json',
-  }
+export async function apiRequest(path, { method = 'GET', body, formData } = {}) {
+  const headers = {}
 
-  const authToken = token ?? localStorage.getItem('sellvro_token')
-  if (authToken) {
-    headers.Authorization = `Bearer ${authToken}`
+  if (body !== undefined && !formData) {
+    headers['Content-Type'] = 'application/json'
   }
 
   let response
@@ -63,7 +60,8 @@ export async function apiRequest(path, { method = 'GET', body, token } = {}) {
     response = await fetch(`${API_BASE}${path}`, {
       method,
       headers,
-      body: body ? JSON.stringify(body) : undefined,
+      credentials: 'include',
+      body: formData || (body ? JSON.stringify(body) : undefined),
     })
   } catch {
     throw new ApiError(fallbackMessage(0), 0, null)
@@ -97,12 +95,97 @@ export async function apiRequest(path, { method = 'GET', body, token } = {}) {
 export const authApi = {
   register: (payload) => apiRequest('/auth/register', { method: 'POST', body: payload }),
   login: (payload) => apiRequest('/auth/login', { method: 'POST', body: payload }),
+  logout: () => apiRequest('/auth/logout', { method: 'POST' }),
   me: () => apiRequest('/auth/me'),
 }
 
 export const businessApi = {
   getMine: () => apiRequest('/business/me'),
   submit: (payload) => apiRequest('/business/submit', { method: 'POST', body: payload }),
+}
+
+export function mediaUrl(path) {
+  if (!path) return ''
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:') || path.startsWith('data:')) {
+    return path
+  }
+  if (API_BASE.startsWith('http')) {
+    const origin = API_BASE.replace(/\/api\/?$/, '')
+    return `${origin}${path.startsWith('/') ? path : `/${path}`}`
+  }
+  return path.startsWith('/') ? path : `/${path}`
+}
+
+export const productApi = {
+  create: (payload, files = []) => {
+    const formData = new FormData()
+    Object.entries(payload).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) formData.append(key, String(value))
+    })
+    files.forEach((file) => {
+      if (file) formData.append('photos', file)
+    })
+    return apiRequest('/products', { method: 'POST', formData })
+  },
+  update: (id, payload, files = []) => {
+    const formData = new FormData()
+    Object.entries(payload).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) formData.append(key, String(value))
+    })
+    files.forEach((file) => {
+      if (file) formData.append('photos', file)
+    })
+    return apiRequest(`/products/${id}`, { method: 'PATCH', formData })
+  },
+  mine: () => apiRequest('/products/mine'),
+  marketplace: () => apiRequest('/products'),
+}
+
+export const categoryApi = {
+  list: () => apiRequest('/categories'),
+  create: (payload) => apiRequest('/categories', { method: 'POST', body: payload }),
+  update: (id, payload) => apiRequest(`/categories/${id}`, { method: 'PATCH', body: payload }),
+  remove: (id) => apiRequest(`/categories/${id}`, { method: 'DELETE' }),
+}
+
+export const orderApi = {
+  create: (payload) => apiRequest('/orders', { method: 'POST', body: payload }),
+  mine: () => apiRequest('/orders/mine'),
+  supplier: () => apiRequest('/orders/supplier'),
+  lookup: (ref) => apiRequest(`/orders/lookup?ref=${encodeURIComponent(ref)}`),
+  updateStatus: (id, status) =>
+    apiRequest(`/orders/${id}/status`, { method: 'PATCH', body: { status } }),
+  dashboardStats: (period = 'all') =>
+    apiRequest(`/orders/dashboard/stats?period=${encodeURIComponent(period)}`),
+}
+
+export const walletApi = {
+  balance: () => apiRequest('/wallet/balance'),
+  myRequests: () => apiRequest('/wallet/requests/mine'),
+  createRequest: (payload, receiptFile) => {
+    const formData = new FormData()
+    Object.entries(payload).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) formData.append(key, String(value))
+    })
+    if (receiptFile) formData.append('receipt', receiptFile)
+    return apiRequest('/wallet/requests', { method: 'POST', formData })
+  },
+}
+
+export const financeApi = {
+  supplier: () => apiRequest('/finance'),
+  dashboardStats: (period = 'all') =>
+    apiRequest(`/finance/dashboard/stats?period=${encodeURIComponent(period)}`),
+}
+
+export const disputeApi = {
+  create: (payload) => apiRequest('/disputes', { method: 'POST', body: payload }),
+  mine: () => apiRequest('/disputes/mine'),
+  unreadCount: () => apiRequest('/disputes/unread-count'),
+  get: (id) => apiRequest(`/disputes/${id}`),
+  sendMessage: (id, text) =>
+    apiRequest(`/disputes/${id}/messages`, { method: 'POST', body: { text } }),
+  markRead: (id) => apiRequest(`/disputes/${id}/read`, { method: 'PATCH' }),
 }
 
 export const adminApi = {
@@ -112,4 +195,54 @@ export const adminApi = {
   users: () => apiRequest('/admin/users'),
   approve: (id) => apiRequest(`/admin/accounts/${id}/approve`, { method: 'PATCH' }),
   reject: (id) => apiRequest(`/admin/accounts/${id}/reject`, { method: 'PATCH' }),
+  products: () => apiRequest('/admin/products'),
+  createProduct: (payload, files = []) => {
+    const formData = new FormData()
+    Object.entries(payload).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) formData.append(key, String(value))
+    })
+    files.forEach((file) => {
+      if (file) formData.append('photos', file)
+    })
+    return apiRequest('/admin/products', { method: 'POST', formData })
+  },
+  approveProduct: (id, body = {}) =>
+    apiRequest(`/admin/products/${id}/approve`, { method: 'PATCH', body }),
+  rejectProduct: (id) => apiRequest(`/admin/products/${id}/reject`, { method: 'PATCH' }),
+  activateProduct: (id) => apiRequest(`/admin/products/${id}/activate`, { method: 'PATCH' }),
+  deactivateProduct: (id) => apiRequest(`/admin/products/${id}/deactivate`, { method: 'PATCH' }),
+  categories: () => apiRequest('/admin/categories'),
+  createCategory: (payload) => apiRequest('/admin/categories', { method: 'POST', body: payload }),
+  updateCategory: (id, payload) =>
+    apiRequest(`/admin/categories/${id}`, { method: 'PATCH', body: payload }),
+  deleteCategory: (id) => apiRequest(`/admin/categories/${id}`, { method: 'DELETE' }),
+  orders: () => apiRequest('/admin/orders'),
+  walletRequests: () => apiRequest('/admin/wallet-requests'),
+  approveWalletRequest: (id, body = {}) =>
+    apiRequest(`/admin/wallet-requests/${id}/approve`, { method: 'PATCH', body }),
+  rejectWalletRequest: (id, body = {}) =>
+    apiRequest(`/admin/wallet-requests/${id}/reject`, { method: 'PATCH', body }),
+  payouts: () => apiRequest('/admin/payouts'),
+  processPayout: (supplierId) =>
+    apiRequest(`/admin/payouts/${supplierId}/process`, { method: 'PATCH' }),
+  supplierDisputes: () => apiRequest('/admin/disputes/supplier'),
+  userComplaints: () => apiRequest('/admin/disputes/user'),
+  disputeUnreadCount: () => apiRequest('/admin/disputes/unread-count'),
+  getDispute: (id) => apiRequest(`/admin/disputes/${id}`),
+  sendDisputeMessage: (id, text) =>
+    apiRequest(`/admin/disputes/${id}/messages`, { method: 'POST', body: { text } }),
+  markDisputeRead: (id) => apiRequest(`/admin/disputes/${id}/read`, { method: 'PATCH' }),
+  resolveDispute: (id, body = {}) =>
+    apiRequest(`/admin/disputes/${id}/resolve`, { method: 'PATCH', body }),
+  rejectDispute: (id, body = {}) =>
+    apiRequest(`/admin/disputes/${id}/reject`, { method: 'PATCH', body }),
+  adminUsers: () => apiRequest('/admin/admins'),
+  createAdminUser: (payload) => apiRequest('/admin/admins', { method: 'POST', body: payload }),
+  roles: () => apiRequest('/admin/roles'),
+  permissions: () => apiRequest('/admin/permissions'),
+  createRole: (payload) => apiRequest('/admin/roles', { method: 'POST', body: payload }),
+  updateRole: (id, payload) => apiRequest(`/admin/roles/${id}`, { method: 'PATCH', body: payload }),
+  deleteRole: (id) => apiRequest(`/admin/roles/${id}`, { method: 'DELETE' }),
+  dashboardStats: (period = 'all') =>
+    apiRequest(`/admin/dashboard/stats?period=${encodeURIComponent(period)}`),
 }

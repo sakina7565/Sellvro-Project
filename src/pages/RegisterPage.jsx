@@ -57,13 +57,15 @@ function RegisterPage() {
   }
 
   return (
-    <AuthLayout cardClassName="max-w-lg">
-      <h1 className="mt-3 text-center text-xl font-bold text-slate-900">Create an Account</h1>
+    <AuthLayout cardClassName="max-w-md">
+      <h1 className="text-center text-xl font-bold text-slate-900">Create an Account</h1>
       <p className="mt-1 text-center text-sm text-slate-500">Join Ezone to get started today</p>
 
-      <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+      <form className="mt-6 space-y-4" onSubmit={handleSubmit} noValidate>
         {error && (
-          <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>
+          <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">
+            {error}
+          </p>
         )}
 
         <Select
@@ -74,6 +76,7 @@ function RegisterPage() {
           value={role}
           onChange={(e) => setRole(e.target.value)}
           required
+          className={!role ? 'text-slate-400' : ''}
         >
           <option value="" disabled>
             Select Role
@@ -91,6 +94,7 @@ function RegisterPage() {
           placeholder="Enter full name"
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
+          autoComplete="name"
           required
         />
 
@@ -103,35 +107,37 @@ function RegisterPage() {
           placeholder="Enter email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
           required
         />
 
-        <div className="grid grid-cols-2 gap-4">
-          <Input
-            id="password"
-            name="password"
-            label="Password"
-            type="password"
-            icon={Lock}
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-          <Input
-            id="confirmPassword"
-            name="confirmPassword"
-            label="Confirm"
-            type="password"
-            icon={ShieldCheck}
-            placeholder="Confirm"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-          />
-        </div>
+        <Input
+          id="password"
+          name="password"
+          label="Password"
+          type="password"
+          icon={Lock}
+          placeholder="Enter password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="new-password"
+          required
+        />
 
-        <Button type="submit" fullWidth disabled={submitting}>
+        <Input
+          id="confirmPassword"
+          name="confirmPassword"
+          label="Confirm Password"
+          type="password"
+          icon={ShieldCheck}
+          placeholder="Confirm password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          autoComplete="new-password"
+          required
+        />
+
+        <Button type="submit" fullWidth disabled={submitting} className="mt-2">
           {submitting ? 'Creating account…' : 'Register Now'}
         </Button>
       </form>

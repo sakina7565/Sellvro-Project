@@ -151,13 +151,6 @@ export const USER_COMPLAINTS = []
 
 export const SUPPLIER_DISPUTES = []
 
-export const ROLES = [
-  { id: 1, name: 'supplier' },
-  { id: 2, name: 'user' },
-  { id: 3, name: 'disputes' },
-  { id: 4, name: 'finance' },
-]
-
 export const SETTINGS_USERS = [
   { id: 1, name: 'Sabina', email: 'sabina.user@gmail.com', role: 'user' },
   { id: 2, name: 'billy', email: 'ejaytechzoharibaig@gmail.com', role: 'user' },

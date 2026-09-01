@@ -3,28 +3,18 @@
  */
 export const USER_DASHBOARD_MODULES = [
   {
-    title: 'Inventory',
+    title: 'Store',
     description: 'Monitor stock levels, manage product SKUs, and track warehouse Inventory.',
     links: [
-      { label: 'All Inventory', to: '/user/products' },
-      { label: 'Add Product', to: '/user/products' },
-      { label: 'SKU Reporting', to: '/user/inventory/sku-reporting' },
+      { label: 'Sellvro Products', to: '/user/products' },
       { label: 'My Reporting', to: '/user/inventory/my-reporting' },
     ],
     featured: true,
   },
   {
     title: 'Finance',
-    description: 'Manage billing, payments and wallet transactions.',
-    links: [{ label: 'Billing', to: '/user/wallet' }],
-  },
-  {
-    title: 'Shipment',
-    description: 'Track and manage all your shipments in one place.',
-    links: [
-      { label: 'All Shipments', to: '/user/orders' },
-      { label: 'Create Shipment', to: '/user/orders' },
-    ],
+    description: 'Manage wallet balance and top-up requests.',
+    links: [{ label: 'My Wallet', to: '/user/wallet' }],
   },
   {
     title: 'Fulfillment',
@@ -38,8 +28,8 @@ export const USER_DASHBOARD_MODULES = [
     title: 'Disputes',
     description: 'Review and manage order disputes.',
     links: [
-      { label: 'All Disputes', to: '/user/orders' },
-      { label: 'Create Dispute', to: '/user/orders' },
+      { label: 'All Disputes', to: '/user/disputes' },
+      { label: 'Create Dispute', to: '/user/disputes' },
     ],
   },
   {

@@ -1,5 +1,12 @@
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
+import Role from '../models/Role.js'
+import { readAuthToken } from '../utils/authCookie.js'
+import {
+  ALL_PERMISSION_KEYS,
+  hasAnyPermission,
+  sanitizePermissions,
+} from '../constants/permissions.js'
 
 export const signToken = (userId) =>
   jwt.sign({ id: userId }, process.env.JWT_SECRET, {
@@ -8,12 +15,11 @@ export const signToken = (userId) =>
 
 export const protect = async (req, res, next) => {
   try {
-    const header = req.headers.authorization
-    if (!header?.startsWith('Bearer ')) {
+    const token = readAuthToken(req)
+    if (!token) {
       return res.status(401).json({ message: 'Not authorized. Please log in.' })
     }
 
-    const token = header.split(' ')[1]
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
     const user = await User.findById(decoded.id)
 
@@ -50,3 +56,44 @@ export const requireApproved = (req, res, next) => {
   }
   return next()
 }
+
+export async function attachAdminPermissions(req, _res, next) {
+  try {
+    if (req.user?.role !== 'admin') {
+      req.adminPermissions = []
+      return next()
+    }
+
+    if (!req.user.adminRoleId) {
+      req.adminPermissions = ALL_PERMISSION_KEYS
+      req.isSuperAdmin = true
+      return next()
+    }
+
+    const role = await Role.findById(req.user.adminRoleId)
+    req.adminPermissions = sanitizePermissions(role?.permissions || [])
+    req.adminRoleName = role?.name || null
+    req.isSuperAdmin = false
+    return next()
+  } catch (error) {
+    return next(error)
+  }
+}
+
+export const requirePermission =
+  (...permissions) =>
+  (req, res, next) => {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ message: 'You do not have access to this resource.' })
+    }
+
+    if (!req.user.adminRoleId) {
+      return next()
+    }
+
+    if (!hasAnyPermission(req.adminPermissions, permissions)) {
+      return res.status(403).json({ message: 'You do not have permission to do that.' })
+    }
+
+    return next()
+  }

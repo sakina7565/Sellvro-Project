@@ -1,8 +1,24 @@
 import User from '../models/User.js'
+import Role from '../models/Role.js'
 import { signToken } from '../middleware/auth.js'
+import { clearAuthCookie, setAuthCookie } from '../utils/authCookie.js'
+import {
+  ALL_PERMISSION_KEYS,
+  sanitizePermissions,
+  ADMIN_ROUTE_PERMISSIONS,
+  hasPermission,
+} from '../constants/permissions.js'
 
 const getHomePath = (user) => {
-  if (user.role === 'admin') return '/admin/dashboard'
+  if (user.role === 'admin') {
+    if (!user.adminRoleId || hasPermission(user.permissions, 'admin.dashboard.view')) {
+      return '/admin/dashboard'
+    }
+    const firstAllowed = Object.keys(ADMIN_ROUTE_PERMISSIONS).find((path) =>
+      hasPermission(user.permissions, ADMIN_ROUTE_PERMISSIONS[path]),
+    )
+    return firstAllowed || '/admin/dashboard'
+  }
   if (user.role === 'supplier') {
     return user.status === 'approved' ? '/supplier/dashboard' : '/supplier/business/details'
   }
@@ -10,6 +26,24 @@ const getHomePath = (user) => {
     return user.status === 'approved' ? '/user/dashboard' : '/user/business/detail'
   }
   return '/'
+}
+
+async function buildSafeUser(user) {
+  if (user.role !== 'admin') {
+    return user.toSafeObject()
+  }
+
+  if (!user.adminRoleId) {
+    return user.toSafeObject({ permissions: ALL_PERMISSION_KEYS })
+  }
+
+  const role = await Role.findById(user.adminRoleId)
+  const permissions = sanitizePermissions(role?.permissions || [])
+  const safeUser = user.toSafeObject({
+    permissions,
+    adminRoleName: role?.name || null,
+  })
+  return safeUser
 }
 
 export const register = async (req, res) => {
@@ -48,11 +82,11 @@ export const register = async (req, res) => {
     })
 
     const token = signToken(user._id)
-    const safeUser = user.toSafeObject()
+    setAuthCookie(res, token)
+    const safeUser = await buildSafeUser(user)
 
     return res.status(201).json({
       message: 'Registration successful.',
-      token,
       user: safeUser,
       redirectTo: getHomePath(safeUser),
     })
@@ -100,11 +134,11 @@ export const login = async (req, res) => {
     }
 
     const token = signToken(user._id)
-    const safeUser = user.toSafeObject()
+    setAuthCookie(res, token)
+    const safeUser = await buildSafeUser(user)
 
     return res.json({
       message: 'Login successful.',
-      token,
       user: safeUser,
       redirectTo: getHomePath(safeUser),
     })
@@ -115,8 +149,14 @@ export const login = async (req, res) => {
 }
 
 export const getMe = async (req, res) => {
+  const safeUser = await buildSafeUser(req.user)
   return res.json({
-    user: req.user.toSafeObject(),
-    redirectTo: getHomePath(req.user.toSafeObject()),
+    user: safeUser,
+    redirectTo: getHomePath(safeUser),
   })
+}
+
+export const logout = async (_req, res) => {
+  clearAuthCookie(res)
+  return res.json({ message: 'Logged out.' })
 }

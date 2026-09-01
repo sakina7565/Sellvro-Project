@@ -3,10 +3,18 @@ import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
 import express from 'express'
 import cors from 'cors'
+import cookieParser from 'cookie-parser'
 import connectDB from './config/db.js'
 import authRoutes from './routes/authRoutes.js'
 import businessRoutes from './routes/businessRoutes.js'
 import adminRoutes from './routes/adminRoutes.js'
+import productRoutes from './routes/productRoutes.js'
+import categoryRoutes from './routes/categoryRoutes.js'
+import orderRoutes from './routes/orderRoutes.js'
+import walletRoutes from './routes/walletRoutes.js'
+import disputeRoutes from './routes/disputeRoutes.js'
+import financeRoutes from './routes/financeRoutes.js'
+import { UPLOADS_DIR } from './middleware/upload.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -15,6 +23,7 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') })
 
 const app = express()
 const PORT = process.env.PORT || 5000
+app.set('trust proxy', 1)
 
 const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173,http://localhost:5174')
   .split(',')
@@ -33,7 +42,9 @@ app.use(
     credentials: true,
   }),
 )
+app.use(cookieParser())
 app.use(express.json())
+app.use('/uploads', express.static(UPLOADS_DIR))
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'Sellvro API is running' })
@@ -42,6 +53,12 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRoutes)
 app.use('/api/business', businessRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/api/products', productRoutes)
+app.use('/api/categories', categoryRoutes)
+app.use('/api/orders', orderRoutes)
+app.use('/api/wallet', walletRoutes)
+app.use('/api/disputes', disputeRoutes)
+app.use('/api/finance', financeRoutes)
 
 app.use((err, _req, res, _next) => {
   console.error(err)

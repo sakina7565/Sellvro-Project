@@ -1,0 +1,5 @@
+[33m7a84b0e[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Redesign panel UI and add SKU and business reporting pages across admin, supplier, and user roles.
+[33m310c5d5[m[33m ([m[1;31morigin/main[m[33m)[m Remove railway.toml - not needed, using package.json start script
+[33mc29db8d[m Fix railway.toml syntax - use TOML format instead of JSON
+[33ma905f67[m Fix server folder - add as regular directory not submodule
+[33m955e657[m[33m ([m[1;31morigin/master[m[33m)[m Add complete frontend and organize backend into server folder

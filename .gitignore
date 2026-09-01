@@ -5,6 +5,8 @@ dist-ssr
 .env
 .env.*
 !.env.example
+uploads
+!uploads/.gitkeep
 
 .vscode/*
 !.vscode/extensions.json

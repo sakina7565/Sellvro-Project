@@ -18,6 +18,8 @@ CLIENT_URL=https://YOUR-VERCEL-APP.vercel.app
 
 5. Deploy and copy the public URL, e.g. `https://sellvro-api.up.railway.app`
 
+Auth uses an **httpOnly cookie**. Railway `CLIENT_URL` must be the exact Vercel origin (no trailing slash), and Vercel `VITE_API_URL` must point at Railway `/api`. After changing those, redeploy both.
+
 ## 3. Frontend → Vercel
 1. Go to https://vercel.com → Add New Project → import this repo.
 2. Framework: Vite · Build: `npm run build` · Output: `dist`
