@@ -79,7 +79,7 @@ function SupplierProductsPage() {
 
       <h2 className="mb-1 text-sm font-bold text-slate-900">Your products</h2>
       <p className="mb-4 text-sm text-slate-500">
-        After admin approves your product, it still needs activation before users can buy it on the marketplace.
+        Submitted products stay hidden until an admin uses <span className="font-medium text-slate-700">Approve &amp; Activate</span> (or Approve, then Activate). Only Active products appear for users.
       </p>
 
       {error && (

@@ -25,10 +25,23 @@ const FIELD_CLASS =
 const TEXTAREA_CLASS =
   'w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 transition-colors focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100'
 
-function PendingBadge() {
+function StatusBadge({ panel, publishActive }) {
+  if (panel === 'admin' && publishActive) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+        Live on marketplace
+      </span>
+    )
+  }
+  if (panel === 'admin') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
+        Needs approval later
+      </span>
+    )
+  }
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700">
-      <span aria-hidden>⏳</span>
       Pending Approval
     </span>
   )
@@ -71,7 +84,7 @@ function AddProductForm({ eyebrow, panel = 'supplier' }) {
   const [photos, setPhotos] = useState([])
   const [categories, setCategories] = useState([])
   const [suppliers, setSuppliers] = useState([])
-  const [publishActive, setPublishActive] = useState(false)
+  const [publishActive, setPublishActive] = useState(panel === 'admin')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -184,12 +197,21 @@ function AddProductForm({ eyebrow, panel = 'supplier' }) {
 
   const handleSubmit = (event) => {
     event.preventDefault()
+    if (panel === 'admin') {
+      saveProduct(publishActive ? 'active' : 'pending_approval')
+      return
+    }
     saveProduct('pending_approval')
   }
 
   return (
     <>
-      <PageHeader eyebrow={eyebrow} title="Add Product" action={<PendingBadge />} className="mb-6" />
+      <PageHeader
+        eyebrow={eyebrow}
+        title="Add Product"
+        action={<StatusBadge panel={panel} publishActive={publishActive} />}
+        className="mb-6"
+      />
 
       <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
         {error && (

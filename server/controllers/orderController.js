@@ -28,16 +28,54 @@ async function populateOrder(query) {
     .populate('product', 'name sku image')
 }
 
+function normalizeShippingAddress(raw = {}) {
+  return {
+    fullName: String(raw.fullName || '').trim(),
+    phone: String(raw.phone || '').trim(),
+    addressLine: String(raw.addressLine || '').trim(),
+    city: String(raw.city || '').trim(),
+    state: String(raw.state || '').trim(),
+    postalCode: String(raw.postalCode || '').trim(),
+    country: String(raw.country || '').trim(),
+  }
+}
+
+function validateShippingAddress(shipping) {
+  const labels = {
+    fullName: 'full name',
+    phone: 'phone',
+    addressLine: 'address',
+    city: 'city',
+    state: 'state / province',
+    postalCode: 'postal code',
+    country: 'country',
+  }
+  for (const [key, label] of Object.entries(labels)) {
+    if (!shipping[key]) {
+      return `Shipping ${label} is required.`
+    }
+  }
+  return null
+}
+
 export const createOrder = async (req, res) => {
   try {
     const productId = req.body.productId || req.body.product
     const quantity = Number(req.body.quantity || 1)
+    const shippingAddress = normalizeShippingAddress(
+      req.body.shippingAddress || req.body.shipping || req.body,
+    )
 
     if (!productId) {
       return res.status(400).json({ message: 'Product is required.' })
     }
     if (!Number.isFinite(quantity) || quantity < 1) {
       return res.status(400).json({ message: 'Quantity must be at least 1.' })
+    }
+
+    const shippingError = validateShippingAddress(shippingAddress)
+    if (shippingError) {
+      return res.status(400).json({ message: shippingError })
     }
 
     const product = await Product.findById(productId)
@@ -82,6 +120,7 @@ export const createOrder = async (req, res) => {
       status: 'placed',
       brandLabel: String(req.body.brandLabel || '').trim(),
       payoutStatus: 'pending',
+      shippingAddress,
     })
 
     await buyer.save()

@@ -16,7 +16,7 @@ import {
   UserCog,
   Warehouse,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -30,14 +30,17 @@ import PageHeader from '../admin/PageHeader.jsx'
 import Card from '../ui/Card.jsx'
 import Button from '../ui/Button.jsx'
 import Badge from '../ui/Badge.jsx'
+import { adminApi, disputeApi, getErrorMessage, mediaUrl, orderApi, productApi } from '../../lib/api.js'
+import { PRODUCT_STATUS_LABEL } from '../../lib/productStatus.js'
 import {
-  SKU_DISPUTES,
-  SKU_FULFILLMENTS,
-  SKU_MONTHLY_IN_OUT,
-  SKU_REPORT_METRICS,
-  SKU_REPORT_PRODUCT,
-  SKU_SHIPMENTS,
-} from '../../lib/mockSkuReportData.js'
+  badgeToneForStatus,
+  formatMoney,
+  formatReportDate,
+  inDateRange,
+  lastSixMonthBuckets,
+  monthKey,
+  statusLabel,
+} from '../../lib/reportUtils.js'
 
 const ICON_MAP = {
   warehouse: Warehouse,
@@ -93,7 +96,7 @@ function SkuMetricCard({ icon, tone, value, label }) {
   )
 }
 
-function SectionTable({ title, count, icon: Icon, columns, rows, emptyMessage }) {
+function SectionTable({ title, count, icon: Icon, columns, rows, emptyMessage, renderRow }) {
   return (
     <Card className="overflow-hidden border border-slate-200 shadow-soft">
       <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
@@ -124,26 +127,7 @@ function SectionTable({ title, count, icon: Icon, columns, rows, emptyMessage })
                 </td>
               </tr>
             ) : (
-              rows.map((row) => (
-                <tr key={row.shipmentNo || row.date} className="border-b border-slate-50 last:border-0">
-                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{row.date}</td>
-                  <td className="whitespace-nowrap px-5 py-3.5 font-medium text-slate-800">
-                    {row.shipmentNo}
-                  </td>
-                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{row.courier}</td>
-                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{row.expected}</td>
-                  <td className="whitespace-nowrap px-5 py-3.5">
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-600">
-                      {row.received}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{row.damaged}</td>
-                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{row.missing}</td>
-                  <td className="whitespace-nowrap px-5 py-3.5">
-                    <Badge tone="success">{row.status}</Badge>
-                  </td>
-                </tr>
-              ))
+              rows.map((row, index) => renderRow(row, index))
             )}
           </tbody>
         </table>
@@ -152,30 +136,288 @@ function SectionTable({ title, count, icon: Icon, columns, rows, emptyMessage })
   )
 }
 
+async function fetchPanelData(panel) {
+  if (panel === 'admin') {
+    const [productsRes, ordersRes, supplierDisputesRes, userDisputesRes] = await Promise.all([
+      adminApi.products(),
+      adminApi.orders(),
+      adminApi.supplierDisputes().catch(() => ({ data: [] })),
+      adminApi.userComplaints().catch(() => ({ data: [] })),
+    ])
+    return {
+      products: productsRes.data || [],
+      orders: ordersRes.data || [],
+      disputes: [...(supplierDisputesRes.data || []), ...(userDisputesRes.data || [])],
+    }
+  }
+
+  const [productsRes, ordersRes, disputesRes] = await Promise.all([
+    productApi.mine(),
+    orderApi.supplier(),
+    disputeApi.mine().catch(() => ({ data: [] })),
+  ])
+  return {
+    products: productsRes.data || [],
+    orders: ordersRes.data || [],
+    disputes: disputesRes.data || [],
+  }
+}
+
 /**
  * Shared SKU Reporting page content — used by admin and supplier panels.
+ * Loads live products / orders / disputes and builds the report on demand.
  */
 function SkuReportingContent({ panel = 'admin' }) {
-  const [skuQuery, setSkuQuery] = useState(SKU_REPORT_PRODUCT.sku)
+  const [skuQuery, setSkuQuery] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
-  const product = SKU_REPORT_PRODUCT
+  const [products, setProducts] = useState([])
+  const [orders, setOrders] = useState([])
+  const [disputes, setDisputes] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [reportError, setReportError] = useState('')
+  const [selectedProduct, setSelectedProduct] = useState(null)
+  const [appliedFrom, setAppliedFrom] = useState('')
+  const [appliedTo, setAppliedTo] = useState('')
   const copy = PANEL_COPY[panel] || PANEL_COPY.admin
+
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await fetchPanelData(panel)
+      setProducts(data.products)
+      setOrders(data.orders)
+      setDisputes(data.disputes)
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to load reporting data.'))
+      setProducts([])
+      setOrders([])
+      setDisputes([])
+    } finally {
+      setLoading(false)
+    }
+  }, [panel])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  const skuSuggestions = useMemo(() => {
+    const query = skuQuery.trim().toUpperCase()
+    if (!query || query.length < 2) return []
+    return products
+      .filter((product) => String(product.sku || '').toUpperCase().includes(query))
+      .slice(0, 8)
+  }, [products, skuQuery])
+
+  const findProduct = useCallback(
+    (query) => {
+      const normalized = query.trim().toUpperCase()
+      if (!normalized) return null
+      const exact = products.find((product) => String(product.sku || '').toUpperCase() === normalized)
+      if (exact) return exact
+      return (
+        products.find((product) => String(product.sku || '').toUpperCase().includes(normalized)) ||
+        null
+      )
+    },
+    [products],
+  )
+
+  const handleLoadReport = () => {
+    setReportError('')
+    const product = findProduct(skuQuery)
+    if (!product) {
+      setSelectedProduct(null)
+      setReportError(
+        skuQuery.trim()
+          ? `No product found for SKU "${skuQuery.trim()}".`
+          : 'Enter a SKU to load the report.',
+      )
+      return
+    }
+    setSkuQuery(product.sku || '')
+    setSelectedProduct(product)
+    setAppliedFrom(fromDate)
+    setAppliedTo(toDate)
+  }
 
   const handleClear = () => {
     setSkuQuery('')
     setFromDate('')
     setToDate('')
+    setAppliedFrom('')
+    setAppliedTo('')
+    setSelectedProduct(null)
+    setReportError('')
   }
+
+  const productOrders = useMemo(() => {
+    if (!selectedProduct) return []
+    return orders.filter(
+      (order) =>
+        order.productId === selectedProduct.id &&
+        inDateRange(order.createdAt, appliedFrom, appliedTo),
+    )
+  }, [orders, selectedProduct, appliedFrom, appliedTo])
+
+  const productDisputes = useMemo(() => {
+    if (!selectedProduct) return []
+    return disputes.filter((dispute) => {
+      const matchesProduct =
+        dispute.productId === selectedProduct.id ||
+        String(dispute.productSku || '').toUpperCase() === String(selectedProduct.sku || '').toUpperCase()
+      return matchesProduct && inDateRange(dispute.createdAt, appliedFrom, appliedTo)
+    })
+  }, [disputes, selectedProduct, appliedFrom, appliedTo])
+
+  const unitsDispatched = useMemo(
+    () =>
+      productOrders
+        .filter((order) => order.status !== 'cancelled')
+        .reduce((sum, order) => sum + (Number(order.quantity) || 0), 0),
+    [productOrders],
+  )
+
+  const pendingFulfills = useMemo(
+    () => productOrders.filter((order) => ['pending', 'placed', 'in_process'].includes(order.status)).length,
+    [productOrders],
+  )
+
+  const fulfillByAdmin = useMemo(
+    () =>
+      selectedProduct?.fulfillBy === 'warehouse' || selectedProduct?.inWarehouse
+        ? productOrders.length
+        : 0,
+    [selectedProduct, productOrders],
+  )
+
+  const fulfillByClient = useMemo(
+    () => (selectedProduct?.fulfillBy === 'self' ? productOrders.length : 0),
+    [selectedProduct, productOrders],
+  )
+
+  const stockReceived = Number(selectedProduct?.quantity || 0) + unitsDispatched
+
+  const metrics = useMemo(() => {
+    if (!selectedProduct) return []
+    return [
+      { label: 'Current Stock', value: selectedProduct.quantity ?? 0, tone: 'blue', icon: 'warehouse' },
+      {
+        label: 'Shipments',
+        value: selectedProduct.quantity > 0 || stockReceived > 0 ? 1 : 0,
+        tone: 'green',
+        icon: 'truck',
+      },
+      { label: 'Units Received', value: stockReceived, tone: 'green', icon: 'download' },
+      { label: 'Units Dispatched', value: unitsDispatched, tone: 'blue', icon: 'truckOut' },
+      { label: 'Disputes', value: productDisputes.length, tone: 'orange', icon: 'alert' },
+      { label: 'Damaged Units', value: 0, tone: 'red', icon: 'target' },
+      { label: 'Missing Units', value: 0, tone: 'orange', icon: 'alertCircle' },
+      { label: 'Fulfillments', value: productOrders.length, tone: 'blue', icon: 'send' },
+      { label: 'Pending Fulfills', value: pendingFulfills, tone: 'yellow', icon: 'hourglass' },
+      { label: 'Fulfillment by Admin', value: fulfillByAdmin, tone: 'purple', icon: 'userCog' },
+      { label: 'Fulfillment by Client', value: fulfillByClient, tone: 'teal', icon: 'user' },
+    ]
+  }, [
+    selectedProduct,
+    stockReceived,
+    unitsDispatched,
+    productDisputes.length,
+    productOrders.length,
+    pendingFulfills,
+    fulfillByAdmin,
+    fulfillByClient,
+  ])
+
+  const monthlyData = useMemo(() => {
+    const buckets = lastSixMonthBuckets()
+    if (!selectedProduct) return buckets
+
+    const createdKey = monthKey(selectedProduct.createdAt)
+    const bucket = buckets.find((item) => item.key === createdKey)
+    if (bucket && inDateRange(selectedProduct.createdAt, appliedFrom, appliedTo)) {
+      bucket.received += stockReceived
+    }
+
+    productOrders.forEach((order) => {
+      if (order.status === 'cancelled') return
+      const key = monthKey(order.createdAt)
+      const target = buckets.find((item) => item.key === key)
+      if (target) target.dispatched += Number(order.quantity) || 0
+    })
+
+    return buckets
+  }, [selectedProduct, productOrders, stockReceived, appliedFrom, appliedTo])
+
+  const shipments = useMemo(() => {
+    if (!selectedProduct) return []
+    if (!inDateRange(selectedProduct.createdAt, appliedFrom, appliedTo)) return []
+    if (stockReceived <= 0) return []
+    return [
+      {
+        date: formatReportDate(selectedProduct.createdAt),
+        shipmentNo: `STOCK-${selectedProduct.sku}`,
+        courier: selectedProduct.inWarehouse ? 'warehouse' : 'manual',
+        expected: stockReceived,
+        received: stockReceived,
+        damaged: 0,
+        missing: 0,
+        status: 'received',
+      },
+    ]
+  }, [selectedProduct, stockReceived, appliedFrom, appliedTo])
+
+  const fulfillments = useMemo(
+    () =>
+      productOrders.map((order) => ({
+        id: order.id,
+        date: order.date || formatReportDate(order.createdAt),
+        tracking: order.orderNo || '—',
+        quantity: order.quantity ?? order.items ?? 0,
+        source: order.user || order.brandLabel || '—',
+        location: selectedProduct?.location || '—',
+        status: order.statusLabel || statusLabel(order.status),
+        tone: badgeToneForStatus(order.status),
+      })),
+    [productOrders, selectedProduct],
+  )
+
+  const disputeRows = useMemo(
+    () =>
+      productDisputes.map((dispute) => ({
+        id: dispute.id,
+        date: dispute.date || formatReportDate(dispute.createdAt),
+        type: dispute.type || 'Dispute',
+        message: dispute.message || dispute.requests || '—',
+        raisedBy: dispute.fromLabel || dispute.from || dispute.raisedBy?.label || '—',
+        status: statusLabel(dispute.status),
+        tone: badgeToneForStatus(dispute.status),
+      })),
+    [productDisputes],
+  )
+
+  const productImage =
+    selectedProduct?.image ||
+    (Array.isArray(selectedProduct?.images) ? selectedProduct.images[0] : '') ||
+    ''
 
   return (
     <>
       <PageHeader eyebrow={copy.eyebrow} title="My SKU Reporting" className="mb-4" />
       <p className="mb-5 text-sm text-slate-500">{copy.subtitle}</p>
 
+      {error && (
+        <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      )}
+
       <Card className="mb-5 border border-slate-200 p-4 shadow-soft">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-          <div className="min-w-0 flex-1">
+          <div className="relative min-w-0 flex-1">
             <label htmlFor="sku-search" className="mb-1.5 block text-xs font-medium text-slate-500">
               Search SKU
             </label>
@@ -186,9 +428,24 @@ function SkuReportingContent({ panel = 'admin' }) {
                 type="search"
                 value={skuQuery}
                 onChange={(e) => setSkuQuery(e.target.value)}
-                placeholder="Enter SKU..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleLoadReport()
+                  }
+                }}
+                placeholder={loading ? 'Loading products…' : 'Enter SKU…'}
+                list="sku-suggestions"
                 className={`${FILTER_INPUT} pl-10`}
+                disabled={loading}
               />
+              <datalist id="sku-suggestions">
+                {skuSuggestions.map((product) => (
+                  <option key={product.id} value={product.sku}>
+                    {product.name}
+                  </option>
+                ))}
+              </datalist>
             </div>
           </div>
 
@@ -226,7 +483,13 @@ function SkuReportingContent({ panel = 'admin' }) {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" className="h-10">
+            <Button
+              type="button"
+              size="sm"
+              className="h-10"
+              onClick={handleLoadReport}
+              disabled={loading}
+            >
               <BarChart3 className="h-4 w-4" />
               Load Report
             </Button>
@@ -242,113 +505,191 @@ function SkuReportingContent({ panel = 'admin' }) {
             </Button>
           </div>
         </div>
+        {reportError && <p className="mt-3 text-sm text-rose-600">{reportError}</p>}
+        {!loading && !error && products.length > 0 && (
+          <p className="mt-3 text-xs text-slate-400">
+            {products.length} product{products.length === 1 ? '' : 's'} available for reporting.
+          </p>
+        )}
       </Card>
 
-      <Card className="mb-5 border border-slate-200 p-4 shadow-soft sm:p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50">
-            <ImageIcon className="h-8 w-8 text-slate-300" />
-          </div>
+      {!selectedProduct ? (
+        <Card className="border border-dashed border-slate-200 p-10 text-center shadow-soft">
+          <Package className="mx-auto mb-3 h-8 w-8 text-slate-300" />
+          <p className="text-sm font-medium text-slate-700">No report loaded</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Search a product SKU and click Load Report to view stock, fulfillments and disputes.
+          </p>
+        </Card>
+      ) : (
+        <>
+          <Card className="mb-5 border border-slate-200 p-4 shadow-soft sm:p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                {productImage ? (
+                  <img
+                    src={mediaUrl(productImage)}
+                    alt={selectedProduct.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <ImageIcon className="h-8 w-8 text-slate-300" />
+                )}
+              </div>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <h2 className="text-lg font-bold text-slate-900">{product.name}</h2>
-              <Badge tone="success">{product.status}</Badge>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h2 className="text-lg font-bold text-slate-900">{selectedProduct.name}</h2>
+                  <Badge tone={badgeToneForStatus(selectedProduct.status)}>
+                    {PRODUCT_STATUS_LABEL[selectedProduct.status] || statusLabel(selectedProduct.status)}
+                  </Badge>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 sm:text-sm">
+                  <span>
+                    <span className="font-medium text-slate-400">SKU:</span> {selectedProduct.sku}
+                  </span>
+                  <span>
+                    <span className="font-medium text-slate-400">Category:</span>{' '}
+                    {selectedProduct.category || '—'}
+                  </span>
+                  <span>
+                    <span className="font-medium text-slate-400">Brand:</span>{' '}
+                    {selectedProduct.brand || '—'}
+                  </span>
+                  <span>
+                    <span className="font-medium text-slate-400">
+                      {panel === 'admin' ? 'Supplier' : 'Location'}:
+                    </span>{' '}
+                    {panel === 'admin' ? selectedProduct.supplier || '—' : selectedProduct.location || '—'}
+                  </span>
+                  <span>
+                    <span className="font-medium text-slate-400">Price:</span>{' '}
+                    {formatMoney(selectedProduct.price)}
+                  </span>
+                  <span>
+                    <span className="font-medium text-slate-400">Added:</span>{' '}
+                    {formatReportDate(selectedProduct.createdAt)}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 sm:text-sm">
-              <span>
-                <span className="font-medium text-slate-400">SKU:</span> {product.sku}
-              </span>
-              <span>
-                <span className="font-medium text-slate-400">Category:</span> {product.category}
-              </span>
-              <span>
-                <span className="font-medium text-slate-400">Brand:</span> {product.brand}
-              </span>
-              <span>
-                <span className="font-medium text-slate-400">Client:</span> {product.client}
-              </span>
-              <span>
-                <span className="font-medium text-slate-400">Price:</span> {product.price}
-              </span>
-              <span>
-                <span className="font-medium text-slate-400">Added:</span> {product.added}
-              </span>
+          </Card>
+
+          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {metrics.slice(0, 6).map((metric) => (
+              <SkuMetricCard key={metric.label} {...metric} />
+            ))}
+          </div>
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {metrics.slice(6).map((metric) => (
+              <SkuMetricCard key={metric.label} {...metric} />
+            ))}
+          </div>
+
+          <Card className="mb-6 border border-slate-200 p-5 shadow-soft">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-slate-900">Monthly In vs Out (Last 6 Months)</h3>
+              <div className="flex items-center gap-4 text-xs text-slate-500">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+                  Received
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                  Dispatched
+                </span>
+              </div>
             </div>
+            <div className="h-56 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <XAxis
+                    dataKey="month"
+                    tick={{ fontSize: 11, fill: '#94a3b8' }}
+                    axisLine={{ stroke: '#e2e8f0' }}
+                    tickLine={false}
+                  />
+                  <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={30} />
+                  <Tooltip contentStyle={{ borderRadius: 8, borderColor: '#e2e8f0', fontSize: 12 }} />
+                  <Legend wrapperStyle={{ display: 'none' }} />
+                  <Bar dataKey="received" fill="#3d4fe0" radius={[4, 4, 0, 0]} barSize={28} />
+                  <Bar dataKey="dispatched" fill="#10b981" radius={[4, 4, 0, 0]} barSize={28} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          <div className="flex flex-col gap-5">
+            <SectionTable
+              title="Shipments Timeline"
+              count={shipments.length}
+              columns={['DATE', 'SHIPMENT #', 'COURIER', 'EXPECTED', 'RECEIVED', 'DAMAGED', 'MISSING', 'STATUS']}
+              rows={shipments}
+              emptyMessage="No shipments found"
+              renderRow={(row) => (
+                <tr key={row.shipmentNo} className="border-b border-slate-50 last:border-0">
+                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{row.date}</td>
+                  <td className="whitespace-nowrap px-5 py-3.5 font-medium text-slate-800">
+                    {row.shipmentNo}
+                  </td>
+                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{row.courier}</td>
+                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{row.expected}</td>
+                  <td className="whitespace-nowrap px-5 py-3.5">
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-600">
+                      {row.received}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{row.damaged}</td>
+                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{row.missing}</td>
+                  <td className="whitespace-nowrap px-5 py-3.5">
+                    <Badge tone="success">{row.status}</Badge>
+                  </td>
+                </tr>
+              )}
+            />
+
+            <SectionTable
+              title="Fulfillment Requests"
+              count={fulfillments.length}
+              columns={['DATE', 'TRACKING #', 'QUANTITY', 'SOURCE', 'LOCATION', 'STATUS']}
+              rows={fulfillments}
+              emptyMessage="No fulfillment requests found"
+              renderRow={(row) => (
+                <tr key={row.id} className="border-b border-slate-50 last:border-0">
+                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{row.date}</td>
+                  <td className="whitespace-nowrap px-5 py-3.5 font-medium text-primary">{row.tracking}</td>
+                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{row.quantity}</td>
+                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{row.source}</td>
+                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{row.location}</td>
+                  <td className="whitespace-nowrap px-5 py-3.5">
+                    <Badge tone={row.tone}>{row.status}</Badge>
+                  </td>
+                </tr>
+              )}
+            />
+
+            <SectionTable
+              title="Disputes"
+              count={disputeRows.length}
+              icon={AlertTriangle}
+              columns={['DATE', 'TYPE', 'MESSAGE', 'RAISED BY', 'STATUS']}
+              rows={disputeRows}
+              emptyMessage="No disputes found"
+              renderRow={(row) => (
+                <tr key={row.id} className="border-b border-slate-50 last:border-0">
+                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{row.date}</td>
+                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-800">{row.type}</td>
+                  <td className="max-w-xs truncate px-5 py-3.5 text-slate-600">{row.message}</td>
+                  <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{row.raisedBy}</td>
+                  <td className="whitespace-nowrap px-5 py-3.5">
+                    <Badge tone={row.tone}>{row.status}</Badge>
+                  </td>
+                </tr>
+              )}
+            />
           </div>
-        </div>
-      </Card>
-
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {SKU_REPORT_METRICS.slice(0, 6).map((metric) => (
-          <SkuMetricCard key={metric.label} {...metric} />
-        ))}
-      </div>
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {SKU_REPORT_METRICS.slice(6).map((metric) => (
-          <SkuMetricCard key={metric.label} {...metric} />
-        ))}
-      </div>
-
-      <Card className="mb-6 border border-slate-200 p-5 shadow-soft">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-bold text-slate-900">Monthly In vs Out (Last 6 Months)</h3>
-          <div className="flex items-center gap-4 text-xs text-slate-500">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-primary" />
-              Received
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-              Dispatched
-            </span>
-          </div>
-        </div>
-        <div className="h-56 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={SKU_MONTHLY_IN_OUT} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <XAxis
-                dataKey="month"
-                tick={{ fontSize: 11, fill: '#94a3b8' }}
-                axisLine={{ stroke: '#e2e8f0' }}
-                tickLine={false}
-              />
-              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={30} />
-              <Tooltip contentStyle={{ borderRadius: 8, borderColor: '#e2e8f0', fontSize: 12 }} />
-              <Legend wrapperStyle={{ display: 'none' }} />
-              <Bar dataKey="received" fill="#3d4fe0" radius={[4, 4, 0, 0]} barSize={28} />
-              <Bar dataKey="dispatched" fill="#10b981" radius={[4, 4, 0, 0]} barSize={28} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
-
-      <div className="flex flex-col gap-5">
-        <SectionTable
-          title="Shipments Timeline"
-          count={SKU_SHIPMENTS.length}
-          columns={['DATE', 'SHIPMENT #', 'COURIER', 'EXPECTED', 'RECEIVED', 'DAMAGED', 'MISSING', 'STATUS']}
-          rows={SKU_SHIPMENTS}
-          emptyMessage="No shipments found"
-        />
-
-        <SectionTable
-          title="Fulfillment Requests"
-          count={SKU_FULFILLMENTS.length}
-          columns={['DATE', 'TRACKING #', 'QUANTITY', 'SOURCE', 'LOCATION', 'STATUS']}
-          rows={SKU_FULFILLMENTS}
-          emptyMessage="No fulfillment requests found"
-        />
-
-        <SectionTable
-          title="Disputes"
-          count={SKU_DISPUTES.length}
-          icon={AlertTriangle}
-          columns={['DATE', 'TYPE', 'MESSAGE', 'RAISED BY', 'STATUS']}
-          rows={SKU_DISPUTES}
-          emptyMessage="No disputes found"
-        />
-      </div>
+        </>
+      )}
     </>
   )
 }

@@ -1,5 +1,18 @@
 import mongoose from 'mongoose'
 
+const shippingAddressSchema = new mongoose.Schema(
+  {
+    fullName: { type: String, trim: true, default: '' },
+    phone: { type: String, trim: true, default: '' },
+    addressLine: { type: String, trim: true, default: '' },
+    city: { type: String, trim: true, default: '' },
+    state: { type: String, trim: true, default: '' },
+    postalCode: { type: String, trim: true, default: '' },
+    country: { type: String, trim: true, default: '' },
+  },
+  { _id: false },
+)
+
 const orderSchema = new mongoose.Schema(
   {
     orderNo: {
@@ -42,6 +55,10 @@ const orderSchema = new mongoose.Schema(
       enum: ['pending', 'processed'],
       default: 'pending',
     },
+    shippingAddress: {
+      type: shippingAddressSchema,
+      default: () => ({}),
+    },
   },
   { timestamps: true },
 )
@@ -61,6 +78,8 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
     this.productName ||
     (productDoc && typeof productDoc === 'object' && productDoc.name ? productDoc.name : '—')
 
+  const shipping = this.shippingAddress || {}
+
   return {
     id: this._id.toString(),
     orderNo: this.orderNo,
@@ -72,6 +91,10 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
     supplierEmail: supplierDoc?.email || '',
     productId: productDoc?._id?.toString?.() || productDoc?.toString?.() || '',
     product: productName,
+    productSku:
+      productDoc && typeof productDoc === 'object' && productDoc.sku ? productDoc.sku : '',
+    productImage:
+      productDoc && typeof productDoc === 'object' && productDoc.image ? productDoc.image : '',
     items: this.quantity,
     quantity: this.quantity,
     unitPrice: this.unitPrice,
@@ -82,11 +105,22 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
     statusLabel: formatStatus(this.status),
     brandLabel: this.brandLabel,
     payoutStatus: this.payoutStatus,
-    date: this.createdAt ? new Date(this.createdAt).toLocaleDateString('en-US', {
-      month: 'short',
-      day: '2-digit',
-      year: 'numeric',
-    }) : '—',
+    shippingAddress: {
+      fullName: shipping.fullName || '',
+      phone: shipping.phone || '',
+      addressLine: shipping.addressLine || '',
+      city: shipping.city || '',
+      state: shipping.state || '',
+      postalCode: shipping.postalCode || '',
+      country: shipping.country || '',
+    },
+    date: this.createdAt
+      ? new Date(this.createdAt).toLocaleDateString('en-US', {
+          month: 'short',
+          day: '2-digit',
+          year: 'numeric',
+        })
+      : '—',
     createdAt: this.createdAt,
   }
 }

@@ -16,8 +16,8 @@ export const PRODUCT_STATUS_LABEL = {
 
 export const PRODUCT_STATUS_HINT = {
   draft: 'Save and submit when ready.',
-  pending_approval: 'Waiting for admin review.',
-  approved: 'Approved — awaiting admin activation for marketplace.',
+  pending_approval: 'Waiting for admin review — not visible to users yet.',
+  approved: 'Approved but not live — click Activate to show on marketplace.',
   active: 'Live on marketplace — users can buy.',
   rejected: 'Rejected by admin. Edit and resubmit.',
 }

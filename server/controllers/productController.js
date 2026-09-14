@@ -224,7 +224,8 @@ export const listAllProducts = async (_req, res) => {
 }
 
 const APPROVABLE_STATUSES = ['draft', 'pending_approval', 'rejected']
-const ACTIVATABLE_STATUSES = ['approved']
+/** Approved products, or pending/draft when admin chooses Activate / Approve & Activate. */
+const ACTIVATABLE_STATUSES = ['approved', 'pending_approval', 'draft', 'rejected']
 const DEACTIVATABLE_STATUSES = ['active']
 const REJECTABLE_STATUSES = ['draft', 'pending_approval', 'approved', 'active']
 
@@ -249,11 +250,18 @@ export const approveProduct = async (req, res) => {
       product.commission = commission
     }
 
-    product.status = 'approved'
+    const alsoActivate =
+      req.body.activate === true ||
+      req.body.activate === 'true' ||
+      req.body.activate === '1'
+
+    product.status = alsoActivate ? 'active' : 'approved'
     await product.save()
 
     return res.json({
-      message: 'Product approved. Supplier can manage it — activate when ready for the marketplace.',
+      message: alsoActivate
+        ? 'Product approved and activated. Users can now buy it on the marketplace.'
+        : 'Product approved. Click Activate to make it visible on the marketplace.',
       product: product.toSafeObject(),
     })
   } catch (error) {
@@ -270,7 +278,7 @@ export const activateProduct = async (req, res) => {
 
     if (!ACTIVATABLE_STATUSES.includes(product.status)) {
       return res.status(400).json({
-        message: `Only approved products can be activated. Current status: "${product.status}".`,
+        message: `Cannot activate a product with status "${product.status}".`,
       })
     }
 
@@ -368,13 +376,26 @@ export const createAdminProduct = async (req, res) => {
 
     const sku = await uniqueSku(fields.sku)
 
-    let status = 'pending_approval'
-    if (req.body.status === 'active' || req.body.publishActive === 'true' || req.body.publishActive === true) {
-      status = 'active'
+    // Admin-created products default to active so they appear on the marketplace
+    // immediately. Opt out with publishActive=false or an explicit non-active status.
+    const publishActive =
+      req.body.publishActive === true ||
+      req.body.publishActive === 'true' ||
+      req.body.publishActive === '1'
+    const publishOptOut =
+      req.body.publishActive === false ||
+      req.body.publishActive === 'false' ||
+      req.body.publishActive === '0'
+
+    let status = 'active'
+    if (req.body.status === 'draft') {
+      status = 'draft'
     } else if (req.body.status === 'approved') {
       status = 'approved'
-    } else if (req.body.status === 'draft') {
-      status = 'draft'
+    } else if (publishActive || req.body.status === 'active') {
+      status = 'active'
+    } else if (publishOptOut || req.body.status === 'pending_approval') {
+      status = 'pending_approval'
     }
 
     const product = await Product.create({

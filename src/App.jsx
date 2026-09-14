@@ -35,6 +35,8 @@ import SupplierDisputesPortalPage from './pages/supplier/DisputesPage.jsx'
 import UserBusinessDetailsPage from './pages/user/BusinessDetailsPage.jsx'
 import UserDashboardPage from './pages/user/DashboardPage.jsx'
 import UserProductsPage from './pages/user/ProductsPage.jsx'
+import UserCheckoutPage from './pages/user/CheckoutPage.jsx'
+import UserOrderConfirmationPage from './pages/user/OrderConfirmationPage.jsx'
 import UserOrdersPage from './pages/user/OrdersPage.jsx'
 import UserWalletPage from './pages/user/WalletPage.jsx'
 import UserDisputesPage from './pages/user/DisputesPage.jsx'
@@ -120,6 +122,15 @@ function App() {
       />
       <Route path="/user/dashboard" element={<UserRoute><UserDashboardPage /></UserRoute>} />
       <Route path="/user/products" element={<UserRoute><UserProductsPage /></UserRoute>} />
+      <Route path="/user/checkout/:productId" element={<UserRoute><UserCheckoutPage /></UserRoute>} />
+      <Route
+        path="/user/orders/confirmation/:orderId"
+        element={
+          <UserRoute>
+            <UserOrderConfirmationPage />
+          </UserRoute>
+        }
+      />
       <Route path="/user/inventory/my-reporting" element={<UserRoute><UserBusinessReportingPage /></UserRoute>} />
       <Route path="/user/orders" element={<UserRoute><UserOrdersPage /></UserRoute>} />
       <Route path="/user/wallet" element={<UserRoute><UserWalletPage /></UserRoute>} />

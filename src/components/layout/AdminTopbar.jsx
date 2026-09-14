@@ -44,8 +44,11 @@ function AdminTopbar({ name, onMenuClick = () => {}, showMenuButton = true }) {
 
   const handleLogout = async () => {
     setMenuOpen(false)
-    await logout()
-    navigate('/login', { replace: true })
+    try {
+      await logout()
+    } finally {
+      navigate('/login', { replace: true })
+    }
   }
 
   const handleSearch = (e) => {

@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
+import { Eye } from 'lucide-react'
 import SupplierLayout from '../../components/layout/SupplierLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import FilterBar from '../../components/admin/FilterBar.jsx'
+import OrderDetailDrawer from '../../components/orders/OrderDetailDrawer.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Badge from '../../components/ui/Badge.jsx'
+import IconAction from '../../components/ui/IconAction.jsx'
 import { orderApi, getErrorMessage } from '../../lib/api.js'
 
 const FILTERS = [
@@ -13,12 +16,14 @@ const FILTERS = [
   { label: 'Order Status' },
 ]
 
-const TABLE_HEAD = ['Order #', 'Customer', 'Product', 'Items', 'Price', 'Commission', 'Date', 'Status']
+const TABLE_HEAD = ['Order #', 'Customer', 'Product', 'Items', 'Price', 'Commission', 'Date', 'Status', 'Actions']
 
 function SupplierViewOrdersPage() {
   const [orders, setOrders] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [selectedId, setSelectedId] = useState('')
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -39,6 +44,16 @@ function SupplierViewOrdersPage() {
   }, [])
 
   const isEmpty = !loading && orders.length === 0
+
+  const openOrder = (order) => {
+    setSelectedId(order.id)
+    setDrawerOpen(true)
+  }
+
+  const handleOrderUpdated = (next) => {
+    if (!next?.id) return
+    setOrders((prev) => prev.map((item) => (item.id === next.id ? { ...item, ...next } : item)))
+  }
 
   return (
     <SupplierLayout>
@@ -82,6 +97,15 @@ function SupplierViewOrdersPage() {
                   <td className="whitespace-nowrap px-5 py-4">
                     <Badge tone="success">{order.statusLabel || order.status}</Badge>
                   </td>
+                  <td className="whitespace-nowrap px-5 py-4">
+                    <IconAction
+                      icon={Eye}
+                      tone="success"
+                      aria-label="View order"
+                      title="View order details"
+                      onClick={() => openOrder(order)}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -91,7 +115,12 @@ function SupplierViewOrdersPage() {
         <div className="divide-y divide-slate-100 md:hidden">
           {isEmpty && <p className="px-5 py-16 text-center text-sm text-slate-500">No Orders Found</p>}
           {orders.map((order) => (
-            <div key={order.id} className="p-4">
+            <button
+              key={order.id}
+              type="button"
+              onClick={() => openOrder(order)}
+              className="block w-full p-4 text-left hover:bg-slate-50"
+            >
               <p className="font-semibold text-slate-800">{order.orderNo}</p>
               <p className="text-sm text-slate-500">{order.user}</p>
               <p className="mt-1 text-sm text-slate-600">
@@ -100,7 +129,7 @@ function SupplierViewOrdersPage() {
               <Badge className="mt-2" tone="success">
                 {order.statusLabel || order.status}
               </Badge>
-            </div>
+            </button>
           ))}
         </div>
       </Card>
@@ -108,6 +137,15 @@ function SupplierViewOrdersPage() {
       <p className="mt-4 text-sm text-slate-500">
         Showing {orders.length} of {orders.length} orders
       </p>
+
+      <OrderDetailDrawer
+        orderId={selectedId}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onUpdated={handleOrderUpdated}
+        showStatusUpdate
+        title="Order details"
+      />
     </SupplierLayout>
   )
 }

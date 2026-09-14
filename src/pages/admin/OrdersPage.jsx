@@ -6,6 +6,7 @@ import FilterBar from '../../components/admin/FilterBar.jsx'
 import Pagination from '../../components/admin/Pagination.jsx'
 import MobileCard from '../../components/admin/MobileCard.jsx'
 import DetailRow from '../../components/admin/DetailRow.jsx'
+import OrderDetailDrawer from '../../components/orders/OrderDetailDrawer.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Badge from '../../components/ui/Badge.jsx'
 import IconAction from '../../components/ui/IconAction.jsx'
@@ -33,6 +34,8 @@ function OrdersPage() {
   const [orders, setOrders] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [selectedId, setSelectedId] = useState('')
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   const loadOrders = async () => {
     setError('')
@@ -49,6 +52,16 @@ function OrdersPage() {
   useEffect(() => {
     loadOrders()
   }, [])
+
+  const openOrder = (order) => {
+    setSelectedId(order.id)
+    setDrawerOpen(true)
+  }
+
+  const handleOrderUpdated = (next) => {
+    if (!next?.id) return
+    setOrders((prev) => prev.map((item) => (item.id === next.id ? { ...item, ...next } : item)))
+  }
 
   return (
     <AdminLayout>
@@ -94,7 +107,13 @@ function OrdersPage() {
                   </td>
                   <td className="whitespace-nowrap px-5 py-4">
                     <div className="flex items-center gap-0.5">
-                      <IconAction icon={Eye} tone="success" aria-label="View order" title={order.product} />
+                      <IconAction
+                        icon={Eye}
+                        tone="success"
+                        aria-label="View order"
+                        title="View order details"
+                        onClick={() => openOrder(order)}
+                      />
                     </div>
                   </td>
                 </tr>
@@ -110,7 +129,14 @@ function OrdersPage() {
               title={order.orderNo}
               subtitle={order.user}
               badge={<OrderStatus status={order.statusLabel || order.status} />}
-              actions={<IconAction icon={Eye} tone="success" aria-label="View order" />}
+              actions={
+                <IconAction
+                  icon={Eye}
+                  tone="success"
+                  aria-label="View order"
+                  onClick={() => openOrder(order)}
+                />
+              }
             >
               <DetailRow label="Supplier" value={order.supplier} />
               <DetailRow label="Items" value={order.items} />
@@ -123,6 +149,15 @@ function OrdersPage() {
 
         <Pagination from={orders.length ? 1 : 0} to={orders.length} total={orders.length} prevLabel="Previous" />
       </Card>
+
+      <OrderDetailDrawer
+        orderId={selectedId}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onUpdated={handleOrderUpdated}
+        showStatusUpdate
+        title="Sale details"
+      />
     </AdminLayout>
   )
 }

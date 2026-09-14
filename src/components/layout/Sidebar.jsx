@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Link, useLocation } from 'react-router-dom'
-import { ChevronDown, ChevronUp, X } from 'lucide-react'
+import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
+import { ChevronDown, ChevronUp, LogOut, X } from 'lucide-react'
 import Logo from '../ui/Logo.jsx'
 import { useDisputeNotifications } from '../../context/DisputeNotificationContext.jsx'
+import { useAuth } from '../../context/AuthContext.jsx'
 
 const linkClasses = ({ isActive }) =>
   `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
@@ -82,6 +83,8 @@ function NavItem({ item, expandedLabel, onToggle }) {
  */
 function Sidebar({ navItems, homeTo, isOpen = false, onClose = () => {} }) {
   const { pathname } = useLocation()
+  const { logout, user } = useAuth()
+  const navigate = useNavigate()
 
   const matchingGroups = navItems.filter(
     (item) => Array.isArray(item.children) && item.children.some((child) => pathname.startsWith(child.to)),
@@ -103,6 +106,15 @@ function Sidebar({ navItems, homeTo, isOpen = false, onClose = () => {} }) {
 
   const handleToggle = (label) => {
     setExpandedLabel((prev) => (prev === label ? null : label))
+  }
+
+  const handleLogout = async () => {
+    onClose()
+    try {
+      await logout()
+    } finally {
+      navigate('/login', { replace: true })
+    }
   }
 
   return (
@@ -144,6 +156,24 @@ function Sidebar({ navItems, homeTo, isOpen = false, onClose = () => {} }) {
             />
           ))}
         </nav>
+
+        {/* Logout section at the bottom of sidebar */}
+        <div className="shrink-0 border-t border-slate-100 px-3 py-3">
+          {user && (
+            <div className="mb-2 px-3 py-1">
+              <p className="truncate text-sm font-semibold text-slate-800">{user.fullName}</p>
+              <p className="truncate text-xs text-slate-400">{user.email}</p>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-rose-500 transition-colors hover:bg-rose-50"
+          >
+            <LogOut className="h-[18px] w-[18px]" />
+            Logout
+          </button>
+        </div>
       </aside>
     </>
   )

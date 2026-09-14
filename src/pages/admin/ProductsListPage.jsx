@@ -13,6 +13,7 @@ import Button from '../../components/ui/Button.jsx'
 import { adminApi, getErrorMessage } from '../../lib/api.js'
 import {
   PRODUCT_STATUS_FILTER_OPTIONS,
+  PRODUCT_STATUS_HINT,
   PRODUCT_STATUS_LABEL,
   PRODUCT_STATUS_TONE,
   statusFilterToValue,
@@ -26,19 +27,27 @@ const FILTERS = [
   { label: 'Product Status', options: PRODUCT_STATUS_FILTER_OPTIONS },
 ]
 
-const TABLE_HEAD = ['Product', 'SKU', 'Category', 'Price', 'Stock', 'Supplier', 'Status', 'Action']
+const TABLE_HEAD = ['Product', 'SKU', 'Category', 'Price', 'Stock', 'Supplier', 'Status', 'Notes', 'Action']
 
-function ProductActions({ product, onApprove, onReject, onActivate, onDeactivate }) {
+function ProductActions({ product, onApprove, onApproveAndActivate, onReject, onActivate, onDeactivate }) {
   if (product.status === 'pending_approval' || product.status === 'draft') {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onApproveAndActivate(product.id)}
+          className="inline-flex items-center gap-1 rounded-md bg-primary-50 px-2 py-1 text-xs font-semibold text-primary hover:bg-primary-100"
+        >
+          <Power className="h-3.5 w-3.5" />
+          Approve & Activate
+        </button>
         <button
           type="button"
           onClick={() => onApprove(product.id)}
           className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
         >
           <Check className="h-3.5 w-3.5" />
-          Approve
+          Approve only
         </button>
         <button
           type="button"
@@ -90,14 +99,24 @@ function ProductActions({ product, onApprove, onReject, onActivate, onDeactivate
 
   if (product.status === 'rejected') {
     return (
-      <button
-        type="button"
-        onClick={() => onApprove(product.id)}
-        className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
-      >
-        <Check className="h-3.5 w-3.5" />
-        Re-approve
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onApproveAndActivate(product.id)}
+          className="inline-flex items-center gap-1 rounded-md bg-primary-50 px-2 py-1 text-xs font-semibold text-primary hover:bg-primary-100"
+        >
+          <Power className="h-3.5 w-3.5" />
+          Approve & Activate
+        </button>
+        <button
+          type="button"
+          onClick={() => onApprove(product.id)}
+          className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+        >
+          <Check className="h-3.5 w-3.5" />
+          Approve only
+        </button>
+      </div>
     )
   }
 
@@ -144,22 +163,27 @@ function ProductsListPage() {
     }
   }
 
-  const handleApprove = async (id) => {
+  const handleApprove = async (id, { activate = false } = {}) => {
     try {
       const commissionInput = window.prompt('Commission % (optional, leave blank to keep current):', '')
       if (commissionInput === null) return
-      const body = {}
+      const body = { activate }
       if (commissionInput.trim() !== '') {
         body.commission = Number(commissionInput)
       }
       const data = await adminApi.approveProduct(id, body)
-      pushToast({ message: data.message || 'Product approved.' })
+      pushToast({
+        message:
+          data.message ||
+          (activate ? 'Product approved and activated.' : 'Product approved.'),
+      })
       await loadProducts()
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to approve product.'))
     }
   }
 
+  const handleApproveAndActivate = (id) => handleApprove(id, { activate: true })
   const handleReject = (id) => runAction(adminApi.rejectProduct, id, 'Product rejected.')
   const handleActivate = (id) => runAction(adminApi.activateProduct, id, 'Product activated.')
   const handleDeactivate = (id) => runAction(adminApi.deactivateProduct, id, 'Product deactivated.')
@@ -185,7 +209,9 @@ function ProductsListPage() {
 
       <h2 className="mb-3 text-sm font-bold text-slate-900">All products</h2>
       <p className="mb-4 text-sm text-slate-500">
-        Approve products first, then activate them to make them visible on the user marketplace.
+        Only <span className="font-medium text-slate-700">Active</span> products appear for users.
+        Use <span className="font-medium text-slate-700">Approve &amp; Activate</span> to publish in one
+        step, or Approve only then Activate later.
       </p>
 
       {error && (
@@ -194,7 +220,7 @@ function ProductsListPage() {
 
       <Card className="overflow-hidden shadow-soft">
         <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[900px] text-left text-sm">
+          <table className="w-full min-w-[1000px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-slate-400">
                 {TABLE_HEAD.map((head) => (
@@ -225,10 +251,14 @@ function ProductsListPage() {
                       {PRODUCT_STATUS_LABEL[product.status] || product.status}
                     </Badge>
                   </td>
+                  <td className="max-w-[200px] px-5 py-4 text-xs text-slate-500">
+                    {PRODUCT_STATUS_HINT[product.status] || '—'}
+                  </td>
                   <td className="whitespace-nowrap px-5 py-4">
                     <ProductActions
                       product={product}
                       onApprove={handleApprove}
+                      onApproveAndActivate={handleApproveAndActivate}
                       onReject={handleReject}
                       onActivate={handleActivate}
                       onDeactivate={handleDeactivate}
@@ -255,6 +285,7 @@ function ProductsListPage() {
                 <ProductActions
                   product={product}
                   onApprove={handleApprove}
+                  onApproveAndActivate={handleApproveAndActivate}
                   onReject={handleReject}
                   onActivate={handleActivate}
                   onDeactivate={handleDeactivate}
@@ -265,6 +296,7 @@ function ProductsListPage() {
               <DetailRow label="Price" value={`$${Number(product.price).toFixed(2)}`} />
               <DetailRow label="Stock" value={product.quantity} />
               <DetailRow label="Supplier" value={product.supplier} full />
+              <DetailRow label="Notes" value={PRODUCT_STATUS_HINT[product.status] || '—'} full />
             </MobileCard>
           ))}
         </div>

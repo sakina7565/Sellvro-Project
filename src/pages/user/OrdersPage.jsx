@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom'
 import { Eye, SlidersHorizontal } from 'lucide-react'
 import UserLayout from '../../components/layout/UserLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
+import OrderDetailDrawer from '../../components/orders/OrderDetailDrawer.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Button from '../../components/ui/Button.jsx'
 import Badge from '../../components/ui/Badge.jsx'
+import IconAction from '../../components/ui/IconAction.jsx'
 import { orderApi, getErrorMessage } from '../../lib/api.js'
 
 const FILTER_CONTROL =
@@ -17,6 +19,8 @@ function UserOrdersPage() {
   const [orders, setOrders] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [selectedId, setSelectedId] = useState('')
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -37,6 +41,11 @@ function UserOrdersPage() {
   }, [])
 
   const isEmpty = !loading && orders.length === 0
+
+  const openOrder = (order) => {
+    setSelectedId(order.id)
+    setDrawerOpen(true)
+  }
 
   return (
     <UserLayout>
@@ -107,7 +116,13 @@ function UserOrdersPage() {
                   </td>
                   <td className="whitespace-nowrap px-5 py-4 text-slate-500">{order.date}</td>
                   <td className="whitespace-nowrap px-5 py-4">
-                    <Eye className="h-4 w-4 text-slate-400" />
+                    <IconAction
+                      icon={Eye}
+                      tone="success"
+                      aria-label="View order"
+                      title="View order details"
+                      onClick={() => openOrder(order)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -118,14 +133,26 @@ function UserOrdersPage() {
         <div className="divide-y divide-slate-100 md:hidden">
           {isEmpty && <p className="px-5 py-16 text-center text-sm text-slate-500">No orders yet.</p>}
           {orders.map((order) => (
-            <div key={order.id} className="p-4">
+            <button
+              key={order.id}
+              type="button"
+              onClick={() => openOrder(order)}
+              className="block w-full p-4 text-left hover:bg-slate-50"
+            >
               <p className="font-semibold text-slate-800">{order.orderNo}</p>
               <p className="text-sm text-slate-500">{order.product}</p>
               <p className="mt-1 text-sm text-slate-600">${Number(order.total).toFixed(2)}</p>
-            </div>
+            </button>
           ))}
         </div>
       </Card>
+
+      <OrderDetailDrawer
+        orderId={selectedId}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        title="My order"
+      />
     </UserLayout>
   )
 }
