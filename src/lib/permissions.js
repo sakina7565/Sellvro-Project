@@ -226,6 +226,7 @@ export const ADMIN_ROUTE_PERMISSIONS = {
   '/admin/users/roles': 'admin.settings.create_user',
   '/admin/location': 'admin.settings.location',
   '/admin/country': 'admin.settings.country',
+  '/admin/accounts': 'admin.users.view',
 }
 
 export function getPermissionLabel(key) {
@@ -261,6 +262,12 @@ export function getEffectivePermissions(user) {
 
 export function canAccessAdminPath(user, path) {
   if (!user || user.role !== 'admin') return false
+  if (path === '/admin/roles' || path === '/admin/users/roles') {
+    return isSuperAdmin(user)
+  }
+  if (path === '/admin/accounts') {
+    return hasAnyPermission(getEffectivePermissions(user), ['admin.users.view', 'admin.suppliers.view'])
+  }
   const permission = ADMIN_ROUTE_PERMISSIONS[path]
   if (!permission) return true
   return hasPermission(getEffectivePermissions(user), permission)
@@ -268,16 +275,31 @@ export function canAccessAdminPath(user, path) {
 
 export function filterAdminNavItems(navItems, user) {
   const permissions = getEffectivePermissions(user)
+  const isSuper = isSuperAdmin(user)
 
   return navItems
     .map((item) => {
       if (item.children) {
         const children = item.children.filter((child) => {
+          if (child.to === '/admin/roles' || child.to === '/admin/users/roles') {
+            return isSuper
+          }
+          if (child.to === '/admin/accounts') {
+            return hasAnyPermission(permissions, ['admin.users.view', 'admin.suppliers.view'])
+          }
           const required = ADMIN_ROUTE_PERMISSIONS[child.to]
           return hasPermission(permissions, required)
         })
         if (children.length === 0) return null
         return { ...item, children }
+      }
+
+      if (item.to === '/admin/roles' || item.to === '/admin/users/roles') {
+        return isSuper ? item : null
+      }
+
+      if (item.to === '/admin/accounts') {
+        return hasAnyPermission(permissions, ['admin.users.view', 'admin.suppliers.view']) ? item : null
       }
 
       const required = ADMIN_ROUTE_PERMISSIONS[item.to]
@@ -286,3 +308,4 @@ export function filterAdminNavItems(navItems, user) {
     })
     .filter(Boolean)
 }
+

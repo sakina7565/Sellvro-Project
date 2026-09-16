@@ -20,7 +20,9 @@ function ProtectedRoute({ children, roles }) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+    const isTargetAdmin = location.pathname.startsWith('/admin')
+    const loginTarget = isTargetAdmin ? '/admin/login' : '/login'
+    return <Navigate to={loginTarget} replace state={{ from: location.pathname }} />
   }
 
   if (roles && !roles.includes(user.role)) {

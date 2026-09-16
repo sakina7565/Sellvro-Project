@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { ShieldAlert } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import Pagination from '../../components/admin/Pagination.jsx'
@@ -15,7 +17,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 
 function CreateUserPage() {
   const { user: currentUser } = useAuth()
-  const canCreateSuperAdmin = isSuperAdmin(currentUser)
+  const isSuper = isSuperAdmin(currentUser)
 
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
@@ -23,6 +25,7 @@ function CreateUserPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [adminRoleId, setAdminRoleId] = useState('')
+
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(true)
@@ -85,6 +88,27 @@ function CreateUserPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  if (!isSuper) {
+    return (
+      <AdminLayout>
+        <Card className="mx-auto mt-12 max-w-lg p-8 text-center shadow-soft">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-rose-600">
+            <ShieldAlert className="h-6 w-6" />
+          </div>
+          <h2 className="mt-4 text-lg font-bold text-slate-900">Access Restricted</h2>
+          <p className="mt-2 text-sm leading-relaxed text-slate-500">
+            Staff and administrator account creation is restricted exclusively to Super Administrators.
+          </p>
+          <div className="mt-6">
+            <Button as={Link} to="/admin/dashboard" size="sm">
+              Back to Dashboard
+            </Button>
+          </div>
+        </Card>
+      </AdminLayout>
+    )
   }
 
   return (

@@ -1,28 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-
-import { Pencil, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
-
+import { Link } from 'react-router-dom'
+import { Pencil, Trash2, ChevronDown, ChevronUp, ShieldAlert } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
-
 import PageHeader from '../../components/admin/PageHeader.jsx'
-
 import MobileCard from '../../components/admin/MobileCard.jsx'
-
 import Card from '../../components/ui/Card.jsx'
-
 import Input from '../../components/ui/Input.jsx'
-
 import Button from '../../components/ui/Button.jsx'
-
 import Badge from '../../components/ui/Badge.jsx'
-
 import IconAction from '../../components/ui/IconAction.jsx'
-
 import Checkbox from '../../components/ui/Checkbox.jsx'
-
 import { adminApi, getErrorMessage } from '../../lib/api.js'
-
-import { PERMISSION_GROUPS, getPermissionLabel } from '../../lib/permissions.js'
+import { PERMISSION_GROUPS, getPermissionLabel, isSuperAdmin } from '../../lib/permissions.js'
+import { useAuth } from '../../context/AuthContext.jsx'
 
 
 
@@ -291,11 +281,11 @@ function PermissionPicker({ selected, onChange, disabled = false }) {
 
 
 function RolesPage() {
+  const { user } = useAuth()
+  const isSuper = isSuperAdmin(user)
 
   const [roles, setRoles] = useState([])
-
   const [name, setName] = useState('')
-
   const [description, setDescription] = useState('')
 
   const [permissions, setPermissions] = useState([])
@@ -490,7 +480,26 @@ function RolesPage() {
 
   }
 
-
+  if (!isSuper) {
+    return (
+      <AdminLayout>
+        <Card className="mx-auto mt-12 max-w-lg p-8 text-center shadow-soft">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-rose-600">
+            <ShieldAlert className="h-6 w-6" />
+          </div>
+          <h2 className="mt-4 text-lg font-bold text-slate-900">Access Restricted</h2>
+          <p className="mt-2 text-sm leading-relaxed text-slate-500">
+            Roles and permissions configuration is restricted exclusively to Super Administrators.
+          </p>
+          <div className="mt-6">
+            <Button as={Link} to="/admin/dashboard" size="sm">
+              Back to Dashboard
+            </Button>
+          </div>
+        </Card>
+      </AdminLayout>
+    )
+  }
 
   return (
 

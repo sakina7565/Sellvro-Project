@@ -43,3 +43,27 @@ export function readAuthToken(req) {
 
   return null
 }
+
+export const IMPERSONATOR_COOKIE = 'sellvro_impersonator'
+
+export function setImpersonatorCookie(res, token) {
+  res.cookie(IMPERSONATOR_COOKIE, token, getAuthCookieOptions())
+}
+
+export function clearImpersonatorCookie(res) {
+  res.clearCookie(IMPERSONATOR_COOKIE, {
+    ...getAuthCookieOptions(),
+    maxAge: 0,
+  })
+}
+
+export function readImpersonatorToken(req) {
+  const cookieToken = req.cookies?.[IMPERSONATOR_COOKIE]
+  if (cookieToken) return cookieToken
+
+  const header = req.headers['x-impersonator-token']
+  if (header) return header
+
+  return null
+}
+

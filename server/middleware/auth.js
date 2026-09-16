@@ -97,3 +97,16 @@ export const requirePermission =
 
     return next()
   }
+
+export const requireSuperAdmin = (req, res, next) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ message: 'You do not have access to this resource.' })
+  }
+
+  if (req.user.adminRoleId) {
+    return res.status(403).json({ message: 'Access restricted to Super Admin only.' })
+  }
+
+  return next()
+}
+

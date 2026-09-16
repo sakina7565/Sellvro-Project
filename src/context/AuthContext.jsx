@@ -66,9 +66,27 @@ export function AuthProvider({ children }) {
     [persistUser],
   )
 
+  const adminLogin = useCallback(
+    async (payload) => {
+      const data = await authApi.adminLogin(payload)
+      persistUser(data.user)
+      return data
+    },
+    [persistUser],
+  )
+
   const register = useCallback(
     async (payload) => {
       const data = await authApi.register(payload)
+      persistUser(data.user)
+      return data
+    },
+    [persistUser],
+  )
+
+  const adminRegister = useCallback(
+    async (payload) => {
+      const data = await authApi.adminRegister(payload)
       persistUser(data.user)
       return data
     },
@@ -88,13 +106,15 @@ export function AuthProvider({ children }) {
       loading,
       isAuthenticated: Boolean(user),
       login,
+      adminLogin,
       register,
+      adminRegister,
       logout,
       refreshUser,
       updateUser,
       getHomePath: () => getRedirectForUser(user),
     }),
-    [user, loading, login, register, logout, refreshUser, updateUser],
+    [user, loading, login, adminLogin, register, adminRegister, logout, refreshUser, updateUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

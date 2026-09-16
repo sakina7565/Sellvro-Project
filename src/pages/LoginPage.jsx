@@ -77,12 +77,20 @@ function LoginPage() {
         </Button>
       </form>
 
-      <p className="mt-5 text-center text-sm text-slate-500">
-        New here?{' '}
-        <Link to="/register" className="font-semibold text-primary hover:text-primary-700">
-          Create Account
-        </Link>
-      </p>
+      <div className="mt-5 space-y-2 text-center text-sm text-slate-500">
+        <p>
+          New here?{' '}
+          <Link to="/register" className="font-semibold text-primary hover:text-primary-700">
+            Create Account
+          </Link>
+        </p>
+        <p className="border-t border-slate-100 pt-3 text-xs text-slate-400">
+          Admin or Staff member?{' '}
+          <Link to="/admin/login" className="font-semibold text-slate-600 hover:text-slate-900">
+            Admin Sign In
+          </Link>
+        </p>
+      </div>
     </AuthLayout>
   )
 }

@@ -95,8 +95,12 @@ export async function apiRequest(path, { method = 'GET', body, formData } = {}) 
 export const authApi = {
   register: (payload) => apiRequest('/auth/register', { method: 'POST', body: payload }),
   login: (payload) => apiRequest('/auth/login', { method: 'POST', body: payload }),
+  adminRegister: (payload) => apiRequest('/auth/admin/register', { method: 'POST', body: payload }),
+  adminLogin: (payload) => apiRequest('/auth/admin/login', { method: 'POST', body: payload }),
+  getRoles: () => apiRequest('/auth/roles'),
   logout: () => apiRequest('/auth/logout', { method: 'POST' }),
   me: () => apiRequest('/auth/me'),
+  switchBack: () => apiRequest('/auth/switch-back', { method: 'POST' }),
 }
 
 export const businessApi = {
@@ -245,4 +249,24 @@ export const adminApi = {
   deleteRole: (id) => apiRequest(`/admin/roles/${id}`, { method: 'DELETE' }),
   dashboardStats: (period = 'all') =>
     apiRequest(`/admin/dashboard/stats?period=${encodeURIComponent(period)}`),
+  changePassword: (payload) =>
+    apiRequest('/admin/change-password', { method: 'PATCH', body: payload }),
+  notifications: () => apiRequest('/admin/notifications'),
+  markNotificationRead: (id) =>
+    apiRequest(`/admin/notifications/${id}/read`, { method: 'PATCH' }),
+  markAllNotificationsRead: () =>
+    apiRequest('/admin/notifications/read-all', { method: 'PATCH' }),
+  accounts: (params = {}) => {
+    const clean = Object.fromEntries(
+      Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== ''),
+    )
+    const query = new URLSearchParams(clean).toString()
+    return apiRequest(`/admin/accounts${query ? `?${query}` : ''}`)
+  },
+  createAccount: (payload) => apiRequest('/admin/accounts', { method: 'POST', body: payload }),
+  updateAccount: (id, payload) =>
+    apiRequest(`/admin/accounts/${id}`, { method: 'PATCH', body: payload }),
+  deleteAccount: (id) => apiRequest(`/admin/accounts/${id}`, { method: 'DELETE' }),
+  impersonate: (id) => apiRequest(`/admin/impersonate/${id}`, { method: 'POST' }),
 }
+

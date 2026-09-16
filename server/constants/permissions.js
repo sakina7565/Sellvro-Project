@@ -229,6 +229,7 @@ export const ADMIN_ROUTE_PERMISSIONS = {
   '/admin/users/roles': 'admin.settings.create_user',
   '/admin/location': 'admin.settings.location',
   '/admin/country': 'admin.settings.country',
+  '/admin/accounts': 'admin.users.view',
 }
 
 export function sanitizePermissions(input) {

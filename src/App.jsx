@@ -4,6 +4,8 @@ import PublicOnlyRoute from './components/auth/PublicOnlyRoute.jsx'
 import LandingPage from './pages/LandingPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import RegisterPage from './pages/RegisterPage.jsx'
+import AdminLoginPage from './pages/admin/AdminLoginPage.jsx'
+import AdminRegisterPage from './pages/admin/AdminRegisterPage.jsx'
 import DashboardPage from './pages/admin/DashboardPage.jsx'
 import ProductsListPage from './pages/admin/ProductsListPage.jsx'
 import AddProductPage from './pages/admin/AddProductPage.jsx'
@@ -14,6 +16,7 @@ import AllSuppliersPage from './pages/admin/AllSuppliersPage.jsx'
 import PendingSuppliersPage from './pages/admin/PendingSuppliersPage.jsx'
 import AllUsersPage from './pages/admin/AllUsersPage.jsx'
 import PendingUsersPage from './pages/admin/PendingUsersPage.jsx'
+import AccountsManagementPage from './pages/admin/AccountsManagementPage.jsx'
 import OrdersPage from './pages/admin/OrdersPage.jsx'
 import WalletsRequestsPage from './pages/admin/WalletsRequestsPage.jsx'
 import SupplierPayoutsPage from './pages/admin/SupplierPayoutsPage.jsx'
@@ -74,6 +77,24 @@ function App() {
           </PublicOnlyRoute>
         }
       />
+      <Route
+        path="/admin/login"
+        element={
+          <PublicOnlyRoute>
+            <AdminLoginPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/admin/register"
+        element={
+          <PublicOnlyRoute>
+            <AdminRegisterPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route path="/admin-login" element={<Navigate to="/admin/login" replace />} />
+      <Route path="/admin-register" element={<Navigate to="/admin/register" replace />} />
 
       <Route path="/admin/dashboard" element={<AdminRoute><DashboardPage /></AdminRoute>} />
       <Route path="/admin/products" element={<AdminRoute><ProductsListPage /></AdminRoute>} />
@@ -81,6 +102,7 @@ function App() {
       <Route path="/admin/inventory/sku-reporting" element={<AdminRoute><AdminSkuReportingPage /></AdminRoute>} />
       <Route path="/admin/inventory/my-reporting" element={<AdminRoute><AdminBusinessReportingPage /></AdminRoute>} />
       <Route path="/admin/categories" element={<AdminRoute><CategoriesPage /></AdminRoute>} />
+      <Route path="/admin/accounts" element={<AdminRoute><AccountsManagementPage /></AdminRoute>} />
       <Route path="/admin/suppliers" element={<AdminRoute><AllSuppliersPage /></AdminRoute>} />
       <Route path="/admin/suppliers/pending" element={<AdminRoute><PendingSuppliersPage /></AdminRoute>} />
       <Route path="/admin/users" element={<AdminRoute><AllUsersPage /></AdminRoute>} />

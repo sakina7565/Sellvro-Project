@@ -31,6 +31,7 @@ export const ADMIN_NAV_ITEMS = [
     label: 'Suppliers',
     icon: Contact2,
     children: [
+      { label: 'User & Supplier Mgmt', to: '/admin/accounts' },
       { label: 'All Suppliers', to: '/admin/suppliers' },
       { label: 'Pending', to: '/admin/suppliers/pending' },
     ],
@@ -39,6 +40,7 @@ export const ADMIN_NAV_ITEMS = [
     label: 'Users',
     icon: Users,
     children: [
+      { label: 'User & Supplier Mgmt', to: '/admin/accounts' },
       { label: 'All Users', to: '/admin/users' },
       { label: 'Pending', to: '/admin/users/pending' },
     ],

@@ -24,7 +24,7 @@ function RegisterPage() {
     setError('')
 
     if (!role) {
-      setError('Please select a role (Admin, Supplier, or User).')
+      setError('Please select a role (Supplier or User).')
       return
     }
     if (!fullName.trim()) {
@@ -81,9 +81,8 @@ function RegisterPage() {
           <option value="" disabled>
             Select Role
           </option>
-          <option value="admin">Admin</option>
-          <option value="supplier">Supplier</option>
-          <option value="user">User</option>
+          <option value="supplier">Supplier (Manufacturer)</option>
+          <option value="user">User (Reseller / Buyer)</option>
         </Select>
 
         <Input
@@ -142,12 +141,24 @@ function RegisterPage() {
         </Button>
       </form>
 
-      <p className="mt-5 text-center text-sm text-slate-500">
-        Already have an account?{' '}
-        <Link to="/login" className="font-semibold text-primary hover:text-primary-700">
-          Login
-        </Link>
-      </p>
+      <div className="mt-5 space-y-2 text-center text-sm text-slate-500">
+        <p>
+          Already have an account?{' '}
+          <Link to="/login" className="font-semibold text-primary hover:text-primary-700">
+            Login
+          </Link>
+        </p>
+        <p className="border-t border-slate-100 pt-3 text-xs text-slate-400">
+          Admin or Staff member?{' '}
+          <Link to="/admin/login" className="font-semibold text-slate-600 hover:text-slate-900">
+            Admin Sign In
+          </Link>
+          {' · '}
+          <Link to="/admin/register" className="font-semibold text-slate-600 hover:text-slate-900">
+            Register Admin
+          </Link>
+        </p>
+      </div>
     </AuthLayout>
   )
 }

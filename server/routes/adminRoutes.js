@@ -18,6 +18,15 @@ import {
 
   rejectAccount,
 
+  changeAdminPassword,
+  listAdminNotifications,
+  markAdminNotificationRead,
+  markAllAdminNotificationsRead,
+  listAllAccounts,
+  createAccount,
+  updateAccount,
+  deleteAccount,
+  impersonateAccount,
 } from '../controllers/adminController.js'
 
 import {
@@ -93,7 +102,7 @@ import {
 
 import { getAdminDashboardStats } from '../controllers/dashboardController.js'
 
-import { protect, authorize, attachAdminPermissions, requirePermission } from '../middleware/auth.js'
+import { protect, authorize, attachAdminPermissions, requirePermission, requireSuperAdmin } from '../middleware/auth.js'
 import { productUpload } from '../middleware/upload.js'
 
 const router = Router()
@@ -117,23 +126,19 @@ router.get('/dashboard/stats', requirePermission('admin.dashboard.view'), getAdm
 
 
 
-router.get('/permissions', requirePermission('admin.settings.roles'), listPermissions)
+router.get('/permissions', requireSuperAdmin, listPermissions)
 
-router.get(
-  '/roles',
-  requirePermission('admin.settings.roles', 'admin.settings.create_user'),
-  listRoles,
-)
+router.get('/roles', requireSuperAdmin, listRoles)
 
-router.get('/admins', requirePermission('admin.settings.create_user'), listAdminUsers)
+router.get('/admins', requireSuperAdmin, listAdminUsers)
 
-router.post('/admins', requirePermission('admin.settings.create_user'), createAdminUser)
+router.post('/admins', requireSuperAdmin, createAdminUser)
 
-router.post('/roles', requirePermission('admin.settings.roles'), createRole)
+router.post('/roles', requireSuperAdmin, createRole)
 
-router.patch('/roles/:id', requirePermission('admin.settings.roles'), updateRole)
+router.patch('/roles/:id', requireSuperAdmin, updateRole)
 
-router.delete('/roles/:id', requirePermission('admin.settings.roles'), deleteRole)
+router.delete('/roles/:id', requireSuperAdmin, deleteRole)
 
 
 
@@ -268,7 +273,37 @@ router.patch(
   markDisputeRead,
 )
 
+router.patch('/change-password', changeAdminPassword)
+router.get('/notifications', requireSuperAdmin, listAdminNotifications)
+router.patch('/notifications/read-all', requireSuperAdmin, markAllAdminNotificationsRead)
+router.patch('/notifications/:id/read', requireSuperAdmin, markAdminNotificationRead)
 
+router.get(
+  '/accounts',
+  requirePermission('admin.suppliers.view', 'admin.users.view'),
+  listAllAccounts,
+)
+router.post(
+  '/accounts',
+  requirePermission('admin.suppliers.approve', 'admin.users.approve'),
+  createAccount,
+)
+router.patch(
+  '/accounts/:id',
+  requirePermission('admin.suppliers.approve', 'admin.users.approve'),
+  updateAccount,
+)
+router.delete(
+  '/accounts/:id',
+  requirePermission('admin.suppliers.approve', 'admin.users.approve'),
+  deleteAccount,
+)
+router.post(
+  '/impersonate/:id',
+  requirePermission('admin.suppliers.view', 'admin.users.view'),
+  impersonateAccount,
+)
 
 export default router
+
 
