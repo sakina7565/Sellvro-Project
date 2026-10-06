@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ShieldAlert } from 'lucide-react'
+import { ShieldAlert, ShieldCheck, UserPlus, Eye, EyeOff } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import Pagination from '../../components/admin/Pagination.jsx'
@@ -18,6 +18,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 function CreateUserPage() {
   const { user: currentUser } = useAuth()
   const isSuper = isSuperAdmin(currentUser)
+  const canCreateSuperAdmin = isSuper
 
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
@@ -25,6 +26,7 @@ function CreateUserPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [adminRoleId, setAdminRoleId] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -65,8 +67,13 @@ function CreateUserPage() {
       return
     }
 
-    if (!canCreateSuperAdmin && !adminRoleId) {
-      setError('Please select a role for the new admin user.')
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.')
+      return
+    }
+
+    if (!adminRoleId) {
+      setError('Please select a role (Super Admin or Sub-Admin role).')
       return
     }
 
@@ -77,10 +84,12 @@ function CreateUserPage() {
         email: email.trim(),
         password,
       }
-      if (adminRoleId) payload.adminRoleId = adminRoleId
+      if (adminRoleId && adminRoleId !== 'super_admin') {
+        payload.adminRoleId = adminRoleId
+      }
 
       await adminApi.createAdminUser(payload)
-      setSuccess('Admin user created.')
+      setSuccess('Admin / Sub-Admin user created successfully. They can now log in at /admin/login.')
       resetForm()
       await loadData()
     } catch (err) {
@@ -113,11 +122,33 @@ function CreateUserPage() {
 
   return (
     <AdminLayout>
-      <PageHeader title="Users" />
+      <PageHeader
+        title="Create User"
+        description="Register Super Admin & Sub-Admin (Staff) accounts with custom permissions"
+      />
+
+      {/* Info notice about role restriction */}
+      <div className="mb-6 rounded-xl border border-sky-200 bg-sky-50/70 p-4 text-xs text-sky-800">
+        <div className="flex items-start gap-2.5">
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />
+          <div>
+            <p className="font-semibold text-sky-900">Admin & Sub-Admin Registration Only</p>
+            <p className="mt-0.5 leading-relaxed text-sky-700">
+              This form is strictly for creating <strong>Super Administrators</strong> and{' '}
+              <strong>Sub-Admins (Staff Members)</strong> with predefined roles and permissions. Regular{' '}
+              <strong>Users (Buyers)</strong> and <strong>Suppliers</strong> register their own accounts
+              directly via the public portal.
+            </p>
+          </div>
+        </div>
+      </div>
 
       <Card className="mb-6 p-5 shadow-soft">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-sm font-bold text-slate-900">Add Admin User</h2>
+          <div className="flex items-center gap-2">
+            <UserPlus className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-bold text-slate-900">Register Admin / Sub-Admin User</h2>
+          </div>
           <Button
             type="submit"
             form="add-user-form"
@@ -125,7 +156,7 @@ function CreateUserPage() {
             className="w-full sm:w-auto"
             disabled={saving}
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? 'Creating…' : 'Create Account'}
           </Button>
         </div>
         <form
@@ -135,48 +166,71 @@ function CreateUserPage() {
         >
           <Input
             id="userName"
-            label="Name *"
-            placeholder="Enter name"
+            label="Full Name *"
+            placeholder="e.g. John Doe"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
+            required
           />
           <Input
             id="userEmail"
-            label="Email *"
+            label="Email Address *"
             type="email"
-            placeholder="Enter email"
+            placeholder="admin@sellvro.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            required
           />
-          <Input
-            id="userPassword"
-            label="Password *"
-            type="password"
-            placeholder="Enter password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <div className="relative">
+            <Input
+              id="userPassword"
+              label="Password (min 6 chars) *"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute right-3 top-8 text-slate-400 hover:text-slate-600"
+              tabIndex={-1}
+              title={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
           <Select
             id="userRole"
-            label="Admin Role *"
+            label="Role & Permissions *"
             value={adminRoleId}
             onChange={(e) => setAdminRoleId(e.target.value)}
+            required
           >
+            <option value="" disabled>
+              -- Select Role --
+            </option>
             {canCreateSuperAdmin && (
-              <option value="">Super Admin (full access)</option>
-            )}
-            {!canCreateSuperAdmin && (
-              <option value="" disabled>
-                Select role
-              </option>
+              <option value="super_admin">Super Admin (Full Access)</option>
             )}
             {roles.map((role) => (
               <option key={role.id} value={role.id}>
-                {role.name}
+                Sub-Admin: {role.name}
               </option>
             ))}
           </Select>
         </form>
+
+        {roles.length === 0 && (
+          <p className="mt-3 text-xs text-slate-500">
+            Tip: You can create custom staff roles (like Finance Manager, Catalog Manager) in{' '}
+            <Link to="/admin/roles" className="font-semibold text-primary hover:underline">
+              Settings → Roles
+            </Link>
+            .
+          </p>
+        )}
 
         {error && (
           <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">
@@ -223,7 +277,9 @@ function CreateUserPage() {
                   <td className="whitespace-nowrap px-5 py-4 font-medium text-slate-800">{user.name}</td>
                   <td className="whitespace-nowrap px-5 py-4 text-slate-500">{user.email}</td>
                   <td className="whitespace-nowrap px-5 py-4">
-                    <Badge tone="solid">{user.roleLabel}</Badge>
+                    <Badge tone={user.roleLabel === 'Super Admin' ? 'solid' : 'warning'}>
+                      {user.roleLabel}
+                    </Badge>
                   </td>
                   <td className="whitespace-nowrap px-5 py-4 text-slate-500">{user.joined}</td>
                 </tr>
@@ -244,7 +300,11 @@ function CreateUserPage() {
               key={user.id}
               title={user.name}
               subtitle={user.email}
-              badge={<Badge tone="solid">{user.roleLabel}</Badge>}
+              badge={
+                <Badge tone={user.roleLabel === 'Super Admin' ? 'solid' : 'warning'}>
+                  {user.roleLabel}
+                </Badge>
+              }
             >
               <DetailRow label="Joined" value={user.joined} full />
             </MobileCard>

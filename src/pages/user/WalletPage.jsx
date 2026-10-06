@@ -66,10 +66,21 @@ function UserWalletPage() {
     event.preventDefault()
     setError('')
     setSuccess('')
+
+    if (!amount || Number(amount) <= 0) {
+      setError('Please enter a valid deposit amount greater than $0.00.')
+      return
+    }
+
+    if (!receipt) {
+      setError('Receipt image is required. Please upload your deposit slip / proof of payment before submitting.')
+      return
+    }
+
     setSaving(true)
     try {
       await walletApi.createRequest({ amount, bankTid }, receipt)
-      setSuccess('Deposit request submitted.')
+      setSuccess('Deposit request submitted successfully! Awaiting admin approval.')
       setAmount('')
       setBankTid('')
       setReceipt(null)
@@ -106,16 +117,25 @@ function UserWalletPage() {
       </div>
 
       {error && (
-        <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>
+        <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError('')} className="text-rose-500 hover:text-rose-700 text-xs font-semibold">
+            Dismiss
+          </button>
+        </div>
       )}
       {success && (
-        <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-          {success}
-        </p>
+        <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 flex items-center justify-between">
+          <span>{success}</span>
+          <button onClick={() => setSuccess('')} className="text-emerald-500 hover:text-emerald-700 text-xs font-semibold">
+            Dismiss
+          </button>
+        </div>
       )}
 
       {showForm && (
-        <Card className="mb-6 p-5 shadow-soft">
+        <Card className="mb-6 p-5 shadow-soft border border-slate-200">
+          <h3 className="mb-4 text-base font-bold text-slate-900">Submit Deposit / Recharge Request</h3>
           <form className="grid grid-cols-1 gap-4 sm:grid-cols-2" onSubmit={handleSubmit}>
             <Input
               id="depositAmount"
@@ -123,32 +143,42 @@ function UserWalletPage() {
               type="number"
               min="0.01"
               step="0.01"
+              placeholder="e.g. 100.00"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               required
             />
             <Input
               id="bankTid"
-              label="Bank TID *"
+              label="Bank Transaction ID (TID) *"
+              placeholder="e.g. TXN-9843217"
               value={bankTid}
               onChange={(e) => setBankTid(e.target.value)}
               required
             />
             <div className="sm:col-span-2">
-              <label htmlFor="receipt" className="mb-1.5 block text-sm font-medium text-slate-700">
-                Receipt image
+              <label htmlFor="receipt" className="mb-1.5 flex items-center justify-between text-sm font-medium text-slate-700">
+                <span>Receipt Screenshot / Payment Proof <span className="text-rose-500">* (Required)</span></span>
+                {receipt && (
+                  <span className="text-xs font-normal text-emerald-600">✓ File selected ({receipt.name})</span>
+                )}
               </label>
               <input
                 id="receipt"
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept="image/jpeg,image/png,image/webp,image/jpg"
                 onChange={(e) => setReceipt(e.target.files?.[0] || null)}
-                className="block w-full text-sm text-slate-600"
+                required
+                className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-lg file:border-0 file:bg-teal-50 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-teal-700 hover:file:bg-teal-100 cursor-pointer rounded-lg border border-slate-200 p-2"
               />
+              <p className="mt-1 text-xs text-slate-400">Supported formats: JPG, PNG, WEBP. A valid proof of transfer is required for verification.</p>
             </div>
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-2 flex items-center gap-3 pt-2">
               <Button type="submit" disabled={saving}>
-                {saving ? 'Submitting…' : 'Submit deposit request'}
+                {saving ? 'Submitting…' : 'Submit Deposit Request'}
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>
+                Cancel
               </Button>
             </div>
           </form>

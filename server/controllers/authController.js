@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 import Role from '../models/Role.js'
+import BusinessProfile from '../models/BusinessProfile.js'
 import { signToken } from '../middleware/auth.js'
 import {
   clearAuthCookie,
@@ -8,6 +9,7 @@ import {
   clearImpersonatorCookie,
   readImpersonatorToken,
 } from '../utils/authCookie.js'
+import { sendPasswordResetEmail } from '../utils/emailService.js'
 import {
   ALL_PERMISSION_KEYS,
   sanitizePermissions,
@@ -99,6 +101,7 @@ export const register = async (req, res) => {
 
     return res.status(201).json({
       message: 'Registration successful.',
+      token,
       user: safeUser,
       redirectTo: getHomePath(safeUser),
     })
@@ -137,6 +140,14 @@ export const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password.' })
     }
 
+    // Admin accounts must use the dedicated admin portal — block them here
+    if (user.role === 'admin') {
+      return res.status(403).json({
+        message:
+          'Admin accounts cannot log in from the public portal. Please use the Admin Sign In page at /admin/login.',
+      })
+    }
+
     if (user.status === 'suspended') {
       return res.status(403).json({ message: 'Your account has been suspended.' })
     }
@@ -151,6 +162,7 @@ export const login = async (req, res) => {
 
     return res.json({
       message: 'Login successful.',
+      token,
       user: safeUser,
       redirectTo: getHomePath(safeUser),
     })
@@ -271,6 +283,7 @@ export const adminRegister = async (req, res) => {
 
     return res.status(201).json({
       message: 'Admin account registered successfully.',
+      token,
       user: safeUser,
       redirectTo: getHomePath(safeUser),
     })
@@ -312,6 +325,7 @@ export const adminLogin = async (req, res) => {
 
     return res.json({
       message: 'Admin login successful.',
+      token,
       user: safeUser,
       redirectTo: getHomePath(safeUser),
     })
@@ -335,4 +349,238 @@ export const getPublicRoles = async (_req, res) => {
     return res.status(500).json({ message: error.message || 'Failed to load roles.' })
   }
 }
+
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body
+    if (!email?.trim()) {
+      return res.status(400).json({ message: 'Please enter your email address.' })
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+resetPasswordCode +resetPasswordExpires')
+    if (!user) {
+      return res.status(404).json({ message: 'No account found with this email address.' })
+    }
+
+    // Generate 6-digit verification code
+    const code = Math.floor(100000 + Math.random() * 900000).toString()
+    user.resetPasswordCode = code
+    user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000) // 15 mins
+    await user.save()
+
+    await sendPasswordResetEmail(user.email, code, user.fullName)
+
+    return res.json({
+      message: 'A 6-digit verification code has been sent to your email.',
+      email: user.email,
+    })
+  } catch (error) {
+    console.error('Forgot password error:', error)
+    return res.status(500).json({ message: error.message || 'Failed to send recovery code.' })
+  }
+}
+
+export const verifyResetCode = async (req, res) => {
+  try {
+    const { email, code } = req.body
+    if (!email || !code) {
+      return res.status(400).json({ message: 'Email and verification code are required.' })
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+resetPasswordCode +resetPasswordExpires')
+    if (!user || !user.resetPasswordCode) {
+      return res.status(400).json({ message: 'No reset request found. Please request a new code.' })
+    }
+
+    if (user.resetPasswordCode !== code.trim()) {
+      return res.status(400).json({ message: 'Invalid verification code. Please check and try again.' })
+    }
+
+    if (new Date() > new Date(user.resetPasswordExpires)) {
+      return res.status(400).json({ message: 'Verification code has expired. Please request a new code.' })
+    }
+
+    return res.json({ message: 'Code verified successfully.', valid: true })
+  } catch (error) {
+    console.error('Verify code error:', error)
+    return res.status(500).json({ message: error.message || 'Failed to verify code.' })
+  }
+}
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword, confirmPassword } = req.body
+
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ message: 'All fields are required.' })
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters.' })
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: 'Passwords do not match.' })
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password +resetPasswordCode +resetPasswordExpires')
+    if (!user || !user.resetPasswordCode) {
+      return res.status(400).json({ message: 'No reset request found. Please request a new code.' })
+    }
+
+    if (user.resetPasswordCode !== code.trim()) {
+      return res.status(400).json({ message: 'Invalid verification code.' })
+    }
+
+    if (new Date() > new Date(user.resetPasswordExpires)) {
+      return res.status(400).json({ message: 'Verification code has expired. Please request a new code.' })
+    }
+
+    user.password = newPassword
+    user.resetPasswordCode = undefined
+    user.resetPasswordExpires = undefined
+    await user.save()
+
+    const token = signToken(user._id)
+    setAuthCookie(res, token)
+    const safeUser = await buildSafeUser(user)
+
+    return res.json({
+      message: 'Your password has been changed successfully.',
+      token,
+      user: safeUser,
+      redirectTo: getHomePath(safeUser),
+    })
+  } catch (error) {
+    console.error('Reset password error:', error)
+    return res.status(500).json({ message: error.message || 'Failed to reset password.' })
+  }
+}
+
+/**
+ * PATCH /auth/change-password
+ * Works for all roles (admin, supplier, user).
+ * Requires: currentPassword, newPassword, confirmPassword.
+ */
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ message: 'All password fields are required.' })
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'New password must be at least 6 characters.' })
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: 'New passwords do not match.' })
+    }
+
+    // Reload user with password field (it's select:false by default)
+    const user = await User.findById(req.user._id).select('+password')
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' })
+    }
+
+    const isMatch = await user.matchPassword(currentPassword)
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Current password is incorrect.' })
+    }
+
+    user.password = newPassword
+    await user.save()
+
+    return res.json({ message: 'Password updated successfully.' })
+  } catch (error) {
+    console.error('changePassword error:', error)
+    return res.status(500).json({ message: error.message || 'Failed to change password.' })
+  }
+}
+
+export const googleAuth = async (req, res) => {
+  try {
+    const { credential, role = 'user', email, name, googleId, picture } = req.body
+
+    let userEmail = email
+    let userName = name
+    let userGoogleId = googleId
+
+    if (credential) {
+      try {
+        const decoded = jwt.decode(credential)
+        if (decoded?.email) {
+          userEmail = decoded.email
+          userName = decoded.name || decoded.given_name || userEmail.split('@')[0]
+          userGoogleId = decoded.sub
+        }
+      } catch (e) {
+        console.error('Google token decode error:', e)
+      }
+    }
+
+    if (!userEmail) {
+      return res.status(400).json({ message: 'Could not obtain email address from Google.' })
+    }
+
+    userEmail = userEmail.toLowerCase().trim()
+    let user = await User.findOne({ email: userEmail })
+
+    if (user) {
+      if (user.role === 'admin') {
+        return res.status(403).json({
+          message:
+            'Admin accounts cannot log in from the public portal. Please use the Admin Sign In page at /admin/login.',
+        })
+      }
+      if (user.status === 'suspended') {
+        return res.status(403).json({ message: 'Your account has been suspended.' })
+      }
+      if (user.status === 'rejected') {
+        return res.status(403).json({ message: 'Your account application was rejected.' })
+      }
+      if (!user.googleId && userGoogleId) {
+        user.googleId = userGoogleId
+        await user.save()
+      }
+    } else {
+      const selectedRole = ['supplier', 'user'].includes(role) ? role : 'user'
+      const status = selectedRole === 'supplier' ? 'pending_details' : 'approved'
+
+      const randomPassword = 'G_' + Math.random().toString(36).slice(2) + '!9X'
+      user = await User.create({
+        fullName: userName || userEmail.split('@')[0],
+        email: userEmail,
+        password: randomPassword,
+        role: selectedRole,
+        status,
+        googleId: userGoogleId || undefined,
+      })
+
+      await BusinessProfile.create({
+        user: user._id,
+        profileType: selectedRole,
+        businessName: user.fullName,
+        businessEmail: userEmail,
+        status: status === 'approved' ? 'approved' : 'pending',
+      })
+    }
+
+    const token = signToken(user._id)
+    setAuthCookie(res, token)
+    const safeUser = await buildSafeUser(user)
+
+    return res.json({
+      message: 'Logged in with Google successfully.',
+      token,
+      user: safeUser,
+      redirectTo: getHomePath(safeUser),
+    })
+  } catch (error) {
+    console.error('Google auth error:', error)
+    return res.status(500).json({ message: error.message || 'Google sign in failed.' })
+  }
+}
+
 

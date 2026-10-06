@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { Search, XCircle } from 'lucide-react'
 import UserLayout from '../../components/layout/UserLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import BuyProductCard from '../../components/user/BuyProductCard.jsx'
@@ -7,13 +8,22 @@ import Card from '../../components/ui/Card.jsx'
 import { productApi, getErrorMessage } from '../../lib/api.js'
 
 function UserProductsPage() {
-  const [query, setQuery] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlQ = searchParams.get('q') || ''
+
+  const [query, setQuery] = useState(urlQ)
   const [category, setCategory] = useState('All Categories')
-  const [appliedQuery, setAppliedQuery] = useState('')
+  const [appliedQuery, setAppliedQuery] = useState(urlQ)
   const [appliedCategory, setAppliedCategory] = useState('All Categories')
   const [catalog, setCatalog] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const q = searchParams.get('q') || ''
+    setQuery(q)
+    setAppliedQuery(q)
+  }, [searchParams])
 
   useEffect(() => {
     let active = true
@@ -42,7 +52,9 @@ function UserProductsPage() {
     return catalog.filter((product) => {
       const matchesCategory = appliedCategory === 'All Categories' || product.category === appliedCategory
       const matchesQuery =
-        !appliedQuery.trim() || product.name.toLowerCase().includes(appliedQuery.trim().toLowerCase())
+        !appliedQuery.trim() ||
+        product.name.toLowerCase().includes(appliedQuery.trim().toLowerCase()) ||
+        (product.sku && product.sku.toLowerCase().includes(appliedQuery.trim().toLowerCase()))
       return matchesCategory && matchesQuery
     })
   }, [appliedCategory, appliedQuery, catalog])
@@ -51,6 +63,22 @@ function UserProductsPage() {
     e.preventDefault()
     setAppliedQuery(query)
     setAppliedCategory(category)
+    const next = new URLSearchParams(searchParams)
+    if (query.trim()) {
+      next.set('q', query.trim())
+    } else {
+      next.delete('q')
+    }
+    setSearchParams(next)
+  }
+
+  const handleClear = () => {
+    setQuery('')
+    setAppliedQuery('')
+    setAppliedCategory('All Categories')
+    const next = new URLSearchParams(searchParams)
+    next.delete('q')
+    setSearchParams(next)
   }
 
   return (
@@ -90,6 +118,25 @@ function UserProductsPage() {
           </button>
         </form>
       </Card>
+
+      {appliedQuery && (
+        <div className="mb-4 flex items-center justify-between rounded-xl border border-primary-200 bg-primary-50/70 px-4 py-2.5 text-sm text-primary-900">
+          <div className="flex items-center gap-2">
+            <Search className="h-4 w-4 text-primary shrink-0" />
+            <span>
+              Searching for <strong className="font-semibold text-primary-950">"{appliedQuery}"</strong> ({products.length} results found)
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleClear}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-800 hover:underline"
+          >
+            <XCircle className="h-4 w-4" />
+            Clear
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {products.map((product) => (

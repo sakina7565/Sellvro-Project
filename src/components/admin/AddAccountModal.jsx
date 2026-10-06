@@ -60,6 +60,11 @@ function AddAccountModal({ isOpen, onClose, onSuccess, initialRole = 'user' }) {
       return
     }
 
+    if (walletBalance !== '' && parseFloat(walletBalance) < 0) {
+      setError('Wallet balance cannot be negative.')
+      return
+    }
+
     setLoading(true)
     try {
       await adminApi.createAccount({

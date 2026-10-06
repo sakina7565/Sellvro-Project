@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 590 160" fill="none">
+  <!-- Sellvro Icon Mark -->
+  <g fill="#081729">
+    <!-- Main S-cart body -->
+    <path d="M 32 6 C 42 1 54 2 64 8 C 76 15 84 27 94 36 C 104 45 116 52 130 55 C 145 59 160 67 163 83 C 167 101 155 117 140 125 C 122 135 99 137 79 134 C 54 130 33 116 19 95 C 12 85 9 73 9 61 C 9 60 11 60 12 62 C 16 75 22 87 32 96 C 42 106 55 112 69 113 C 86 114 104 109 114 96 C 121 87 122 75 116 66 C 108 55 93 52 80 47 C 67 42 55 35 44 26 C 36 19 28 11 32 6 Z" />
+    <!-- Left wheel / foot -->
+    <path d="M 27 126 C 35 126 41 132 41 140 C 41 148 35 154 27 154 C 19 154 13 148 13 140 C 13 132 19 126 27 126 Z" />
+    <!-- Right wheel / foot -->
+    <path d="M 103 126 C 111 126 117 132 117 140 C 117 148 111 154 103 154 C 95 154 89 148 89 140 C 89 132 95 126 103 126 Z" />
+  </g>
+
+  <!-- Complete Sellvro Wordmark -->
+  <text
+    x="188"
+    y="114"
+    font-family="system-ui, -apple-system, 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif"
+    font-size="106"
+    font-weight="700"
+    letter-spacing="-2px"
+    fill="#081729"
+  >Sellvro</text>
+</svg>

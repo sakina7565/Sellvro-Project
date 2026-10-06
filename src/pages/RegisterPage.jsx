@@ -5,6 +5,7 @@ import AuthLayout from '../components/layout/AuthLayout.jsx'
 import Input from '../components/ui/Input.jsx'
 import Select from '../components/ui/Select.jsx'
 import Button from '../components/ui/Button.jsx'
+import GoogleSignInButton from '../components/auth/GoogleSignInButton.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { getErrorMessage } from '../lib/api.js'
 
@@ -140,6 +141,17 @@ function RegisterPage() {
           {submitting ? 'Creating account…' : 'Register Now'}
         </Button>
       </form>
+
+      <div className="relative my-5">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-slate-200" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-white px-3 font-semibold text-slate-400">Or register with</span>
+        </div>
+      </div>
+
+      <GoogleSignInButton defaultRole={role || 'user'} label="Sign up with Google" />
 
       <div className="mt-5 space-y-2 text-center text-sm text-slate-500">
         <p>

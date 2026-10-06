@@ -1,5 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="8" fill="#3d4fe0"/>
-  <path d="M9 8v10a7 7 0 0 0 7 7h1" stroke="white" stroke-width="3" stroke-linecap="round" fill="none"/>
-  <line x1="23" y1="8" x2="23" y2="27" stroke="white" stroke-width="3" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="favBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#08182b"/>
+      <stop offset="50%" stop-color="#0c2340"/>
+      <stop offset="100%" stop-color="#061220"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded App Icon Background -->
+  <rect width="512" height="512" rx="112" fill="url(#favBg)"/>
+  
+  <!-- White Sellvro Icon Mark -->
+  <g fill="#ffffff" transform="matrix(2.45, 0, 0, 2.45, 52, 60)">
+    <!-- Main S-cart body -->
+    <path d="M 32 6 C 42 1 54 2 64 8 C 76 15 84 27 94 36 C 104 45 116 52 130 55 C 145 59 160 67 163 83 C 167 101 155 117 140 125 C 122 135 99 137 79 134 C 54 130 33 116 19 95 C 12 85 9 73 9 61 C 9 60 11 60 12 62 C 16 75 22 87 32 96 C 42 106 55 112 69 113 C 86 114 104 109 114 96 C 121 87 122 75 116 66 C 108 55 93 52 80 47 C 67 42 55 35 44 26 C 36 19 28 11 32 6 Z"/>
+    <!-- Left wheel / foot -->
+    <path d="M 27 126 C 35 126 41 132 41 140 C 41 148 35 154 27 154 C 19 154 13 148 13 140 C 13 132 19 126 27 126 Z"/>
+    <!-- Right wheel / foot -->
+    <path d="M 103 126 C 111 126 117 132 117 140 C 117 148 111 154 103 154 C 95 154 89 148 89 140 C 89 132 95 126 103 126 Z"/>
+  </g>
 </svg>

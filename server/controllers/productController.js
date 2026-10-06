@@ -1,6 +1,8 @@
 import mongoose from 'mongoose'
 import Product from '../models/Product.js'
+import BusinessProfile from '../models/BusinessProfile.js'
 import { resolveCategoryName } from './categoryController.js'
+import { createNotification } from '../utils/notifications.js'
 
 const PLACEHOLDER_IMAGE =
   'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80'
@@ -42,10 +44,9 @@ function readProductFields(body) {
   const fulfillBy =
     body.fulfillBy === 'warehouse' ? 'warehouse' : body.fulfillBy === 'self' ? 'self' : ''
   const inWarehouse =
-    body.inWarehouse === true ||
-    body.inWarehouse === 'true' ||
-    body.inWarehouse === '1' ||
-    fulfillBy === 'warehouse'
+    fulfillBy === 'warehouse' ||
+    (fulfillBy === '' &&
+      (body.inWarehouse === true || body.inWarehouse === 'true' || body.inWarehouse === '1'))
 
   return {
     name: String(body.name || '').trim(),
@@ -80,6 +81,12 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ message: 'Product name and category are required.' })
     }
 
+    if (!asDraft && (!fields.fulfillBy || !['warehouse', 'self'].includes(fields.fulfillBy))) {
+      return res.status(400).json({
+        message: 'Please specify where the product is kept: Sellvro Inventory (WMS) or with Supplier (Self).',
+      })
+    }
+
     const categoryName = await resolveCategoryName(fields.category)
     if (!categoryName) {
       return res.status(400).json({
@@ -88,15 +95,34 @@ export const createProduct = async (req, res) => {
     }
     fields.category = categoryName
 
-    if (Number.isNaN(fields.price) || fields.price < 0) {
-      return res.status(400).json({ message: 'A valid price is required.' })
+    if (Number.isNaN(fields.price) || fields.price <= 0) {
+      return res.status(400).json({ message: 'A valid positive price greater than 0 is required.' })
+    }
+    if (fields.quantity < 0) {
+      return res.status(400).json({ message: 'Quantity cannot be negative.' })
+    }
+    if (fields.commission < 0) {
+      return res.status(400).json({ message: 'Commission cannot be negative.' })
     }
 
     const uploaded = Array.isArray(req.files)
       ? req.files.map((file) => `/uploads/${file.filename}`)
       : []
     const images = uploaded.length > 0 ? uploaded : fields.image ? [fields.image] : []
-    const image = images[0] || PLACEHOLDER_IMAGE
+
+    // Supplier restriction: Must upload at least 2 images
+    if (images.length < 2) {
+      return res.status(400).json({
+        message:
+          images.length === 0
+            ? 'Please upload at least 2 images for the product. Multiple images are required.'
+            : 'Please upload at least 2 images. Products cannot be submitted with only 1 image.',
+      })
+    }
+
+    const isVideoPath = (p) => /\.(mp4|webm|mov|ogg|mkv)$/i.test(p)
+    const firstPhoto = images.find((item) => !isVideoPath(item))
+    const image = firstPhoto || images[0] || PLACEHOLDER_IMAGE
 
     const sku = await uniqueSku(fields.sku)
     const status = asDraft ? 'draft' : 'pending_approval'
@@ -109,6 +135,16 @@ export const createProduct = async (req, res) => {
       supplier: req.user._id,
       status,
     })
+
+    if (!asDraft) {
+      createNotification({
+        targetRole: 'admin',
+        type: 'product',
+        title: 'New Product Submitted',
+        message: `${req.user.fullName || 'A supplier'} submitted product "${product.name}" for review.`,
+        link: '/admin/products',
+      })
+    }
 
     return res.status(201).json({
       message: asDraft
@@ -154,8 +190,11 @@ export const updateMyProduct = async (req, res) => {
       fields.sku = product.sku
     }
 
-    if (Number.isNaN(fields.price) || fields.price < 0) {
-      return res.status(400).json({ message: 'A valid price is required.' })
+    if (fields.price !== undefined && (Number.isNaN(fields.price) || fields.price <= 0)) {
+      return res.status(400).json({ message: 'A valid positive price greater than 0 is required.' })
+    }
+    if (fields.quantity !== undefined && fields.quantity < 0) {
+      return res.status(400).json({ message: 'Quantity cannot be negative.' })
     }
 
     const uploaded = Array.isArray(req.files)
@@ -164,6 +203,13 @@ export const updateMyProduct = async (req, res) => {
     if (uploaded.length > 0) {
       fields.images = [...(product.images || []), ...uploaded]
       fields.image = uploaded[0]
+    }
+
+    const currentImages = fields.images || product.images || []
+    if (currentImages.length < 2) {
+      return res.status(400).json({
+        message: 'Product must have at least 2 images. Multiple images are required.',
+      })
     }
 
     const resubmit = req.body.status === 'pending_approval' || req.body.resubmit === 'true'
@@ -229,9 +275,76 @@ const ACTIVATABLE_STATUSES = ['approved', 'pending_approval', 'draft', 'rejected
 const DEACTIVATABLE_STATUSES = ['active']
 const REJECTABLE_STATUSES = ['draft', 'pending_approval', 'approved', 'active']
 
+export const getProductById = async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(404).json({ message: 'Product not found.' })
+    }
+    const product = await Product.findById(req.params.id).populate(
+      'supplier',
+      'fullName email phone businessName address',
+    )
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found.' })
+    }
+
+    const safeObj = product.toSafeObject()
+
+    // Enrich with supplier business profile if available
+    const supplierId = product.supplier?._id || product.supplier
+    if (supplierId) {
+      try {
+        const profile = await BusinessProfile.findOne({ user: supplierId })
+        if (profile) {
+          safeObj.supplierBusinessName = profile.businessName || safeObj.supplierBusinessName
+          safeObj.supplierCity = profile.city || ''
+          safeObj.supplierCountry = profile.country || ''
+          safeObj.supplierAddress = profile.businessAddress || ''
+        }
+      } catch {
+        // ignore profile lookup errors
+      }
+    }
+
+    return res.json({ product: safeObj })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to load product.' })
+  }
+}
+
+export const updateProductCommission = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id).populate(
+      'supplier',
+      'fullName email phone businessName address',
+    )
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found.' })
+    }
+
+    const commission = Number(req.body.commission)
+    if (Number.isNaN(commission) || commission <= 0) {
+      return res.status(400).json({ message: 'Commission must be a valid number greater than 0.' })
+    }
+
+    product.commission = commission
+    await product.save()
+
+    return res.json({
+      message: 'Product commission updated successfully.',
+      product: product.toSafeObject(),
+    })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to update commission.' })
+  }
+}
+
 export const approveProduct = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id).populate('supplier', 'fullName email')
+    const product = await Product.findById(req.params.id).populate(
+      'supplier',
+      'fullName email phone businessName address',
+    )
     if (!product) {
       return res.status(404).json({ message: 'Product not found.' })
     }
@@ -242,12 +355,20 @@ export const approveProduct = async (req, res) => {
       })
     }
 
+    let effectiveCommission = product.commission
     if (req.body.commission !== undefined && req.body.commission !== '') {
       const commission = Number(req.body.commission)
-      if (Number.isNaN(commission) || commission < 0) {
-        return res.status(400).json({ message: 'Commission must be a valid number.' })
+      if (Number.isNaN(commission) || commission <= 0) {
+        return res.status(400).json({ message: 'Commission must be a valid number greater than 0.' })
       }
       product.commission = commission
+      effectiveCommission = commission
+    }
+
+    if (!effectiveCommission || Number(effectiveCommission) <= 0) {
+      return res.status(400).json({
+        message: 'Commission is required. You must set a commission greater than 0 before approving or activating this product.',
+      })
     }
 
     const alsoActivate =
@@ -257,6 +378,15 @@ export const approveProduct = async (req, res) => {
 
     product.status = alsoActivate ? 'active' : 'approved'
     await product.save()
+
+    createNotification({
+      recipient: product.supplier?._id || product.supplier,
+      targetRole: 'supplier',
+      type: 'product',
+      title: 'Product Approved',
+      message: `Your product "${product.name}" was approved${alsoActivate ? ' and activated on the marketplace' : ''}.`,
+      link: '/supplier/products',
+    })
 
     return res.json({
       message: alsoActivate
@@ -271,7 +401,10 @@ export const approveProduct = async (req, res) => {
 
 export const activateProduct = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id).populate('supplier', 'fullName email')
+    const product = await Product.findById(req.params.id).populate(
+      'supplier',
+      'fullName email phone businessName address',
+    )
     if (!product) {
       return res.status(404).json({ message: 'Product not found.' })
     }
@@ -279,6 +412,12 @@ export const activateProduct = async (req, res) => {
     if (!ACTIVATABLE_STATUSES.includes(product.status)) {
       return res.status(400).json({
         message: `Cannot activate a product with status "${product.status}".`,
+      })
+    }
+
+    if (!product.commission || Number(product.commission) <= 0) {
+      return res.status(400).json({
+        message: 'Commission is required. You must set a commission greater than 0 before activating this product.',
       })
     }
 
@@ -364,15 +503,22 @@ export const createAdminProduct = async (req, res) => {
     }
     fields.category = categoryName
 
-    if (Number.isNaN(fields.price) || fields.price < 0) {
-      return res.status(400).json({ message: 'A valid price is required.' })
+    if (Number.isNaN(fields.price) || fields.price <= 0) {
+      return res.status(400).json({ message: 'A valid positive price greater than 0 is required.' })
+    }
+    if (fields.quantity < 0) {
+      return res.status(400).json({ message: 'Quantity cannot be negative.' })
+    }
+    if (fields.commission < 0) {
+      return res.status(400).json({ message: 'Commission cannot be negative.' })
     }
 
     const uploaded = Array.isArray(req.files)
       ? req.files.map((file) => `/uploads/${file.filename}`)
       : []
-    const images = uploaded.length > 0 ? uploaded : fields.image ? [fields.image] : []
-    const image = images[0] || PLACEHOLDER_IMAGE
+    const isVideoPath = (p) => /\.(mp4|webm|mov|ogg|mkv)$/i.test(p)
+    const firstPhoto = images.find((item) => !isVideoPath(item))
+    const image = firstPhoto || images[0] || PLACEHOLDER_IMAGE
 
     const sku = await uniqueSku(fields.sku)
 

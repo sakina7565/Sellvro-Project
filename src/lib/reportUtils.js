@@ -4,7 +4,10 @@
 
 export function formatMoney(value) {
   const num = Number(value) || 0
-  return `Rs ${num.toLocaleString('en-PK', { maximumFractionDigits: 0 })}`
+  return `$${num.toLocaleString('en-US', {
+    minimumFractionDigits: num % 1 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`
 }
 
 export function formatReportDate(value) {

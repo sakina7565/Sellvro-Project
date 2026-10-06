@@ -1,27 +1,29 @@
 import logoSrc from '../../assets/logo.png'
 
 /**
- * "Urbanoas" wordmark, used across the public site, auth screens and
- * the admin sidebar. Renders the official logo asset; `size` scales
- * it proportionally (the source image's aspect ratio is preserved).
+ * Sellvro logo (mark + wordmark), used across the public site, auth screens,
+ * top navigation bar and panel sidebars.
  */
-function Logo({ size = 'md', className = '' }) {
+function Logo({ size = 'md', className = '', alt = 'Sellvro' }) {
   const heights = {
-    sm: 20,
-    md: 26,
-    lg: 32,
+    sm: 24,
+    md: 32,
+    lg: 40,
+    xl: 48,
   }
-  const height = heights[size] || heights.md
+  const height = typeof size === 'number' ? size : heights[size] || heights.md
 
   return (
     <img
       src={logoSrc}
-      alt="Urbanoas"
+      alt={alt}
       height={height}
-      style={{ height, width: 'auto', maxWidth: '100%' }}
-      className={`w-auto object-contain ${className}`}
+      style={{ height: `${height}px`, width: 'auto' }}
+      className={`inline-block select-none object-contain ${className}`}
+      loading="eager"
     />
   )
 }
 
 export default Logo
+

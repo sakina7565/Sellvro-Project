@@ -1,22 +1,37 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Wallet, Box, ShoppingBag, DollarSign, Inbox, BarChart3, Banknote } from 'lucide-react'
+import {
+  Wallet,
+  Box,
+  ShoppingBag,
+  DollarSign,
+  Inbox,
+  BarChart3,
+  Banknote,
+  Truck,
+  AlertTriangle,
+} from 'lucide-react'
 import SupplierLayout from '../../components/layout/SupplierLayout.jsx'
 import PanelDashboard from '../../components/dashboard/PanelDashboard.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { SUPPLIER_FEATURED_MODULE, SUPPLIER_GRID_MODULES } from '../../lib/supplierDashboardModules.js'
+import {
+  SUPPLIER_FEATURED_MODULE,
+  SUPPLIER_GRID_MODULES,
+} from '../../lib/supplierDashboardModules.js'
 import { financeApi, getErrorMessage } from '../../lib/api.js'
 
 const EMPTY_OVERVIEW = [
-  { label: 'Approved', value: '—', icon: Wallet, tone: 'yellow' },
-  { label: 'Total Products', value: '—', icon: Box, tone: 'blue' },
-  { label: 'Total Orders', value: '—', icon: ShoppingBag, tone: 'pink' },
-  { label: 'Total Revenue', value: '—', icon: DollarSign, tone: 'teal' },
+  { label: 'Active Products', value: '—', icon: Wallet, tone: 'yellow', to: '/supplier/products' },
+  { label: 'Total Products', value: '—', icon: Box, tone: 'blue', to: '/supplier/products' },
+  { label: 'Total Orders', value: '—', icon: ShoppingBag, tone: 'pink', to: '/supplier/sales/details' },
+  { label: 'Total Earnings', value: '—', icon: DollarSign, tone: 'teal', to: '/supplier/finance/index' },
 ]
 
 const EMPTY_PENDING = [
-  { label: 'Pending Status', value: '—', icon: Inbox, tone: 'yellow' },
-  { label: 'Stock Difference', value: '—', icon: BarChart3, tone: 'red' },
-  { label: 'Pending Payout', value: '—', icon: Banknote, tone: 'teal' },
+  { label: 'Pending Approval', value: '—', icon: Inbox, tone: 'yellow', to: '/supplier/products' },
+  { label: 'Orders to Fulfill', value: '—', icon: Truck, tone: 'blue', to: '/supplier/sales/details' },
+  { label: 'Out of Stock', value: '—', icon: BarChart3, tone: 'red', to: '/supplier/products' },
+  { label: 'Open Disputes', value: '—', icon: AlertTriangle, tone: 'orange', to: '/supplier/disputes' },
+  { label: 'Pending Payout', value: '—', icon: Banknote, tone: 'teal', to: '/supplier/finance/index' },
 ]
 
 function SupplierDashboardPage() {
@@ -24,6 +39,7 @@ function SupplierDashboardPage() {
   const displayName = user?.fullName || 'Supplier'
   const [overviewStats, setOverviewStats] = useState(EMPTY_OVERVIEW)
   const [pendingTasks, setPendingTasks] = useState(EMPTY_PENDING)
+  const [monthlyData, setMonthlyData] = useState([])
   const [statsLoading, setStatsLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -36,31 +52,77 @@ function SupplierDashboardPage() {
       const pending = data.pendingTasks || {}
 
       setOverviewStats([
-        { label: 'Approved', value: overview.approved ?? 0, icon: Wallet, tone: 'yellow' },
-        { label: 'Total Products', value: overview.totalProducts ?? 0, icon: Box, tone: 'blue' },
-        { label: 'Total Orders', value: overview.totalOrders ?? 0, icon: ShoppingBag, tone: 'pink' },
         {
-          label: 'Total Revenue',
+          label: 'Active Products',
+          value: overview.approved ?? 0,
+          icon: Wallet,
+          tone: 'yellow',
+          to: '/supplier/products',
+        },
+        {
+          label: 'Total Products',
+          value: overview.totalProducts ?? 0,
+          icon: Box,
+          tone: 'blue',
+          to: '/supplier/products',
+        },
+        {
+          label: 'Total Orders',
+          value: overview.totalOrders ?? 0,
+          icon: ShoppingBag,
+          tone: 'pink',
+          to: '/supplier/sales/details',
+        },
+        {
+          label: 'Total Earnings',
           value: overview.totalRevenueLabel ?? `$${Number(overview.totalRevenue || 0).toFixed(2)}`,
           icon: DollarSign,
           tone: 'teal',
+          to: '/supplier/finance/index',
         },
       ])
+
       setPendingTasks([
-        { label: 'Pending Status', value: pending.pendingStatus ?? 0, icon: Inbox, tone: 'yellow' },
         {
-          label: 'Stock Difference',
+          label: 'Pending Approval',
+          value: pending.pendingStatus ?? 0,
+          icon: Inbox,
+          tone: 'yellow',
+          to: '/supplier/products',
+        },
+        {
+          label: 'Orders to Fulfill',
+          value: pending.pendingFulfillments ?? 0,
+          icon: Truck,
+          tone: 'blue',
+          to: '/supplier/sales/details',
+        },
+        {
+          label: 'Out of Stock',
           value: pending.stockDifference ?? 0,
           icon: BarChart3,
           tone: 'red',
+          to: '/supplier/products',
+        },
+        {
+          label: 'Open Disputes',
+          value: pending.openDisputes ?? 0,
+          icon: AlertTriangle,
+          tone: 'orange',
+          to: '/supplier/disputes',
         },
         {
           label: 'Pending Payout',
           value: pending.pendingPayoutLabel ?? `$${Number(pending.pendingPayout || 0).toFixed(2)}`,
           icon: Banknote,
           tone: 'teal',
+          to: '/supplier/finance/index',
         },
       ])
+
+      if (Array.isArray(data.monthlyData)) {
+        setMonthlyData(data.monthlyData)
+      }
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to load dashboard stats.'))
     } finally {
@@ -88,6 +150,10 @@ function SupplierDashboardPage() {
         gridModules={SUPPLIER_GRID_MODULES}
         overviewStats={overviewStats}
         pendingTasks={pendingTasks}
+        monthlyData={monthlyData}
+        revenueTitle="Monthly Supplier Earnings & Revenue"
+        revenueMetricLabel="Net Earnings"
+        revenueColor="#10b981"
         onPeriodChange={(period) => loadStats(period)}
         statsLoading={statsLoading}
       />

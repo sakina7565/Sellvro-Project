@@ -58,6 +58,11 @@ function EditAccountModal({ isOpen, onClose, onSuccess, account }) {
       return
     }
 
+    if (walletBalance !== '' && parseFloat(walletBalance) < 0) {
+      setError('Wallet balance cannot be negative.')
+      return
+    }
+
     setLoading(true)
     try {
       await adminApi.updateAccount(account.id, {

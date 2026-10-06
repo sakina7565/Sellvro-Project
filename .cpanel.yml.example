@@ -1,0 +1,7 @@
+---
+deployment:
+  tasks:
+    # If deploying via cPanel "Git™ Version Control", replace USERNAME with your cPanel username
+    # and directory with your target application folder (e.g. /home/USERNAME/sellvro or /home/USERNAME/public_html)
+    - export DEPLOYPATH=/home/USERNAME/public_html/
+    - /bin/cp -a * $DEPLOYPATH

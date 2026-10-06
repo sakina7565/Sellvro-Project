@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Truck, FileText, Coins, Scale, AlertTriangle, Clock, Wallet } from 'lucide-react'
+import { Truck, FileText, Coins, Scale, AlertTriangle, Clock, Wallet, ArrowUpRight } from 'lucide-react'
 import UserLayout from '../../components/layout/UserLayout.jsx'
 import PanelDashboard from '../../components/dashboard/PanelDashboard.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -7,16 +7,17 @@ import { USER_FEATURED_MODULE, USER_GRID_MODULES } from '../../lib/userDashboard
 import { orderApi, getErrorMessage } from '../../lib/api.js'
 
 const EMPTY_OVERVIEW = [
-  { label: 'Fulfillment Orders', value: '—', icon: Truck, tone: 'yellow' },
-  { label: 'Pending Orders', value: '—', icon: FileText, tone: 'blue' },
-  { label: 'Total Invoices', value: '—', icon: Coins, tone: 'pink' },
-  { label: 'Billing (Paid)', value: '—', icon: Scale, tone: 'teal' },
+  { label: 'Total Orders', value: '—', icon: Truck, tone: 'yellow', to: '/user/orders' },
+  { label: 'Pending Orders', value: '—', icon: FileText, tone: 'blue', to: '/user/orders' },
+  { label: 'Total Spend', value: '—', icon: Coins, tone: 'pink', to: '/user/orders' },
+  { label: 'Wallet Balance', value: '—', icon: Scale, tone: 'teal', to: '/user/wallet' },
 ]
 
 const EMPTY_PENDING = [
-  { label: 'Disputes', value: '—', icon: AlertTriangle, tone: 'red' },
-  { label: 'Pending Fulfillment', value: '—', icon: Clock, tone: 'yellow' },
-  { label: 'Pending Amount', value: '—', icon: Wallet, tone: 'teal' },
+  { label: 'In-Process / Pending Orders', value: '—', icon: Clock, tone: 'yellow', to: '/user/orders' },
+  { label: 'Open Disputes', value: '—', icon: AlertTriangle, tone: 'red', to: '/user/disputes' },
+  { label: 'Pending Top-ups', value: '—', icon: ArrowUpRight, tone: 'blue', to: '/user/wallet' },
+  { label: 'Pending Top-up Amount', value: '—', icon: Wallet, tone: 'teal', to: '/user/wallet' },
 ]
 
 function UserDashboardPage() {
@@ -24,6 +25,7 @@ function UserDashboardPage() {
   const displayName = user?.fullName || 'User'
   const [overviewStats, setOverviewStats] = useState(EMPTY_OVERVIEW)
   const [pendingTasks, setPendingTasks] = useState(EMPTY_PENDING)
+  const [monthlyData, setMonthlyData] = useState([])
   const [statsLoading, setStatsLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -37,35 +39,69 @@ function UserDashboardPage() {
 
       setOverviewStats([
         {
-          label: 'Fulfillment Orders',
+          label: 'Total Orders',
           value: overview.fulfillmentOrders ?? 0,
           icon: Truck,
           tone: 'yellow',
+          to: '/user/orders',
         },
-        { label: 'Pending Orders', value: overview.pendingOrders ?? 0, icon: FileText, tone: 'blue' },
-        { label: 'Total Invoices', value: overview.totalInvoices ?? 0, icon: Coins, tone: 'pink' },
         {
-          label: 'Billing (Paid)',
+          label: 'Pending Orders',
+          value: overview.pendingOrders ?? 0,
+          icon: FileText,
+          tone: 'blue',
+          to: '/user/orders',
+        },
+        {
+          label: 'Total Spend',
           value: overview.billingPaidLabel ?? `$${overview.billingPaid ?? 0}`,
+          icon: Coins,
+          tone: 'pink',
+          to: '/user/orders',
+        },
+        {
+          label: 'Wallet Balance',
+          value: overview.walletBalanceLabel ?? `$${overview.walletBalance ?? 0}`,
           icon: Scale,
           tone: 'teal',
+          to: '/user/wallet',
         },
       ])
+
       setPendingTasks([
-        { label: 'Disputes', value: pending.disputes ?? 0, icon: AlertTriangle, tone: 'red' },
         {
-          label: 'Pending Fulfillment',
+          label: 'In-Process / Pending Orders',
           value: pending.pendingFulfillment ?? 0,
           icon: Clock,
           tone: 'yellow',
+          to: '/user/orders',
         },
         {
-          label: 'Pending Amount',
+          label: 'Open Disputes',
+          value: pending.disputes ?? 0,
+          icon: AlertTriangle,
+          tone: 'red',
+          to: '/user/disputes',
+        },
+        {
+          label: 'Pending Top-ups',
+          value: pending.pendingWalletRequests ?? 0,
+          icon: ArrowUpRight,
+          tone: 'blue',
+          to: '/user/wallet',
+        },
+        {
+          label: 'Pending Top-up Amount',
           value: pending.pendingAmountLabel ?? `$${pending.pendingAmount ?? 0}`,
           icon: Wallet,
           tone: 'teal',
+          to: '/user/wallet',
         },
       ])
+
+      if (Array.isArray(data.monthlyData)) {
+        setMonthlyData(data.monthlyData)
+      }
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to load dashboard stats.'))
     } finally {
@@ -93,6 +129,10 @@ function UserDashboardPage() {
         gridModules={USER_GRID_MODULES}
         overviewStats={overviewStats}
         pendingTasks={pendingTasks}
+        monthlyData={monthlyData}
+        revenueTitle="Monthly Purchases & Spend Overview"
+        revenueMetricLabel="Purchases"
+        revenueColor="#3d4fe0"
         onPeriodChange={(period) => loadStats(period)}
         statsLoading={statsLoading}
       />

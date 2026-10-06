@@ -1,4 +1,4 @@
-import { Home, Box, Receipt, Briefcase, Truck, Info, MessageCircle } from 'lucide-react'
+import { Home, Box, Receipt, Briefcase, Info } from 'lucide-react'
 
 /**
  * Supplier panel navigation with grouped sub-categories
@@ -27,21 +27,11 @@ export const SUPPLIER_NAV_ITEMS = [
     children: [{ label: 'Finance Overview', to: '/supplier/finance/index' }],
   },
   {
-    label: 'Inventory',
-    icon: Truck,
-    children: [
-      { label: 'All Products', to: '/supplier/products' },
-      { label: 'Add Product', to: '/supplier/product/create' },
-    ],
-  },
-  {
-    label: 'Disputes',
+    label: 'Disputes & Support',
     icon: Info,
-    children: [{ label: 'View Disputes', to: '/supplier/disputes' }],
-  },
-  {
-    label: 'Communication',
-    icon: MessageCircle,
-    children: [{ label: 'Open Chat with Admin', to: '/supplier/dashboard' }],
+    children: [
+      { label: 'View Disputes', to: '/supplier/disputes' },
+      { label: 'Chat with Admin', to: '/supplier/disputes' },
+    ],
   },
 ]

@@ -51,6 +51,11 @@ export function getErrorMessage(err, fallback = 'Something went wrong. Please tr
 export async function apiRequest(path, { method = 'GET', body, formData } = {}) {
   const headers = {}
 
+  const token = typeof window !== 'undefined' ? localStorage.getItem('sellvro_token') : null
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
   if (body !== undefined && !formData) {
     headers['Content-Type'] = 'application/json'
   }
@@ -101,6 +106,21 @@ export const authApi = {
   logout: () => apiRequest('/auth/logout', { method: 'POST' }),
   me: () => apiRequest('/auth/me'),
   switchBack: () => apiRequest('/auth/switch-back', { method: 'POST' }),
+  forgotPassword: (payload) => apiRequest('/auth/forgot-password', { method: 'POST', body: payload }),
+  verifyResetCode: (payload) => apiRequest('/auth/verify-code', { method: 'POST', body: payload }),
+  resetPassword: (payload) => apiRequest('/auth/reset-password', { method: 'POST', body: payload }),
+  googleAuth: (payload) => apiRequest('/auth/google', { method: 'POST', body: payload }),
+  changePassword: (payload) => apiRequest('/auth/change-password', { method: 'PATCH', body: payload }),
+}
+
+export const notificationApi = {
+  list: () => apiRequest('/notifications'),
+  markRead: (id) => apiRequest(`/notifications/${id}/read`, { method: 'PATCH' }),
+  markAllRead: () => apiRequest('/notifications/read-all', { method: 'PATCH' }),
+}
+
+export const searchApi = {
+  search: (query) => apiRequest(`/search?q=${encodeURIComponent(query)}`),
 }
 
 export const businessApi = {
@@ -143,6 +163,7 @@ export const productApi = {
   },
   mine: () => apiRequest('/products/mine'),
   marketplace: () => apiRequest('/products'),
+  get: (id) => apiRequest(`/products/${id}`),
 }
 
 export const categoryApi = {
@@ -200,6 +221,9 @@ export const adminApi = {
   approve: (id) => apiRequest(`/admin/accounts/${id}/approve`, { method: 'PATCH' }),
   reject: (id) => apiRequest(`/admin/accounts/${id}/reject`, { method: 'PATCH' }),
   products: () => apiRequest('/admin/products'),
+  product: (id) => apiRequest(`/admin/products/${id}`),
+  updateProductCommission: (id, commission) =>
+    apiRequest(`/admin/products/${id}/commission`, { method: 'PATCH', body: { commission } }),
   createProduct: (payload, files = []) => {
     const formData = new FormData()
     Object.entries(payload).forEach(([key, value]) => {
@@ -268,5 +292,11 @@ export const adminApi = {
     apiRequest(`/admin/accounts/${id}`, { method: 'PATCH', body: payload }),
   deleteAccount: (id) => apiRequest(`/admin/accounts/${id}`, { method: 'DELETE' }),
   impersonate: (id) => apiRequest(`/admin/impersonate/${id}`, { method: 'POST' }),
+  countries: () => apiRequest('/admin/countries'),
+  createCountry: (payload) => apiRequest('/admin/countries', { method: 'POST', body: payload }),
+  deleteCountry: (id) => apiRequest(`/admin/countries/${id}`, { method: 'DELETE' }),
+  locations: () => apiRequest('/admin/locations'),
+  createLocation: (payload) => apiRequest('/admin/locations', { method: 'POST', body: payload }),
+  deleteLocation: (id) => apiRequest(`/admin/locations/${id}`, { method: 'DELETE' }),
 }
 

@@ -268,6 +268,9 @@ export function canAccessAdminPath(user, path) {
   if (path === '/admin/accounts') {
     return hasAnyPermission(getEffectivePermissions(user), ['admin.users.view', 'admin.suppliers.view'])
   }
+  if (path.startsWith('/admin/products/')) {
+    return hasPermission(getEffectivePermissions(user), 'admin.products.view')
+  }
   const permission = ADMIN_ROUTE_PERMISSIONS[path]
   if (!permission) return true
   return hasPermission(getEffectivePermissions(user), permission)

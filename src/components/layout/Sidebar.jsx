@@ -17,15 +17,13 @@ const linkClasses = ({ isActive }) =>
  * provided, an expandable group (e.g. Products -> All/Add/Categories).
  * Only one group can be expanded at a time (accordion).
  */
-function NavItem({ item, expandedLabel, onToggle }) {
-  const { pathname } = useLocation()
+function NavItem({ item, expandedLabel, activeGroupLabel, onToggle }) {
   const { unreadCount } = useDisputeNotifications()
   const hasChildren = Array.isArray(item.children) && item.children.length > 0
-  const isChildActive = hasChildren && item.children.some((child) => pathname.startsWith(child.to))
 
   if (!hasChildren) {
     return (
-      <NavLink to={item.to} className={linkClasses}>
+      <NavLink to={item.to} end={item.to?.endsWith('/dashboard')} className={linkClasses}>
         <item.icon className="h-[18px] w-[18px]" />
         {item.label}
       </NavLink>
@@ -33,7 +31,7 @@ function NavItem({ item, expandedLabel, onToggle }) {
   }
 
   const isExpanded = expandedLabel === item.label
-  const isGroupActive = isExpanded || isChildActive
+  const isGroupActive = activeGroupLabel === item.label
 
   return (
     <div>
@@ -42,7 +40,7 @@ function NavItem({ item, expandedLabel, onToggle }) {
         onClick={() => onToggle(item.label)}
         aria-expanded={isExpanded}
         className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-          isGroupActive ? 'bg-primary-50 text-primary' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+          isGroupActive || isExpanded ? 'bg-primary-50 text-primary' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
         }`}
       >
         <item.icon className="h-[18px] w-[18px]" />
@@ -86,23 +84,47 @@ function Sidebar({ navItems, homeTo, isOpen = false, onClose = () => {} }) {
   const { logout, user } = useAuth()
   const navigate = useNavigate()
 
-  const matchingGroups = navItems.filter(
-    (item) => Array.isArray(item.children) && item.children.some((child) => pathname.startsWith(child.to)),
+  const isDashboardRoute = pathname.endsWith('/dashboard') || pathname.endsWith('/dashboard/')
+  const hasExactTopLevelMatch = navItems.some(
+    (item) => !item.children?.length && item.to && pathname === item.to,
   )
 
-  const resolveGroupLabel = (preferredLabel) => {
-    if (matchingGroups.length === 0) return null
-    if (preferredLabel && matchingGroups.some((group) => group.label === preferredLabel)) {
-      return preferredLabel
-    }
-    return matchingGroups[0].label
-  }
+  // Single-winner best matching group algorithm
+  const activeGroup = (() => {
+    if (isDashboardRoute || hasExactTopLevelMatch) return null
 
-  const [expandedLabel, setExpandedLabel] = useState(() => resolveGroupLabel(null))
+    // Priority 1: Exact child match (child.to === pathname)
+    for (const item of navItems) {
+      if (!Array.isArray(item.children)) continue
+      const exact = item.children.some((child) => child.to === pathname)
+      if (exact) return item
+    }
+
+    // Priority 2: Longest prefix child match
+    let bestItem = null
+    let longestPrefixLen = 0
+
+    for (const item of navItems) {
+      if (!Array.isArray(item.children)) continue
+      for (const child of item.children) {
+        if (!child.to || child.to.endsWith('/dashboard')) continue
+        if (pathname.startsWith(child.to + '/') && child.to.length > longestPrefixLen) {
+          longestPrefixLen = child.to.length
+          bestItem = item
+        }
+      }
+    }
+
+    return bestItem
+  })()
+
+  const activeGroupLabel = activeGroup?.label || null
+
+  const [expandedLabel, setExpandedLabel] = useState(activeGroupLabel)
 
   useEffect(() => {
-    setExpandedLabel((prev) => resolveGroupLabel(prev))
-  }, [pathname, navItems])
+    setExpandedLabel(activeGroupLabel)
+  }, [activeGroupLabel])
 
   const handleToggle = (label) => {
     setExpandedLabel((prev) => (prev === label ? null : label))
@@ -152,6 +174,7 @@ function Sidebar({ navItems, homeTo, isOpen = false, onClose = () => {} }) {
               key={item.label}
               item={item}
               expandedLabel={expandedLabel}
+              activeGroupLabel={activeGroupLabel}
               onToggle={handleToggle}
             />
           ))}

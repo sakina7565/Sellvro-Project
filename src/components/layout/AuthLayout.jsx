@@ -10,8 +10,8 @@ function AuthLayout({ children, cardClassName = 'max-w-md', footerLabel = 'DEVEL
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 py-10">
       <Card className={`w-full border border-slate-100 ${cardClassName} p-6 sm:p-8`}>
-        <div className="mb-4 flex justify-center">
-          <Logo size="md" />
+        <div className="mb-5 flex justify-center">
+          <Logo size="lg" className="h-10 sm:h-11 w-auto" />
         </div>
         {children}
       </Card>

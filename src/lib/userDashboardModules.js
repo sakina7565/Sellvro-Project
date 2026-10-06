@@ -4,9 +4,10 @@
 export const USER_DASHBOARD_MODULES = [
   {
     title: 'Store',
-    description: 'Monitor stock levels, manage product SKUs, and track warehouse Inventory.',
+    description: 'Browse available products, manage catalog, and review inventory reporting.',
     links: [
       { label: 'Sellvro Products', to: '/user/products' },
+      { label: 'SKU Reporting', to: '/user/inventory/sku-reporting' },
       { label: 'My Reporting', to: '/user/inventory/my-reporting' },
     ],
     featured: true,
@@ -17,25 +18,17 @@ export const USER_DASHBOARD_MODULES = [
     links: [{ label: 'My Wallet', to: '/user/wallet' }],
   },
   {
-    title: 'Fulfillment',
-    description: 'Handle fulfillment requests and order processing.',
-    links: [
-      { label: 'Fulfillments Request', to: '/user/orders' },
-      { label: 'Fulfillments', to: '/user/orders' },
-    ],
+    title: 'Orders',
+    description: 'Track orders, status updates, and dispatch history.',
+    links: [{ label: 'View Orders', to: '/user/orders' }],
   },
   {
-    title: 'Disputes',
-    description: 'Review and manage order disputes.',
+    title: 'Disputes & Support',
+    description: 'Review and manage order disputes, complaints, and staff chat.',
     links: [
       { label: 'All Disputes', to: '/user/disputes' },
-      { label: 'Create Dispute', to: '/user/disputes' },
+      { label: 'Chat with Admin', to: '/user/disputes' },
     ],
-  },
-  {
-    title: 'Communication',
-    description: 'Connect with admin support and get help quickly.',
-    links: [{ label: 'Open Chat with Admin', to: '/user/dashboard' }],
   },
 ]
 

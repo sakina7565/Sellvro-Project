@@ -121,7 +121,15 @@ function AddProductForm({ eyebrow, panel = 'supplier' }) {
   }, [panel])
 
   const updateField = (field) => (event) => {
-    setForm((prev) => ({ ...prev, [field]: event.target.value }))
+    let val = event.target.value
+    if (['price', 'quantity', 'commission', 'weight', 'length', 'width', 'height'].includes(field)) {
+      if (val.includes('-')) {
+        val = val.replace(/-/g, '')
+      }
+      const num = Number(val)
+      if (!Number.isNaN(num) && num < 0) return
+    }
+    setForm((prev) => ({ ...prev, [field]: val }))
   }
 
   const buildPayload = (status) => ({
@@ -166,14 +174,35 @@ function AddProductForm({ eyebrow, panel = 'supplier' }) {
       setError('Product name and category are required.')
       return
     }
-    if (form.price === '' || Number(form.price) < 0) {
-      setError('A valid price is required.')
+    if (form.price === '' || Number(form.price) <= 0) {
+      setError('A valid positive price greater than 0 is required.')
+      return
+    }
+    if (form.quantity !== '' && Number(form.quantity) < 0) {
+      setError('Quantity cannot be negative.')
+      return
+    }
+    if (form.commission !== '' && Number(form.commission) < 0) {
+      setError('Commission cannot be negative.')
+      return
+    }
+    if (panel === 'supplier' && !form.fulfillBy) {
+      setError('Please select whether to store product in Sellvro Inventory (WMS) or keep with supplier.')
+      return
+    }
+
+    const files = photos.filter(Boolean).map((item) => item.file)
+    if (panel === 'supplier' && files.length < 2) {
+      setError(
+        files.length === 0
+          ? 'Please upload at least 2 images for the product. Multiple images are required.'
+          : 'Please upload at least 2 images. You cannot submit a product with only 1 image.',
+      )
       return
     }
 
     setSubmitting(true)
     try {
-      const files = photos.filter(Boolean).map((item) => item.file)
       const data =
         panel === 'admin'
           ? await adminApi.createProduct(buildPayload(status), files)
@@ -224,7 +253,12 @@ function AddProductForm({ eyebrow, panel = 'supplier' }) {
         )}
 
         <AddProductSection step="1" title="Product photos">
-          <ProductPhotoUpload photos={photos} onChange={setPhotos} onError={setError} />
+          <ProductPhotoUpload
+            photos={photos}
+            onChange={setPhotos}
+            onError={setError}
+            minPhotos={panel === 'supplier' ? 2 : 1}
+          />
         </AddProductSection>
 
         <AddProductSection step="2" title="Product details">
@@ -327,6 +361,14 @@ function AddProductForm({ eyebrow, panel = 'supplier' }) {
                   value={form.price}
                   onChange={updateField('price')}
                 />
+                <Input
+                  id="quantity"
+                  label="Quantity"
+                  type="number"
+                  placeholder="Enter quantity"
+                  value={form.quantity}
+                  onChange={updateField('quantity')}
+                />
                 <Select
                   id="supplier"
                   label="Assign to Supplier *"
@@ -342,49 +384,83 @@ function AddProductForm({ eyebrow, panel = 'supplier' }) {
                     </option>
                   ))}
                 </Select>
-                <Select id="location" label="Location *" value={form.location} onChange={updateField('location')}>
-                  <option value="" disabled>
-                    Select Location
+                <Select
+                  id="fulfillBy"
+                  label="Fulfillment / Inventory"
+                  value={form.fulfillBy}
+                  onChange={updateField('fulfillBy')}
+                >
+                  <option value="">Select Fulfillment</option>
+                  <option value="warehouse">Sellvro Inventory (WMS)</option>
+                  <option value="self">With Supplier (Self)</option>
+                </Select>
+                <Select id="location" label="Location" value={form.location} onChange={updateField('location')}>
+                  <option value="">
+                    Select Location (optional)
                   </option>
                   <option value="warehouse-1">Warehouse 1</option>
                   <option value="warehouse-2">Warehouse 2</option>
                 </Select>
-                <Input
-                  id="quantity"
-                  label="Quantity"
-                  type="number"
-                  placeholder="Enter quantity"
-                  value={form.quantity}
-                  onChange={updateField('quantity')}
-                />
               </div>
             )}
 
             {panel === 'supplier' && (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Input
-                  id="price"
-                  label="Price (USD) *"
-                  type="number"
-                  placeholder="0.00"
-                  value={form.price}
-                  onChange={updateField('price')}
-                />
-                <Select id="fulfillBy" label="Fulfill By *" value={form.fulfillBy} onChange={updateField('fulfillBy')}>
-                  <option value="" disabled>
-                    Select
-                  </option>
-                  <option value="self">Self (Supplier)</option>
-                  <option value="warehouse">Warehouse</option>
-                </Select>
-                <Input
-                  id="quantity"
-                  label="Quantity"
-                  type="number"
-                  placeholder="Enter quantity"
-                  value={form.quantity}
-                  onChange={updateField('quantity')}
-                />
+              <div className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Input
+                    id="price"
+                    label="Price (USD) *"
+                    type="number"
+                    placeholder="0.00"
+                    value={form.price}
+                    onChange={updateField('price')}
+                  />
+                  <Input
+                    id="quantity"
+                    label="Quantity"
+                    type="number"
+                    placeholder="Enter quantity"
+                    value={form.quantity}
+                    onChange={updateField('quantity')}
+                  />
+                </div>
+
+                <div>
+                  <Select
+                    id="fulfillBy"
+                    label="Storage & Fulfillment Option *"
+                    value={form.fulfillBy}
+                    onChange={updateField('fulfillBy')}
+                  >
+                    <option value="" disabled>
+                      Select where this product is kept
+                    </option>
+                    <option value="warehouse">Store in Sellvro Inventory (WMS Fulfillment)</option>
+                    <option value="self">Keep at My Own Facility (Supplier Fulfillment)</option>
+                  </Select>
+
+                  {form.fulfillBy === 'warehouse' && (
+                    <div className="mt-2.5 flex items-start gap-2.5 rounded-lg border border-primary-200 bg-primary-50/70 p-3 text-xs text-primary-900">
+                      <span className="shrink-0 rounded bg-primary-600 px-1.5 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider">
+                        WMS
+                      </span>
+                      <span>
+                        <strong>Stored in Sellvro Inventory:</strong> This product will be kept in Sellvro's warehouse and will prominently display the <strong>WMS</strong> badge on the user store.
+                      </span>
+                    </div>
+                  )}
+
+                  {form.fulfillBy === 'self' && (
+                    <div className="mt-2.5 flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+                      <span className="shrink-0 rounded bg-slate-600 px-1.5 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider">
+                        Self
+                      </span>
+                      <span>
+                        <strong>Kept with Supplier:</strong> You will hold inventory at your own facility and fulfill orders directly. The product will appear in the user store <strong>without the WMS badge</strong>.
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -397,9 +473,14 @@ function AddProductForm({ eyebrow, panel = 'supplier' }) {
               <div className="flex gap-2">
                 <input
                   id="weight"
-                  type="text"
+                  type="number"
+                  min="0"
+                  step="any"
                   placeholder="0"
                   value={form.weight}
+                  onKeyDown={(e) => {
+                    if (e.key === '-' || e.key === 'Minus' || e.key === 'e' || e.key === 'E') e.preventDefault()
+                  }}
                   onChange={updateField('weight')}
                   className={`${FIELD_CLASS} max-w-[120px]`}
                 />
@@ -415,27 +496,42 @@ function AddProductForm({ eyebrow, panel = 'supplier' }) {
               <FormLabel>Dimensions</FormLabel>
               <div className="flex flex-wrap items-center gap-2">
                 <input
-                  type="text"
+                  type="number"
+                  min="0"
+                  step="any"
                   placeholder="L"
                   value={form.length}
+                  onKeyDown={(e) => {
+                    if (e.key === '-' || e.key === 'Minus' || e.key === 'e' || e.key === 'E') e.preventDefault()
+                  }}
                   onChange={updateField('length')}
                   className={`${FIELD_CLASS} w-20 sm:w-24`}
                   aria-label="Length"
                 />
                 <span className="text-sm text-slate-400">×</span>
                 <input
-                  type="text"
+                  type="number"
+                  min="0"
+                  step="any"
                   placeholder="W"
                   value={form.width}
+                  onKeyDown={(e) => {
+                    if (e.key === '-' || e.key === 'Minus' || e.key === 'e' || e.key === 'E') e.preventDefault()
+                  }}
                   onChange={updateField('width')}
                   className={`${FIELD_CLASS} w-20 sm:w-24`}
                   aria-label="Width"
                 />
                 <span className="text-sm text-slate-400">×</span>
                 <input
-                  type="text"
+                  type="number"
+                  min="0"
+                  step="any"
                   placeholder="H"
                   value={form.height}
+                  onKeyDown={(e) => {
+                    if (e.key === '-' || e.key === 'Minus' || e.key === 'e' || e.key === 'E') e.preventDefault()
+                  }}
                   onChange={updateField('height')}
                   className={`${FIELD_CLASS} w-20 sm:w-24`}
                   aria-label="Height"

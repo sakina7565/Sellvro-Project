@@ -5,7 +5,7 @@ import { getRedirectForUser } from '../lib/authRedirect.js'
 const AuthContext = createContext(null)
 
 const USER_KEY = 'sellvro_user'
-const LEGACY_TOKEN_KEY = 'sellvro_token'
+const TOKEN_KEY = 'sellvro_token'
 
 function readStoredUser() {
   try {
@@ -14,10 +14,6 @@ function readStoredUser() {
   } catch {
     return null
   }
-}
-
-function clearLegacyToken() {
-  localStorage.removeItem(LEGACY_TOKEN_KEY)
 }
 
 export function AuthProvider({ children }) {
@@ -36,6 +32,7 @@ export function AuthProvider({ children }) {
     } catch {
       // Cookie is still cleared locally even if the network call fails.
     }
+    localStorage.removeItem(TOKEN_KEY)
     persistUser(null)
   }, [persistUser])
 
@@ -45,6 +42,7 @@ export function AuthProvider({ children }) {
       persistUser(data.user)
       return data.user
     } catch {
+      localStorage.removeItem(TOKEN_KEY)
       persistUser(null)
       return null
     } finally {
@@ -53,13 +51,13 @@ export function AuthProvider({ children }) {
   }, [persistUser])
 
   useEffect(() => {
-    clearLegacyToken()
     refreshUser()
   }, [refreshUser])
 
   const login = useCallback(
     async (payload) => {
       const data = await authApi.login(payload)
+      if (data.token) localStorage.setItem(TOKEN_KEY, data.token)
       persistUser(data.user)
       return data
     },
@@ -69,6 +67,7 @@ export function AuthProvider({ children }) {
   const adminLogin = useCallback(
     async (payload) => {
       const data = await authApi.adminLogin(payload)
+      if (data.token) localStorage.setItem(TOKEN_KEY, data.token)
       persistUser(data.user)
       return data
     },
@@ -78,6 +77,7 @@ export function AuthProvider({ children }) {
   const register = useCallback(
     async (payload) => {
       const data = await authApi.register(payload)
+      if (data.token) localStorage.setItem(TOKEN_KEY, data.token)
       persistUser(data.user)
       return data
     },
@@ -87,6 +87,17 @@ export function AuthProvider({ children }) {
   const adminRegister = useCallback(
     async (payload) => {
       const data = await authApi.adminRegister(payload)
+      if (data.token) localStorage.setItem(TOKEN_KEY, data.token)
+      persistUser(data.user)
+      return data
+    },
+    [persistUser],
+  )
+
+  const googleLogin = useCallback(
+    async (payload) => {
+      const data = await authApi.googleAuth(payload)
+      if (data.token) localStorage.setItem(TOKEN_KEY, data.token)
       persistUser(data.user)
       return data
     },
@@ -109,12 +120,13 @@ export function AuthProvider({ children }) {
       adminLogin,
       register,
       adminRegister,
+      googleLogin,
       logout,
       refreshUser,
       updateUser,
       getHomePath: () => getRedirectForUser(user),
     }),
-    [user, loading, login, adminLogin, register, adminRegister, logout, refreshUser, updateUser],
+    [user, loading, login, adminLogin, register, adminRegister, googleLogin, logout, refreshUser, updateUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

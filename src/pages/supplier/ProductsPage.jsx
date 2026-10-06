@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Plus, Search, XCircle } from 'lucide-react'
 import SupplierLayout from '../../components/layout/SupplierLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import FilterBar from '../../components/admin/FilterBar.jsx'
@@ -31,6 +31,8 @@ function SupplierProductsPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('All Statuses')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const searchQuery = (searchParams.get('q') || '').trim()
 
   useEffect(() => {
     let active = true
@@ -52,9 +54,26 @@ function SupplierProductsPage() {
 
   const filteredProducts = useMemo(() => {
     const statusValue = statusFilterToValue(statusFilter)
-    if (!statusValue) return products
-    return products.filter((product) => product.status === statusValue)
-  }, [products, statusFilter])
+    const qLower = searchQuery.toLowerCase()
+
+    return products.filter((product) => {
+      if (statusValue && product.status !== statusValue) return false
+      if (qLower) {
+        const nameMatch = product.name?.toLowerCase().includes(qLower)
+        const skuMatch = product.sku?.toLowerCase().includes(qLower)
+        const catMatch = product.category?.toLowerCase().includes(qLower)
+        const descMatch = product.description?.toLowerCase().includes(qLower)
+        return Boolean(nameMatch || skuMatch || catMatch || descMatch)
+      }
+      return true
+    })
+  }, [products, statusFilter, searchQuery])
+
+  const clearSearch = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('q')
+    setSearchParams(next)
+  }
 
   return (
     <SupplierLayout>
@@ -76,6 +95,25 @@ function SupplierProductsPage() {
             : filter,
         )}
       />
+
+      {searchQuery && (
+        <div className="mb-4 flex items-center justify-between rounded-xl border border-primary-200 bg-primary-50/70 px-4 py-2.5 text-sm text-primary-900">
+          <div className="flex items-center gap-2">
+            <Search className="h-4 w-4 text-primary shrink-0" />
+            <span>
+              Searching for <strong className="font-semibold text-primary-950">"{searchQuery}"</strong> ({filteredProducts.length} results found)
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={clearSearch}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-800 hover:underline"
+          >
+            <XCircle className="h-4 w-4" />
+            Clear
+          </button>
+        </div>
+      )}
 
       <h2 className="mb-1 text-sm font-bold text-slate-900">Your products</h2>
       <p className="mb-4 text-sm text-slate-500">

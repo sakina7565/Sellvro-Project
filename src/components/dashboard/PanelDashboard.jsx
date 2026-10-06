@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { MessageCircle, SlidersHorizontal } from 'lucide-react'
 import DashboardModuleCard from './DashboardModuleCard.jsx'
 import HeroFeaturedCard from './HeroFeaturedCard.jsx'
@@ -37,6 +38,10 @@ function PanelDashboard({
   showCommunication = true,
   onPeriodChange,
   statsLoading = false,
+  monthlyData = [],
+  revenueTitle = 'Monthly Revenue',
+  revenueMetricLabel = 'Revenue',
+  revenueColor = '#3d4fe0',
 }) {
   const [activePeriod, setActivePeriod] = useState('All')
 
@@ -55,23 +60,29 @@ function PanelDashboard({
           )}
         </div>
         {showCommunication && (
-          <Button variant="outline" size="sm" className="border border-slate-200 bg-white">
+          <Button
+            as={Link}
+            to={panelLabel === 'Supplier Panel' ? '/supplier/disputes' : '/user/disputes'}
+            variant="outline"
+            size="sm"
+            className="border border-slate-200 bg-white"
+          >
             <MessageCircle className="h-4 w-4" />
             Communication
           </Button>
         )}
       </div>
 
-      <div className="mb-6 flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start">
-        <div className="overflow-hidden rounded-2xl lg:flex-[2]">
+      <div className="mb-6 grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-12 lg:items-stretch">
+        <div className="relative h-40 w-full overflow-hidden rounded-2xl sm:h-48 lg:col-span-8 lg:h-full lg:min-h-[190px]">
           <img
             src={heroImage}
             alt="Warehouse"
-            className="h-28 w-full object-cover sm:h-36 lg:h-[165px]"
+            className="absolute inset-0 h-full w-full object-cover"
           />
         </div>
         {featuredModule && (
-          <div className="lg:min-w-[240px] lg:flex-[1]">
+          <div className="flex flex-col lg:col-span-4">
             <HeroFeaturedCard
               title={featuredModule.title}
               description={featuredModule.description}
@@ -144,7 +155,10 @@ function PanelDashboard({
 
       {pendingTasks.length > 0 && (
         <div className="mb-8">
-          <h2 className="mb-4 text-xl font-bold text-slate-900">Pending Tasks</h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl font-bold text-slate-900">Pending Tasks &amp; Actions</h2>
+            <span className="text-xs font-medium text-slate-400">Click any card to take action</span>
+          </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {pendingTasks.map((task) => (
               <StatCard key={task.label} {...task} />
@@ -154,9 +168,17 @@ function PanelDashboard({
       )}
 
       <div>
-        <h2 className="mb-4 text-xl font-bold text-slate-900">Monthly Revenue</h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-xl font-bold text-slate-900">{revenueTitle}</h2>
+          <span className="text-xs font-medium text-slate-400">Past 6 Months Performance</span>
+        </div>
         <Card className="min-w-0 overflow-hidden p-5 shadow-soft">
-          <RevenueChart />
+          <RevenueChart
+            data={monthlyData}
+            dataKey="revenue"
+            metricLabel={revenueMetricLabel}
+            color={revenueColor}
+          />
         </Card>
       </div>
     </>

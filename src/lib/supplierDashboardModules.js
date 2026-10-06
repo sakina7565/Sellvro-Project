@@ -26,22 +26,12 @@ export const SUPPLIER_DASHBOARD_MODULES = [
     links: [{ label: 'Finance Overview', to: '/supplier/finance/index' }],
   },
   {
-    title: 'Inventory',
-    description: 'Monitor stock levels and warehouse inventory.',
+    title: 'Disputes & Support',
+    description: 'Review and resolve order disputes, payout queries, and admin chat.',
     links: [
-      { label: 'All Products', to: '/supplier/products' },
-      { label: 'Add Product', to: '/supplier/product/create' },
+      { label: 'View Disputes', to: '/supplier/disputes' },
+      { label: 'Chat with Admin', to: '/supplier/disputes' },
     ],
-  },
-  {
-    title: 'Disputes',
-    description: 'Review and resolve order or product disputes.',
-    links: [{ label: 'View Disputes', to: '/supplier/disputes' }],
-  },
-  {
-    title: 'Communication',
-    description: 'Connect with admin support and get help.',
-    links: [{ label: 'Open Chat with Admin', to: '/supplier/dashboard' }],
   },
 ]
 

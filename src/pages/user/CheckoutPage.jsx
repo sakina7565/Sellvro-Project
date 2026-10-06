@@ -31,7 +31,7 @@ function UserCheckoutPage() {
   const [product, setProduct] = useState(location.state?.product || null)
   const [loadingProduct, setLoadingProduct] = useState(!location.state?.product)
   const [walletBalance, setWalletBalance] = useState(user?.walletBalance ?? 0)
-  const [quantity, setQuantity] = useState(1)
+  const [quantity, setQuantity] = useState(Number(location.state?.quantity) || 1)
   const [address, setAddress] = useState({
     ...EMPTY_ADDRESS,
     fullName: user?.fullName || '',
@@ -262,7 +262,14 @@ function UserCheckoutPage() {
                 <img src={imageSrc} alt={product.name} className="h-full w-full object-contain" />
               </div>
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-800">{product.name}</p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className="truncate text-sm font-semibold text-slate-800">{product.name}</p>
+                  {(product.inWarehouse || product.fulfillBy === 'warehouse') && (
+                    <span className="rounded bg-slate-900 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-amber-400">
+                      WMS
+                    </span>
+                  )}
+                </div>
                 <p className="mt-0.5 text-sm text-slate-500">${unitPrice.toFixed(2)} each</p>
                 {product.sku ? <p className="text-xs text-slate-400">SKU: {product.sku}</p> : null}
               </div>

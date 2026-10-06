@@ -1,4 +1,4 @@
-import { Home, Box, FileText, Wallet, Package, Info, MessageCircle } from 'lucide-react'
+import { Home, Box, FileText, Wallet, Info } from 'lucide-react'
 
 /**
  * User / client panel navigation with grouped sub-categories
@@ -11,6 +11,7 @@ export const USER_NAV_ITEMS = [
     icon: Box,
     children: [
       { label: 'Sellvro Products', to: '/user/products' },
+      { label: 'SKU Reporting', to: '/user/inventory/sku-reporting' },
       { label: 'My Reporting', to: '/user/inventory/my-reporting' },
     ],
   },
@@ -19,26 +20,13 @@ export const USER_NAV_ITEMS = [
     icon: Wallet,
     children: [{ label: 'My Wallet', to: '/user/wallet' }],
   },
+  { label: 'Orders', to: '/user/orders', icon: FileText },
   {
-    label: 'Fulfillment',
-    icon: Package,
-    children: [
-      { label: 'Fulfillments Request', to: '/user/orders' },
-      { label: 'Fulfillments', to: '/user/orders' },
-    ],
-  },
-  {
-    label: 'Disputes',
+    label: 'Disputes & Support',
     icon: Info,
     children: [
       { label: 'All Disputes', to: '/user/disputes' },
-      { label: 'Create Dispute', to: '/user/disputes' },
+      { label: 'Chat with Admin', to: '/user/disputes' },
     ],
   },
-  {
-    label: 'Communication',
-    icon: MessageCircle,
-    children: [{ label: 'Open Chat with Admin', to: '/user/dashboard' }],
-  },
-  { label: 'Orders', to: '/user/orders', icon: FileText },
 ]

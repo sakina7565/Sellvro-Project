@@ -31,18 +31,16 @@ export const ADMIN_NAV_ITEMS = [
     label: 'Suppliers',
     icon: Contact2,
     children: [
-      { label: 'User & Supplier Mgmt', to: '/admin/accounts' },
       { label: 'All Suppliers', to: '/admin/suppliers' },
-      { label: 'Pending', to: '/admin/suppliers/pending' },
+      { label: 'Pending Suppliers', to: '/admin/suppliers/pending' },
     ],
   },
   {
     label: 'Users',
     icon: Users,
     children: [
-      { label: 'User & Supplier Mgmt', to: '/admin/accounts' },
       { label: 'All Users', to: '/admin/users' },
-      { label: 'Pending', to: '/admin/users/pending' },
+      { label: 'Pending Users', to: '/admin/users/pending' },
     ],
   },
   { label: 'Sales', to: '/admin/sales', icon: Receipt },
@@ -68,6 +66,7 @@ export const ADMIN_NAV_ITEMS = [
     children: [
       { label: 'Roles', to: '/admin/roles' },
       { label: 'Create User', to: '/admin/users/roles' },
+      { label: 'Accounts Management', to: '/admin/accounts' },
       { label: 'Location', to: '/admin/location' },
       { label: 'Country', to: '/admin/country' },
     ],

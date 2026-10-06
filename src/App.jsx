@@ -4,10 +4,12 @@ import PublicOnlyRoute from './components/auth/PublicOnlyRoute.jsx'
 import LandingPage from './pages/LandingPage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import RegisterPage from './pages/RegisterPage.jsx'
+import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx'
 import AdminLoginPage from './pages/admin/AdminLoginPage.jsx'
 import AdminRegisterPage from './pages/admin/AdminRegisterPage.jsx'
 import DashboardPage from './pages/admin/DashboardPage.jsx'
 import ProductsListPage from './pages/admin/ProductsListPage.jsx'
+import ProductDetailPage from './pages/admin/ProductDetailPage.jsx'
 import AddProductPage from './pages/admin/AddProductPage.jsx'
 import AdminSkuReportingPage from './pages/admin/SkuReportingPage.jsx'
 import AdminBusinessReportingPage from './pages/admin/BusinessReportingPage.jsx'
@@ -38,12 +40,14 @@ import SupplierDisputesPortalPage from './pages/supplier/DisputesPage.jsx'
 import UserBusinessDetailsPage from './pages/user/BusinessDetailsPage.jsx'
 import UserDashboardPage from './pages/user/DashboardPage.jsx'
 import UserProductsPage from './pages/user/ProductsPage.jsx'
+import UserProductDetailPage from './pages/user/ProductDetailPage.jsx'
 import UserCheckoutPage from './pages/user/CheckoutPage.jsx'
 import UserOrderConfirmationPage from './pages/user/OrderConfirmationPage.jsx'
 import UserOrdersPage from './pages/user/OrdersPage.jsx'
 import UserWalletPage from './pages/user/WalletPage.jsx'
 import UserDisputesPage from './pages/user/DisputesPage.jsx'
 import UserBusinessReportingPage from './pages/user/BusinessReportingPage.jsx'
+import UserSkuReportingPage from './pages/user/SkuReportingPage.jsx'
 
 function AdminRoute({ children }) {
   return <ProtectedRoute roles={['admin']}>{children}</ProtectedRoute>
@@ -78,6 +82,14 @@ function App() {
         }
       />
       <Route
+        path="/forgot-password"
+        element={
+          <PublicOnlyRoute>
+            <ForgotPasswordPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
         path="/admin/login"
         element={
           <PublicOnlyRoute>
@@ -98,6 +110,7 @@ function App() {
 
       <Route path="/admin/dashboard" element={<AdminRoute><DashboardPage /></AdminRoute>} />
       <Route path="/admin/products" element={<AdminRoute><ProductsListPage /></AdminRoute>} />
+      <Route path="/admin/products/:id" element={<AdminRoute><ProductDetailPage /></AdminRoute>} />
       <Route path="/admin/product/create" element={<AdminRoute><AddProductPage /></AdminRoute>} />
       <Route path="/admin/inventory/sku-reporting" element={<AdminRoute><AdminSkuReportingPage /></AdminRoute>} />
       <Route path="/admin/inventory/my-reporting" element={<AdminRoute><AdminBusinessReportingPage /></AdminRoute>} />
@@ -144,6 +157,7 @@ function App() {
       />
       <Route path="/user/dashboard" element={<UserRoute><UserDashboardPage /></UserRoute>} />
       <Route path="/user/products" element={<UserRoute><UserProductsPage /></UserRoute>} />
+      <Route path="/user/products/:id" element={<UserRoute><UserProductDetailPage /></UserRoute>} />
       <Route path="/user/checkout/:productId" element={<UserRoute><UserCheckoutPage /></UserRoute>} />
       <Route
         path="/user/orders/confirmation/:orderId"
@@ -153,6 +167,7 @@ function App() {
           </UserRoute>
         }
       />
+      <Route path="/user/inventory/sku-reporting" element={<UserRoute><UserSkuReportingPage /></UserRoute>} />
       <Route path="/user/inventory/my-reporting" element={<UserRoute><UserBusinessReportingPage /></UserRoute>} />
       <Route path="/user/orders" element={<UserRoute><UserOrdersPage /></UserRoute>} />
       <Route path="/user/wallet" element={<UserRoute><UserWalletPage /></UserRoute>} />

@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { Lock, X, CheckCircle2, AlertCircle } from 'lucide-react'
 import Button from '../ui/Button.jsx'
 import Input from '../ui/Input.jsx'
-import { adminApi, getErrorMessage } from '../../lib/api.js'
+import { authApi, getErrorMessage } from '../../lib/api.js'
+import { useAuth } from '../../context/AuthContext.jsx'
 
 function ChangePasswordModal({ isOpen, onClose }) {
+  const { user } = useAuth()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -45,8 +47,15 @@ function ChangePasswordModal({ isOpen, onClose }) {
 
     setSaving(true)
     try {
-      await adminApi.changePassword({ currentPassword, newPassword, confirmPassword })
-      setSuccess('Your password has been changed successfully. Super Admin has been notified.')
+      await authApi.changePassword({ currentPassword, newPassword, confirmPassword })
+
+      // Show role-appropriate success message
+      const isAdmin = user?.role === 'admin'
+      setSuccess(
+        isAdmin
+          ? 'Password changed successfully. Super Admin has been notified.'
+          : 'Your password has been changed successfully.',
+      )
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
@@ -130,10 +139,12 @@ function ChangePasswordModal({ isOpen, onClose }) {
             required
           />
 
-          <p className="text-[11px] text-slate-400">
-            Note: For security reasons, Super Admin will be notified of all administrator and staff password
-            changes.
-          </p>
+          {user?.role === 'admin' && (
+            <p className="text-[11px] text-slate-400">
+              Note: For security reasons, Super Admin will be notified of all administrator and staff password
+              changes.
+            </p>
+          )}
 
           <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
             <Button type="button" variant="outline" size="sm" onClick={handleClose} disabled={saving}>
@@ -150,3 +161,4 @@ function ChangePasswordModal({ isOpen, onClose }) {
 }
 
 export default ChangePasswordModal
+

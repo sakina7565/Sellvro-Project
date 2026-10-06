@@ -138,8 +138,12 @@ function AllSuppliersPage() {
                       {supplier.businessProfile?.location || '—'}
                     </td>
                     <td className="whitespace-nowrap px-5 py-4 text-slate-500">{supplier.ordersCount || 0}</td>
-                    <td className="whitespace-nowrap px-5 py-4 text-slate-500">$0</td>
-                    <td className="whitespace-nowrap px-5 py-4 text-slate-500">weekly</td>
+                    <td className="whitespace-nowrap px-5 py-4 text-slate-500 font-medium">
+                      {supplier.revenueLabel || `$${Number(supplier.revenue || 0).toFixed(2)}`}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-slate-500 capitalize">
+                      {supplier.businessProfile?.payoutSchedule || 'Weekly'}
+                    </td>
                     <td className="whitespace-nowrap px-5 py-4 text-slate-500">{supplier.joined}</td>
                     <td className="whitespace-nowrap px-5 py-4">
                       <Badge tone={supplier.status === 'approved' ? 'success' : supplier.status === 'suspended' ? 'danger' : 'warning'}>
