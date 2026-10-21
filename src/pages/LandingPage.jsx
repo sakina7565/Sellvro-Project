@@ -1,57 +1,105 @@
-import { Link } from 'react-router-dom'
-import { CheckCircle2, Image as ImageIcon } from 'lucide-react'
-import PublicHeader from '../components/layout/PublicHeader.jsx'
-import PageFooter from '../components/layout/PageFooter.jsx'
-import Button from '../components/ui/Button.jsx'
-
-const FEATURES = [
-  'Multi-vendor Reseller Model',
-  'Advanced Warehouse (3PL) System',
-  'Integrated Wallet & Payments',
-]
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import MarketplaceTopBar from '../components/marketplace/MarketplaceTopBar.jsx'
+import MarketplaceSearchHeader from '../components/marketplace/MarketplaceSearchHeader.jsx'
+import MarketplaceCategoryNav from '../components/marketplace/MarketplaceCategoryNav.jsx'
+import MarketplaceHeroCarousel from '../components/marketplace/MarketplaceHeroCarousel.jsx'
+import MarketplaceCategoryGrid from '../components/marketplace/MarketplaceCategoryGrid.jsx'
+import MarketplacePromoBanner from '../components/marketplace/MarketplacePromoBanner.jsx'
+import MarketplaceDeals from '../components/marketplace/MarketplaceDeals.jsx'
+import MarketplaceTrending from '../components/marketplace/MarketplaceTrending.jsx'
+import MarketplaceDarkBanner from '../components/marketplace/MarketplaceDarkBanner.jsx'
+import MarketplaceFooter from '../components/marketplace/MarketplaceFooter.jsx'
+import { productApi } from '../lib/api.js'
 
 function LandingPage() {
+  const navigate = useNavigate()
+  const [activeCategory, setActiveCategory] = useState('All Categories')
+  const [liveProducts, setLiveProducts] = useState([])
+  const [loadingProducts, setLoadingProducts] = useState(true)
+
+  // Fetch active marketplace products from API
+  useEffect(() => {
+    let isMounted = true
+    productApi
+      .marketplace()
+      .then((res) => {
+        if (isMounted && res && Array.isArray(res.data)) {
+          setLiveProducts(res.data)
+        }
+      })
+      .catch(() => {
+        // Fallback to curated marketplaceData if backend DB is empty
+      })
+      .finally(() => {
+        if (isMounted) setLoadingProducts(false)
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  // Handle Search Submission
+  const handleSearch = ({ query, category, advSku, advMinPrice, advMaxPrice, advWarehouseOnly }) => {
+    const params = new URLSearchParams()
+    if (query?.trim()) params.set('q', query.trim())
+    if (category && category !== 'All Categories') params.set('category', category)
+    if (advSku?.trim()) params.set('sku', advSku.trim())
+    if (advMinPrice) params.set('minPrice', advMinPrice)
+    if (advMaxPrice) params.set('maxPrice', advMaxPrice)
+    if (advWarehouseOnly) params.set('warehouse', 'true')
+    navigate(`/user/products?${params.toString()}`)
+  }
+
+  // Handle Category Quick Selection
+  const handleSelectCategory = (catName) => {
+    setActiveCategory(catName)
+    navigate(`/user/products?category=${encodeURIComponent(catName)}`)
+  }
+
   return (
-    <div className="flex min-h-screen flex-col bg-surface-bg">
-      <PublicHeader />
+    <div className="min-h-screen bg-[#f7f7f7] text-slate-800 antialiased font-sans selection:bg-blue-500 selection:text-white">
+      {/* 1. Micro Utility Header (eBay style) */}
+      <MarketplaceTopBar />
 
-      <main className="flex flex-1 items-center justify-center px-6 py-10">
-        <div className="grid w-full max-w-4xl overflow-hidden rounded-xl2 bg-surface-card shadow-card md:grid-cols-2">
-          <div className="flex flex-col justify-center px-10 py-12">
-            <h1 className="text-3xl font-extrabold leading-tight text-slate-900">
-              Welcome to <span className="text-primary">EZONE</span>
-            </h1>
-            <p className="mt-3 text-sm leading-relaxed text-slate-500">
-              A smart B2B Marketplace and Warehouse Management solution designed for modern
-              business growth. Manage your orders, inventory, and supply chain in one place.
-            </p>
+      {/* 2. Main Search & Brand Header (eBay style) */}
+      <MarketplaceSearchHeader
+        onSearch={handleSearch}
+        initialCategory={activeCategory}
+      />
 
-            <ul className="mt-6 space-y-3">
-              {FEATURES.map((feature) => (
-                <li key={feature} className="flex items-center gap-2 text-sm text-slate-700">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
-                  {feature}
-                </li>
-              ))}
-            </ul>
+      {/* 3. Horizontal Category Ribbon */}
+      <MarketplaceCategoryNav
+        activeCategory={activeCategory}
+        onSelectCategory={handleSelectCategory}
+      />
 
-            <Button as={Link} to="/register" className="mt-8 w-fit">
-              Create Free Account
-            </Button>
-          </div>
+      {/* Main Content Sections */}
+      <main className="pb-12">
+        {/* 4. Top Hero Banner Carousel */}
+        <MarketplaceHeroCarousel />
 
-          <div className="m-3 flex items-center justify-center rounded-xl2 bg-primary md:m-4">
-            <div className="flex flex-col items-center gap-2 text-primary-100/80">
-              <ImageIcon className="h-10 w-10" strokeWidth={1.5} />
-              <span className="text-xs font-medium">EZONE Visual</span>
-            </div>
-          </div>
-        </div>
+        {/* 5. "The future in your hands" Category Cards Grid */}
+        <MarketplaceCategoryGrid onSelectCategory={handleSelectCategory} />
+
+        {/* 6. "Sourcing made easy" & Promo Deal Banner */}
+        <MarketplacePromoBanner />
+
+        {/* 7. "Today's Deals" Product Showcase */}
+        <MarketplaceDeals
+          products={liveProducts}
+          onSelectCategory={handleSelectCategory}
+        />
+
+        {/* 8. "Trending on Sellvro" Round Category Spotlight */}
+        <MarketplaceTrending onSelectCategory={handleSelectCategory} />
+
+        {/* 9. Dark 3PL Warehouse & Logistics Showcase Banner */}
+        <MarketplaceDarkBanner />
       </main>
 
-      <footer className="py-8">
-        <PageFooter label="POWERED BY TEAMHAYVIRAL" />
-      </footer>
+      {/* 10. Comprehensive eBay-Style Multi-Column Footer */}
+      <MarketplaceFooter />
     </div>
   )
 }
