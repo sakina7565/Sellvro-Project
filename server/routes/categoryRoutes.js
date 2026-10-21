@@ -9,7 +9,7 @@ import { protect, authorize } from '../middleware/auth.js'
 
 const router = Router()
 
-router.get('/', protect, authorize('admin', 'supplier', 'user'), listCategories)
+router.get('/', listCategories)
 router.post('/', protect, authorize('admin'), createCategory)
 router.patch('/:id', protect, authorize('admin'), updateCategory)
 router.delete('/:id', protect, authorize('admin'), deleteCategory)

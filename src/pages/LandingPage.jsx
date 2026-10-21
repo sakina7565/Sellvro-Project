@@ -15,6 +15,7 @@ import { productApi } from '../lib/api.js'
 function LandingPage() {
   const navigate = useNavigate()
   const [activeCategory, setActiveCategory] = useState('All Categories')
+  const [activeSubcategory, setActiveSubcategory] = useState('')
   const [liveProducts, setLiveProducts] = useState([])
   const [loadingProducts, setLoadingProducts] = useState(true)
 
@@ -51,10 +52,10 @@ function LandingPage() {
     navigate(`/user/products?${params.toString()}`)
   }
 
-  // Handle Category Quick Selection
-  const handleSelectCategory = (catName) => {
+  // Handle Category Quick Selection (with subcategory support)
+  const handleSelectCategory = (catName, subName = '') => {
     setActiveCategory(catName)
-    navigate(`/user/products?category=${encodeURIComponent(catName)}`)
+    setActiveSubcategory(subName)
   }
 
   return (
@@ -68,7 +69,7 @@ function LandingPage() {
         initialCategory={activeCategory}
       />
 
-      {/* 3. Horizontal Category Ribbon */}
+      {/* 3. Horizontal Category Ribbon (ONLY Main Categories with Subcategory Dropdowns) */}
       <MarketplaceCategoryNav
         activeCategory={activeCategory}
         onSelectCategory={handleSelectCategory}
@@ -80,7 +81,7 @@ function LandingPage() {
         <MarketplaceHeroCarousel />
 
         {/* 5. "The future in your hands" Category Cards Grid */}
-        <MarketplaceCategoryGrid onSelectCategory={handleSelectCategory} />
+        <MarketplaceCategoryGrid onSelectCategory={(cat) => handleSelectCategory(cat, '')} />
 
         {/* 6. "Sourcing made easy" & Promo Deal Banner */}
         <MarketplacePromoBanner />
@@ -88,7 +89,8 @@ function LandingPage() {
         {/* 7. "Today's Deals" Product Showcase */}
         <MarketplaceDeals
           products={liveProducts}
-          onSelectCategory={handleSelectCategory}
+          activeCategory={activeCategory}
+          activeSubcategory={activeSubcategory}
         />
 
         {/* 8. "Trending on Sellvro" Round Category Spotlight */}

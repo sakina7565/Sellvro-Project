@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Heart, ChevronRight, Warehouse, Star, CheckCircle } from 'lucide-react'
 import { FEATURED_DEALS } from './marketplaceData.js'
+import { mediaUrl } from '../../lib/api.js'
 
-function MarketplaceDeals({ products = [], onSelectCategory }) {
+function MarketplaceDeals({ products = [], activeCategory = 'All Categories', activeSubcategory = '' }) {
   const [wishlist, setWishlist] = useState({})
 
   const toggleWishlist = (id, e) => {
@@ -12,8 +13,27 @@ function MarketplaceDeals({ products = [], onSelectCategory }) {
     setWishlist((prev) => ({ ...prev, [id]: !prev[id] }))
   }
 
-  // Use live products from API if provided and non-empty, otherwise use featured deals
-  const displayItems = products.length > 0 ? products.slice(0, 6) : FEATURED_DEALS
+  // Combine real database products with fallback deals if DB is small/empty
+  const allItems = products && products.length > 0 ? products : FEATURED_DEALS
+
+  // Filter by category or subcategory if selected
+  const filtered = allItems.filter((item) => {
+    if (activeCategory && activeCategory !== 'All Categories') {
+      const matchCat =
+        item.category && item.category.toLowerCase().includes(activeCategory.toLowerCase())
+      if (!matchCat) return false
+    }
+    if (activeSubcategory) {
+      const matchSub =
+        (item.name && item.name.toLowerCase().includes(activeSubcategory.toLowerCase())) ||
+        (item.description && item.description.toLowerCase().includes(activeSubcategory.toLowerCase())) ||
+        (item.subcategory && item.subcategory.toLowerCase().includes(activeSubcategory.toLowerCase()))
+      if (!matchSub) return false
+    }
+    return true
+  })
+
+  const displayItems = filtered.length > 0 ? filtered.slice(0, 12) : allItems.slice(0, 6)
 
   return (
     <section className="mx-auto mt-12 max-w-7xl px-4 sm:px-6">
@@ -70,8 +90,7 @@ function MarketplaceDeals({ products = [], onSelectCategory }) {
                 <div className="aspect-square w-full overflow-hidden">
                   <img
                     src={
-                      item.image ||
-                      (item.images && item.images[0]) ||
+                      mediaUrl(item.image || (item.images && item.images[0])) ||
                       'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=80'
                     }
                     alt={item.name}

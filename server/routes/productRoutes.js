@@ -28,7 +28,8 @@ router.get('/wms/my-skus', protect, authorize('supplier'), requireApproved, getM
 router.get('/wms/lookup/:sku', protect, authorize('supplier', 'admin'), requireApproved, getWmsProductBySku)
 router.post('/wms/attach-media/:id', protect, authorize('supplier'), requireApproved, handlePhotos, attachWmsProductMedia)
 
-router.get('/', protect, authorize('user', 'admin'), listApprovedProducts)
+// Public marketplace catalog (active products)
+router.get('/', listApprovedProducts)
 router.get('/mine', protect, authorize('supplier'), requireApproved, listMyProducts)
 router.get('/:id', protect, getProductById)
 router.post('/', protect, authorize('supplier'), requireApproved, handlePhotos, createProduct)
