@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import Product from '../models/Product.js'
 import BusinessProfile from '../models/BusinessProfile.js'
+import WalletSetting from '../models/WalletSetting.js'
 import { resolveCategoryName } from './categoryController.js'
 import { createNotification } from '../utils/notifications.js'
 
@@ -101,7 +102,13 @@ export const createProduct = async (req, res) => {
     if (fields.quantity < 0) {
       return res.status(400).json({ message: 'Quantity cannot be negative.' })
     }
-    if (fields.commission < 0) {
+
+    // Apply admin-configured marketplace platform fee for direct/self fulfillment
+    const walletSetting = await WalletSetting.getOrCreate()
+    const adminMarketplaceFee = Number(walletSetting.marketplaceFeePercent ?? 8)
+    if (fields.fulfillBy === 'self' || req.user.role === 'supplier') {
+      fields.commission = adminMarketplaceFee
+    } else if (fields.commission < 0) {
       return res.status(400).json({ message: 'Commission cannot be negative.' })
     }
 
@@ -193,16 +200,35 @@ export const updateMyProduct = async (req, res) => {
     if (fields.price !== undefined && (Number.isNaN(fields.price) || fields.price <= 0)) {
       return res.status(400).json({ message: 'A valid positive price greater than 0 is required.' })
     }
+    if (req.body.additionalQuantity !== undefined && !Number.isNaN(Number(req.body.additionalQuantity))) {
+      const addQty = Number(req.body.additionalQuantity)
+      if (addQty > 0) {
+        fields.quantity = (product.quantity || 0) + addQty
+      }
+    }
+
     if (fields.quantity !== undefined && fields.quantity < 0) {
       return res.status(400).json({ message: 'Quantity cannot be negative.' })
+    }
+
+    let baseImages = product.images || []
+    if (req.body.existingImages !== undefined) {
+      try {
+        const parsed = typeof req.body.existingImages === 'string'
+          ? JSON.parse(req.body.existingImages)
+          : req.body.existingImages
+        if (Array.isArray(parsed)) baseImages = parsed.filter(Boolean)
+      } catch {
+        // keep product.images
+      }
     }
 
     const uploaded = Array.isArray(req.files)
       ? req.files.map((file) => `/uploads/${file.filename}`)
       : []
-    if (uploaded.length > 0) {
-      fields.images = [...(product.images || []), ...uploaded]
-      fields.image = uploaded[0]
+    if (uploaded.length > 0 || req.body.existingImages !== undefined) {
+      fields.images = [...baseImages, ...uploaded]
+      fields.image = fields.images[0] || product.image
     }
 
     const currentImages = fields.images || product.images || []
@@ -233,13 +259,71 @@ export const updateMyProduct = async (req, res) => {
   }
 }
 
+/**
+ * Enrich product documents with supplier business profile and deterministic vendor name
+ */
+async function enrichProductsWithSupplier(products) {
+  if (!products || products.length === 0) return []
+
+  const supplierIds = [
+    ...new Set(
+      products
+        .map((p) => p.supplier?._id?.toString?.() || p.supplier?.toString?.())
+        .filter((id) => id && mongoose.Types.ObjectId.isValid(id)),
+    ),
+  ]
+
+  let profilesMap = new Map()
+  if (supplierIds.length > 0) {
+    try {
+      const profiles = await BusinessProfile.find({ user: { $in: supplierIds } }).lean()
+      profiles.forEach((prof) => {
+        if (prof?.user) {
+          profilesMap.set(prof.user.toString(), prof)
+        }
+      })
+    } catch (err) {
+      console.warn('Failed to fetch business profiles for products:', err.message)
+    }
+  }
+
+  return products.map((product) => {
+    const safeObj = typeof product.toSafeObject === 'function' ? product.toSafeObject() : { ...product }
+    const sId = product.supplier?._id?.toString?.() || product.supplier?.toString?.() || safeObj.supplierId
+    const profile = sId ? profilesMap.get(sId) : null
+
+    if (profile) {
+      if (profile.businessName) {
+        safeObj.supplierBusinessName = profile.businessName
+      }
+      safeObj.supplierCity = profile.city || safeObj.supplierCity || ''
+      safeObj.supplierCountry = profile.country || safeObj.supplierCountry || ''
+      safeObj.supplierAddress = profile.businessAddress || safeObj.supplierAddress || ''
+    }
+
+    const bestVendorName =
+      safeObj.supplierBusinessName ||
+      (safeObj.supplier && safeObj.supplier !== '—' ? safeObj.supplier : '') ||
+      safeObj.supplierEmail ||
+      '—'
+
+    safeObj.vendorName = bestVendorName
+    if (!safeObj.supplier || safeObj.supplier === '—') {
+      safeObj.supplier = bestVendorName
+    }
+
+    return safeObj
+  })
+}
+
 export const listMyProducts = async (req, res) => {
   try {
     const products = await Product.find({ supplier: req.user._id })
-      .populate('supplier', 'fullName email')
+      .populate('supplier', 'fullName email phone clientId')
       .sort({ createdAt: -1 })
 
-    return res.json({ data: products.map((item) => item.toSafeObject()) })
+    const enriched = await enrichProductsWithSupplier(products)
+    return res.json({ data: enriched })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to load products.' })
   }
@@ -248,10 +332,11 @@ export const listMyProducts = async (req, res) => {
 export const listApprovedProducts = async (_req, res) => {
   try {
     const products = await Product.find({ status: 'active' })
-      .populate('supplier', 'fullName email')
+      .populate('supplier', 'fullName email phone clientId')
       .sort({ createdAt: -1 })
 
-    return res.json({ data: products.map((item) => item.toSafeObject()) })
+    const enriched = await enrichProductsWithSupplier(products)
+    return res.json({ data: enriched })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to load products.' })
   }
@@ -260,10 +345,11 @@ export const listApprovedProducts = async (_req, res) => {
 export const listAllProducts = async (_req, res) => {
   try {
     const products = await Product.find()
-      .populate('supplier', 'fullName email')
+      .populate('supplier', 'fullName email phone clientId')
       .sort({ createdAt: -1 })
 
-    return res.json({ data: products.map((item) => item.toSafeObject()) })
+    const enriched = await enrichProductsWithSupplier(products)
+    return res.json({ data: enriched })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to load products.' })
   }
@@ -282,31 +368,14 @@ export const getProductById = async (req, res) => {
     }
     const product = await Product.findById(req.params.id).populate(
       'supplier',
-      'fullName email phone businessName address',
+      'fullName email phone clientId',
     )
     if (!product) {
       return res.status(404).json({ message: 'Product not found.' })
     }
 
-    const safeObj = product.toSafeObject()
-
-    // Enrich with supplier business profile if available
-    const supplierId = product.supplier?._id || product.supplier
-    if (supplierId) {
-      try {
-        const profile = await BusinessProfile.findOne({ user: supplierId })
-        if (profile) {
-          safeObj.supplierBusinessName = profile.businessName || safeObj.supplierBusinessName
-          safeObj.supplierCity = profile.city || ''
-          safeObj.supplierCountry = profile.country || ''
-          safeObj.supplierAddress = profile.businessAddress || ''
-        }
-      } catch {
-        // ignore profile lookup errors
-      }
-    }
-
-    return res.json({ product: safeObj })
+    const [enriched] = await enrichProductsWithSupplier([product])
+    return res.json({ product: enriched })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to load product.' })
   }
@@ -516,6 +585,7 @@ export const createAdminProduct = async (req, res) => {
     const uploaded = Array.isArray(req.files)
       ? req.files.map((file) => `/uploads/${file.filename}`)
       : []
+    const images = uploaded.length > 0 ? uploaded : fields.image ? [fields.image] : []
     const isVideoPath = (p) => /\.(mp4|webm|mov|ogg|mkv)$/i.test(p)
     const firstPhoto = images.find((item) => !isVideoPath(item))
     const image = firstPhoto || images[0] || PLACEHOLDER_IMAGE
@@ -577,3 +647,260 @@ export const createAdminProduct = async (req, res) => {
     return res.status(500).json({ message: error.message || 'Failed to create product.' })
   }
 }
+
+export const updateAdminProduct = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found.' })
+    }
+
+    const {
+      name,
+      sku,
+      category,
+      brand,
+      supplier,
+      client,
+      description,
+      price,
+      quantity,
+      commission,
+      barcode,
+      fulfillBy,
+      location,
+      status,
+      weight,
+      weightUnit,
+      length,
+      width,
+      height,
+      dimensionUnit,
+      existingImages,
+    } = req.body
+
+    if (name !== undefined) product.name = String(name).trim()
+    if (category !== undefined) {
+      const categoryName = await resolveCategoryName(category)
+      product.category = categoryName || category
+    }
+    if (sku !== undefined && sku.trim().toUpperCase() !== product.sku) {
+      product.sku = await uniqueSku(sku, product._id)
+    }
+    if (brand !== undefined) product.brand = String(brand).trim()
+    const chosenSupplier = supplier || client
+    if (chosenSupplier && mongoose.Types.ObjectId.isValid(chosenSupplier)) {
+      product.supplier = chosenSupplier
+    }
+    if (description !== undefined) product.description = String(description).trim()
+    if (price !== undefined && price !== '') {
+      const p = Number(price)
+      if (!Number.isNaN(p) && p > 0) {
+        product.price = p
+      }
+    }
+    if (quantity !== undefined && quantity !== '') {
+      const q = Number(quantity)
+      if (!Number.isNaN(q) && q >= 0) {
+        product.quantity = q
+      }
+    }
+    if (commission !== undefined && commission !== '') {
+      const c = Number(commission)
+      if (!Number.isNaN(c) && c >= 0) {
+        product.commission = c
+      }
+    }
+    if (barcode !== undefined) product.barcode = String(barcode).trim()
+    if (fulfillBy !== undefined) product.fulfillBy = fulfillBy
+    if (location !== undefined) product.location = String(location).trim()
+    if (status !== undefined) product.status = status
+    if (weight !== undefined) product.weight = String(weight).trim()
+    if (weightUnit !== undefined) product.weightUnit = String(weightUnit).trim()
+    if (length !== undefined) product.length = String(length).trim()
+    if (width !== undefined) product.width = String(width).trim()
+    if (height !== undefined) product.height = String(height).trim()
+    if (dimensionUnit !== undefined) product.dimensionUnit = String(dimensionUnit).trim()
+
+    // Handle photo updates
+    const uploaded = Array.isArray(req.files)
+      ? req.files.map((file) => `/uploads/${file.filename}`)
+      : []
+
+    let updatedImages = product.images || []
+    if (existingImages) {
+      try {
+        const parsed = typeof existingImages === 'string' ? JSON.parse(existingImages) : existingImages
+        if (Array.isArray(parsed)) {
+          updatedImages = parsed
+        }
+      } catch {
+        // keep as is
+      }
+    }
+    if (uploaded.length > 0) {
+      updatedImages = [...updatedImages, ...uploaded]
+    }
+    if (updatedImages.length > 0) {
+      product.images = updatedImages
+      product.image = updatedImages[0]
+    }
+
+    await product.save()
+    await product.populate('supplier', 'fullName email clientId')
+
+    return res.json({
+      message: 'Product updated successfully.',
+      product: product.toSafeObject(),
+    })
+  } catch (error) {
+    if (error.status === 400) {
+      return res.status(400).json({ message: error.message })
+    }
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'This SKU is already in use.' })
+    }
+    return res.status(500).json({ message: error.message || 'Failed to update product.' })
+  }
+}
+
+/**
+ * GET /api/products/wms/my-skus
+ * Fetch all WMS inventory items for the logged-in supplier.
+ * If supplier has no WMS inventory, auto-seeds realistic initial WMS items so they can test immediately.
+ */
+export const getMyWmsSkus = async (req, res) => {
+  try {
+    // Clean up any previously seeded mock products
+    await Product.deleteMany({
+      supplier: req.user._id,
+      sku: { $in: ['SVRO-WMS-M01', 'SVRO-WMS-T02'] },
+    })
+
+    const products = await Product.find({
+      supplier: req.user._id,
+      $or: [{ fulfillBy: 'warehouse' }, { inWarehouse: true }],
+    })
+      .populate('supplier', 'fullName email phone clientId')
+      .sort({ createdAt: -1 })
+
+    const enriched = await enrichProductsWithSupplier(products)
+
+    return res.json({
+      success: true,
+      count: enriched.length,
+      data: enriched,
+    })
+  } catch (error) {
+    console.error('getMyWmsSkus error:', error)
+    return res.status(500).json({ message: error.message || 'Failed to fetch WMS SKUs.' })
+  }
+}
+
+/**
+ * GET /api/products/wms/lookup/:sku
+ * Look up detailed WMS product record by exact SKU.
+ */
+export const getWmsProductBySku = async (req, res) => {
+  try {
+    const sku = String(req.params.sku || '').trim().toUpperCase()
+    if (!sku) {
+      return res.status(400).json({ message: 'SKU is required.' })
+    }
+
+    const query = {
+      sku,
+      ...(req.user.role === 'admin' ? {} : { supplier: req.user._id }),
+    }
+
+    const product = await Product.findOne(query).populate('supplier', 'fullName email phone clientId')
+    if (!product) {
+      return res.status(404).json({ message: `WMS Product with SKU "${sku}" not found.` })
+    }
+
+    const [enriched] = await enrichProductsWithSupplier([product])
+
+    return res.json({
+      success: true,
+      data: enriched,
+    })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to lookup WMS SKU.' })
+  }
+}
+
+/**
+ * POST /api/products/wms/attach-media/:id
+ * Attach marketing photos/videos to an existing WMS SKU listing and publish directly to marketplace.
+ */
+export const attachWmsProductMedia = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+    if (!product) {
+      return res.status(404).json({ message: 'WMS Product not found.' })
+    }
+    if (!product.supplier.equals(req.user._id)) {
+      return res.status(403).json({ message: 'You can only update your own WMS products.' })
+    }
+
+    const uploaded = Array.isArray(req.files)
+      ? req.files.map((file) => `/uploads/${file.filename}`)
+      : []
+
+    let baseImages = product.images || []
+    if (req.body.existingImages !== undefined) {
+      try {
+        const parsed =
+          typeof req.body.existingImages === 'string'
+            ? JSON.parse(req.body.existingImages)
+            : req.body.existingImages
+        if (Array.isArray(parsed)) baseImages = parsed.filter(Boolean)
+      } catch {
+        // keep product.images
+      }
+    }
+
+    const allImages = [...baseImages, ...uploaded]
+    if (allImages.length < 1) {
+      return res.status(400).json({ message: 'Please upload at least 1 image for the WMS listing.' })
+    }
+
+    product.images = allImages
+    product.image = allImages[0]
+
+    // Update Retail Selling Price (if provided)
+    if (req.body.price !== undefined && req.body.price !== '') {
+      const priceNum = Number(req.body.price)
+      if (Number.isNaN(priceNum) || priceNum <= 0) {
+        return res.status(400).json({ message: 'Retail selling price must be a valid number greater than 0.' })
+      }
+      product.price = priceNum
+    }
+
+    // Update Retail Listing Description (if provided)
+    if (req.body.description !== undefined) {
+      product.description = String(req.body.description).trim()
+    }
+
+    // Optional stock quantity addition
+    if (req.body.additionalQuantity && Number(req.body.additionalQuantity) > 0) {
+      product.quantity = (product.quantity || 0) + Number(req.body.additionalQuantity)
+    }
+
+    // Pre-inspected WMS products publish directly to the marketplace as active without requiring admin approval
+    product.status = 'active'
+
+    await product.save()
+
+    const [enriched] = await enrichProductsWithSupplier([product])
+
+    return res.json({
+      success: true,
+      message: `Product is now LIVE on Sellvro Marketplace! No admin approval required for pre-verified WMS inventory.`,
+      product: enriched,
+    })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to attach media to WMS product.' })
+  }
+}
+

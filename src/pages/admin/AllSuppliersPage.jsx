@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Plus, LogIn, Pencil, Trash2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Plus, LogIn, Pencil, Trash2, CheckCircle2, XCircle, RefreshCw, Wallet } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import FilterBar from '../../components/admin/FilterBar.jsx'
@@ -132,6 +133,14 @@ function AllSuppliersPage() {
                       <div>
                         <p className="font-semibold text-slate-900">{supplier.fullName}</p>
                         <p className="text-xs text-slate-400">{supplier.email}</p>
+                        <Link
+                          to={`/admin/supplier/payouts?supplierId=${supplier.id}`}
+                          className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline bg-indigo-50/70 px-1.5 py-0.5 rounded border border-indigo-100"
+                          title="Click supplier ID to view monthly finance history, maturity & payouts"
+                        >
+                          <Wallet className="h-3 w-3" />
+                          <span>ID: {supplier.displayId || (supplier.id ? `SUP-${supplier.id.slice(-6).toUpperCase()}` : '—')}</span>
+                        </Link>
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-5 py-4 text-slate-500">
@@ -152,6 +161,15 @@ function AllSuppliersPage() {
                     </td>
                     <td className="whitespace-nowrap px-5 py-4">
                       <div className="flex items-center gap-1.5">
+                        <Link
+                          to={`/admin/supplier/payouts?supplierId=${supplier.id}`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 transition-all hover:bg-emerald-600 hover:text-white cursor-pointer shadow-2xs"
+                          title="Monthly finance history & payouts"
+                        >
+                          <Wallet className="h-3.5 w-3.5" />
+                          <span>Finances</span>
+                        </Link>
+
                         <button
                           type="button"
                           disabled={actionLoading}
@@ -214,7 +232,19 @@ function AllSuppliersPage() {
             <MobileCard
               key={supplier.id}
               title={supplier.fullName}
-              subtitle={supplier.email}
+              subtitle={
+                <div>
+                  <p>{supplier.email}</p>
+                  <Link
+                    to={`/admin/supplier/payouts?supplierId=${supplier.id}`}
+                    className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] font-bold text-indigo-600 hover:underline"
+                    title="Supplier Monthly Finance History"
+                  >
+                    <Wallet className="h-3 w-3" />
+                    <span>ID: {supplier.displayId || (supplier.id ? `SUP-${supplier.id.slice(-6).toUpperCase()}` : '—')}</span>
+                  </Link>
+                </div>
+              }
               badge={
                 <Badge tone={supplier.status === 'approved' ? 'success' : supplier.status === 'suspended' ? 'danger' : 'warning'}>
                   {supplier.status}
@@ -222,6 +252,14 @@ function AllSuppliersPage() {
               }
               actions={
                 <div className="flex items-center gap-1">
+                  <Link
+                    to={`/admin/supplier/payouts?supplierId=${supplier.id}`}
+                    className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+                    title="Supplier Monthly Finance History"
+                  >
+                    <Wallet className="h-3.5 w-3.5" />
+                    <span>Finances</span>
+                  </Link>
                   <button
                     type="button"
                     onClick={() => handleImpersonate(supplier)}
@@ -254,6 +292,18 @@ function AllSuppliersPage() {
               <DetailRow label="Location" value={supplier.businessProfile?.location || '—'} />
               <DetailRow label="Joined" value={supplier.joined} />
               <DetailRow label="Orders" value={supplier.ordersCount || 0} />
+              <DetailRow
+                label="Finances"
+                value={
+                  <Link
+                    to={`/admin/supplier/payouts?supplierId=${supplier.id}`}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:underline"
+                  >
+                    <Wallet className="h-3 w-3" />
+                    Monthly History & Payouts
+                  </Link>
+                }
+              />
             </MobileCard>
           ))}
         </div>

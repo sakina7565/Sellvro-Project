@@ -22,8 +22,6 @@ export const ADMIN_NAV_ITEMS = [
     children: [
       { label: 'All Products', to: '/admin/products' },
       { label: 'Add Products', to: '/admin/product/create' },
-      { label: 'SKU Reporting', to: '/admin/inventory/sku-reporting' },
-      { label: 'My Reporting', to: '/admin/inventory/my-reporting' },
       { label: 'Categories', to: '/admin/categories' },
     ],
   },
@@ -33,6 +31,7 @@ export const ADMIN_NAV_ITEMS = [
     children: [
       { label: 'All Suppliers', to: '/admin/suppliers' },
       { label: 'Pending Suppliers', to: '/admin/suppliers/pending' },
+      { label: 'Supplier Store & SKUs', to: '/admin/suppliers/sku-lookup' },
     ],
   },
   {
@@ -41,6 +40,7 @@ export const ADMIN_NAV_ITEMS = [
     children: [
       { label: 'All Users', to: '/admin/users' },
       { label: 'Pending Users', to: '/admin/users/pending' },
+      { label: 'User Reporting & Live Tracking', to: '/admin/users/reporting' },
     ],
   },
   { label: 'Sales', to: '/admin/sales', icon: Receipt },
@@ -49,7 +49,7 @@ export const ADMIN_NAV_ITEMS = [
     icon: Briefcase,
     children: [
       { label: 'Wallets Requests', to: '/admin/wallets/requests' },
-      { label: 'Supplier Payouts', to: '/admin/supplier/payouts' },
+      { label: 'Supplier Finances & Payouts', to: '/admin/supplier/payouts' },
     ],
   },
   {

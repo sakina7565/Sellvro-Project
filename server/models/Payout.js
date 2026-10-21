@@ -32,6 +32,44 @@ const payoutSchema = new mongoose.Schema(
       enum: ['pending', 'processed'],
       default: 'pending',
     },
+    tid: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    month: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    paymentMethod: {
+      type: String,
+      trim: true,
+      default: 'Bank Transfer (IBFT)',
+    },
+    receiptUrl: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    matureAmount: {
+      type: Number,
+      default: 0,
+    },
+    immatureAmount: {
+      type: Number,
+      default: 0,
+    },
+    notes: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    adminUser: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
     orderIds: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -52,20 +90,34 @@ payoutSchema.methods.toSafeObject = function toSafeObject() {
     supplierDoc && typeof supplierDoc === 'object' && supplierDoc.fullName
       ? supplierDoc.fullName
       : '—'
+  const supplierEmail =
+    supplierDoc && typeof supplierDoc === 'object' && supplierDoc.email
+      ? supplierDoc.email
+      : ''
+  const rawSupplierId = supplierDoc?._id?.toString?.() || supplierDoc?.toString?.() || ''
+  const supplierDisplayId =
+    supplierDoc?.clientId || (rawSupplierId ? `SUP-${rawSupplierId.slice(-6).toUpperCase()}` : '')
 
   return {
     id: this._id.toString(),
-    supplierId: supplierDoc?._id?.toString?.() || supplierDoc?.toString?.() || '',
+    supplierId: rawSupplierId,
+    supplierDisplayId,
     supplier: supplierName,
-    email: supplierDoc?.email || '',
+    email: supplierEmail,
     payout: Number(this.amount).toFixed(2),
     amount: this.amount,
     held: Number(this.held).toFixed(2),
-    bankDetails: this.bankDetails || 'Not Set',
     commission: this.commission,
     cardDate: `${Number(this.commission).toFixed(1)}%`,
     status: this.status === 'processed' ? 'Processed' : 'Pending',
     statusRaw: this.status,
+    tid: this.tid || '',
+    month: this.month || '',
+    paymentMethod: this.paymentMethod || 'Bank Transfer (IBFT)',
+    receiptUrl: this.receiptUrl || '',
+    matureAmount: this.matureAmount || 0,
+    immatureAmount: this.immatureAmount || 0,
+    notes: this.notes || '',
     date: this.processedAt || this.createdAt,
     createdAt: this.createdAt,
   }

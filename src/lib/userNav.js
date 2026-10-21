@@ -12,7 +12,7 @@ export const USER_NAV_ITEMS = [
     children: [
       { label: 'Sellvro Products', to: '/user/products' },
       { label: 'SKU Reporting', to: '/user/inventory/sku-reporting' },
-      { label: 'My Reporting', to: '/user/inventory/my-reporting' },
+      { label: 'Store Reporting', to: '/user/inventory/my-reporting' },
     ],
   },
   {

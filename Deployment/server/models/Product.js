@@ -72,6 +72,7 @@ productSchema.methods.toSafeObject = function toSafeObject() {
     image: this.image,
     images: this.images || [],
     supplierId: supplierDoc?._id?.toString?.() || supplierDoc?.toString?.() || '',
+    supplierClientId: isSupplierObj && (supplierDoc.clientId || supplierDoc.supplierCode) ? (supplierDoc.clientId || supplierDoc.supplierCode) : '',
     supplier: supplierName || '—',
     supplierEmail: supplierEmail || '',
     supplierPhone: supplierPhone || '',

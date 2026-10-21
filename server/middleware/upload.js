@@ -26,6 +26,7 @@ function fileFilter(_req, file, cb) {
     'image/png',
     'image/webp',
     'image/gif',
+    'application/pdf',
     'video/mp4',
     'video/webm',
     'video/quicktime',
@@ -33,7 +34,7 @@ function fileFilter(_req, file, cb) {
     'video/x-matroska',
   ]
   if (!allowed.includes(file.mimetype)) {
-    return cb(new Error('Only JPG, PNG, WEBP, GIF images and MP4, WEBM, MOV videos are allowed.'))
+    return cb(new Error('Only PDF documents, JPG, PNG, WEBP, GIF images and MP4, WEBM videos are allowed.'))
   }
   return cb(null, true)
 }

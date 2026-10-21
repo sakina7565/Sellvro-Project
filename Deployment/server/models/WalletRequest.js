@@ -7,10 +7,44 @@ const walletRequestSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    // The net amount in USD that is credited to user wallet
     amount: {
       type: Number,
       required: [true, 'Amount is required'],
       min: 0.01,
+    },
+    // The currency selected by user for deposit (e.g., 'USD', 'PKR', 'AED', 'EUR')
+    depositCurrency: {
+      type: String,
+      default: 'USD',
+      trim: true,
+      uppercase: true,
+    },
+    // The original amount in the selected deposit currency
+    depositAmount: {
+      type: Number,
+      default: null,
+      min: 0.01,
+    },
+    // Exchange rate to USD (how many units of depositCurrency equal 1 USD)
+    exchangeRate: {
+      type: Number,
+      default: 1,
+    },
+    // Gross amount in USD before conversion fee deduction
+    grossAmount: {
+      type: Number,
+      default: null,
+    },
+    // Conversion fee percentage applied (e.g., 2.5 for 2.5%)
+    conversionFeeRate: {
+      type: Number,
+      default: 0,
+    },
+    // Conversion fee amount in USD deducted from gross amount
+    conversionFee: {
+      type: Number,
+      default: 0,
     },
     bankTid: {
       type: String,
@@ -48,7 +82,13 @@ walletRequestSchema.methods.toSafeObject = function toSafeObject(businessName = 
     user: userName,
     business: businessName || 'No Business',
     email,
-    amount: this.amount,
+    amount: this.amount, // Net USD amount credited to wallet
+    depositCurrency: this.depositCurrency || 'USD',
+    depositAmount: this.depositAmount != null ? this.depositAmount : this.amount,
+    exchangeRate: this.exchangeRate || 1,
+    grossAmount: this.grossAmount != null ? this.grossAmount : this.amount,
+    conversionFeeRate: this.conversionFeeRate || 0,
+    conversionFee: this.conversionFee || 0,
     bankTid: this.bankTid,
     receiptImage: this.receiptImage,
     status: this.status,

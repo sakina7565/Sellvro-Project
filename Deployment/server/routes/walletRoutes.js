@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import {
   getBalance,
+  getCurrencies,
   createWalletRequest,
   listMyWalletRequests,
   listAllWalletRequests,
@@ -21,6 +22,7 @@ function handleReceipt(req, res, next) {
   })
 }
 
+router.get('/currencies', getCurrencies)
 router.get('/balance', protect, authorize('user', 'admin'), getBalance)
 router.get('/requests/mine', protect, authorize('user'), requireApproved, listMyWalletRequests)
 router.post(

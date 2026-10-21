@@ -24,20 +24,28 @@ async function uniqueOrderNo() {
 
 async function populateOrder(query) {
   return query
-    .populate('user', 'fullName email role')
-    .populate('supplier', 'fullName email role')
-    .populate('product', 'name sku image')
+    .populate('user', 'fullName email role clientId')
+    .populate('supplier', 'fullName email role clientId')
+    .populate('product', 'name sku image inWarehouse fulfillBy')
 }
 
 function normalizeShippingAddress(raw = {}) {
+  let data = raw
+  if (typeof raw === 'string') {
+    try {
+      data = JSON.parse(raw)
+    } catch {
+      data = {}
+    }
+  }
   return {
-    fullName: String(raw.fullName || '').trim(),
-    phone: String(raw.phone || '').trim(),
-    addressLine: String(raw.addressLine || '').trim(),
-    city: String(raw.city || '').trim(),
-    state: String(raw.state || '').trim(),
-    postalCode: String(raw.postalCode || '').trim(),
-    country: String(raw.country || '').trim(),
+    fullName: String(data?.fullName || '').trim(),
+    phone: String(data?.phone || '').trim(),
+    addressLine: String(data?.addressLine || '').trim(),
+    city: String(data?.city || '').trim(),
+    state: String(data?.state || '').trim(),
+    postalCode: String(data?.postalCode || '').trim(),
+    country: String(data?.country || '').trim(),
   }
 }
 
@@ -79,6 +87,30 @@ export const createOrder = async (req, res) => {
       return res.status(400).json({ message: shippingError })
     }
 
+    // Shipping & Packaging Label validation
+    const orderLabelRef = String(req.body.orderLabelRef || req.body.brandLabel || '').trim()
+    if (!orderLabelRef) {
+      return res.status(400).json({
+        message: 'Shipping & Packaging Label reference or brand label is required to place the order.',
+      })
+    }
+    const labelNotes = String(req.body.labelNotes || '').trim()
+
+    // File upload or fallback URL
+    let shippingLabelUrl = ''
+    if (req.file) {
+      shippingLabelUrl = `/uploads/${req.file.filename}`
+    } else if (req.body.shippingLabelUrl) {
+      shippingLabelUrl = String(req.body.shippingLabelUrl).trim()
+    }
+
+    if (!shippingLabelUrl) {
+      return res.status(400).json({
+        message: 'Shipping label file (PDF or Image) is required for WMS order dispatch.',
+      })
+    }
+    const brandLabel = String(req.body.brandLabel || orderLabelRef).trim()
+
     const product = await Product.findById(productId)
     if (!product || product.status !== 'active') {
       return res.status(404).json({ message: 'Product is not available for purchase.' })
@@ -107,6 +139,11 @@ export const createOrder = async (req, res) => {
     product.quantity -= quantity
     const orderNo = await uniqueOrderNo()
 
+    // Determine initial warehouse custody location (WMS Central Hub vs Supplier Warehouse)
+    const isAtWms = product.inWarehouse === true || product.fulfillBy === 'warehouse'
+    const initialWarehouseLocation = isAtWms ? 'wms_hub' : 'supplier_warehouse'
+    const initialWarehouseLabel = isAtWms ? 'At WMS Central Hub' : 'At Supplier Warehouse'
+
     const order = await Order.create({
       orderNo,
       user: buyer._id,
@@ -119,7 +156,25 @@ export const createOrder = async (req, res) => {
       commission,
       commissionPercent,
       status: 'placed',
-      brandLabel: String(req.body.brandLabel || '').trim(),
+      warehouseLocation: initialWarehouseLocation,
+      warehouseLocationLabel: initialWarehouseLabel,
+      trackingNumber: `SLV-${orderNo.replace('ORD-', '')}`,
+      carrier: 'Sellvro Express',
+      trackingStatus: 'placed',
+      estimatedDelivery: '3 - 5 Business Days',
+      trackingTimeline: [
+        {
+          status: 'placed',
+          title: 'Order Placed & Label Attached',
+          location: initialWarehouseLabel,
+          timestamp: new Date(),
+          note: `Order confirmed with complete shipping label. Custody location: ${initialWarehouseLabel}.`,
+        },
+      ],
+      brandLabel,
+      orderLabelRef,
+      labelNotes,
+      shippingLabelUrl,
       payoutStatus: 'pending',
       shippingAddress,
     })
@@ -260,3 +315,84 @@ export const updateOrderStatus = async (req, res) => {
     return res.status(500).json({ message: error.message || 'Failed to update order.' })
   }
 }
+
+export const updateOrderTracking = async (req, res) => {
+  try {
+    const order = await populateOrder(Order.findById(req.params.id))
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found.' })
+    }
+
+    const { trackingStatus, carrier, trackingNumber, estimatedDelivery, note, location } = req.body
+
+    if (carrier) order.carrier = String(carrier).trim()
+    if (trackingNumber) order.trackingNumber = String(trackingNumber).trim()
+    if (estimatedDelivery !== undefined) order.estimatedDelivery = String(estimatedDelivery).trim()
+
+    if (req.body.warehouseLocation) {
+      const loc = String(req.body.warehouseLocation).trim().toLowerCase()
+      const locMap = {
+        supplier_warehouse: 'At Supplier Warehouse',
+        wms_hub: 'At WMS Central Hub',
+        in_transit: 'In Courier Transit',
+        delivered: 'Delivered to Customer',
+      }
+      if (locMap[loc]) {
+        order.warehouseLocation = loc
+        order.warehouseLocationLabel = req.body.warehouseLocationLabel || locMap[loc]
+      }
+    }
+
+    if (trackingStatus) {
+      const allowedTracking = ['placed', 'processing', 'in_transit', 'out_for_delivery', 'delivered', 'cancelled']
+      if (allowedTracking.includes(trackingStatus.toLowerCase())) {
+        order.trackingStatus = trackingStatus.toLowerCase()
+        if (trackingStatus === 'cancelled') {
+          order.status = 'cancelled'
+        } else if (trackingStatus === 'processing' || trackingStatus === 'in_transit' || trackingStatus === 'out_for_delivery') {
+          order.status = 'in_process'
+        }
+
+        // Auto sync warehouseLocation if tracking status progresses
+        if (trackingStatus === 'in_transit' || trackingStatus === 'out_for_delivery') {
+          order.warehouseLocation = 'in_transit'
+          order.warehouseLocationLabel = 'In Courier Transit'
+        } else if (trackingStatus === 'delivered') {
+          order.warehouseLocation = 'delivered'
+          order.warehouseLocationLabel = 'Delivered to Customer'
+        }
+
+        const titles = {
+          placed: 'Order Placed & Verified',
+          processing: 'Warehouse Processing & Packaging',
+          in_transit: 'Dispatched & In Transit',
+          out_for_delivery: 'Out for Delivery with Courier',
+          delivered: 'Package Delivered to Customer',
+          cancelled: 'Order / Shipment Cancelled',
+        }
+
+        if (!Array.isArray(order.trackingTimeline)) {
+          order.trackingTimeline = []
+        }
+
+        order.trackingTimeline.push({
+          status: order.trackingStatus,
+          title: titles[order.trackingStatus] || order.trackingStatus,
+          location: String(location || 'Local Hub').trim(),
+          timestamp: new Date(),
+          note: String(note || `Status updated to ${order.trackingStatus}`).trim(),
+        })
+      }
+    }
+
+    await order.save()
+
+    return res.json({
+      message: 'Parcel tracking updated successfully.',
+      order: order.toSafeObject(),
+    })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to update parcel tracking.' })
+  }
+}
+

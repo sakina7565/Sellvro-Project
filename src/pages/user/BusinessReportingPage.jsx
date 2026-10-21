@@ -1,10 +1,10 @@
 import UserLayout from '../../components/layout/UserLayout.jsx'
-import BusinessReportingContent from '../../components/products/BusinessReportingContent.jsx'
+import UserStoreReportingContent from '../../components/products/UserStoreReportingContent.jsx'
 
 function BusinessReportingPage() {
   return (
     <UserLayout>
-      <BusinessReportingContent panel="user" />
+      <UserStoreReportingContent />
     </UserLayout>
   )
 }

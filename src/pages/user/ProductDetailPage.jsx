@@ -20,7 +20,6 @@ import {
   Warehouse,
   Store,
   Building2,
-  Info,
 } from 'lucide-react'
 import UserLayout from '../../components/layout/UserLayout.jsx'
 import Card from '../../components/ui/Card.jsx'
@@ -425,6 +424,23 @@ function ProductDetailPage() {
                     </div>
                   </div>
 
+                  {/* Vendor / Supplier details for WMS Inventory */}
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200/70 bg-white/80 px-3 py-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <Store className="h-4 w-4 text-amber-700 shrink-0" />
+                      <span className="text-slate-600">Vendor / Supplier:</span>
+                      <strong className="font-bold text-slate-900">
+                        {product.vendorName ||
+                          product.supplierBusinessName ||
+                          (product.supplier !== '—' ? product.supplier : '') ||
+                          'Verified Vendor'}
+                      </strong>
+                    </div>
+                    <span className="text-[11px] font-semibold text-amber-800">
+                      Custody: Sellvro Central WMS Hub
+                    </span>
+                  </div>
+
                   <div className="mt-3.5 grid grid-cols-1 gap-2 border-t border-amber-200/80 pt-3 text-xs text-slate-700 sm:grid-cols-3">
                     <div className="flex items-center gap-1.5 font-medium">
                       <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
@@ -458,7 +474,7 @@ function ProductDetailPage() {
                           </span>
                         </div>
                         <p className="mt-0.5 text-xs text-slate-600">
-                          Product is held at the supplier's own facility and dispatched directly by the vendor.
+                          Product is held at the supplier&apos;s own facility and dispatched directly by the vendor.
                         </p>
                       </div>
                     </div>
@@ -615,6 +631,19 @@ function ProductDetailPage() {
                     {product.length && product.width && product.height
                       ? `${product.length} × ${product.width} × ${product.height} ${product.dimensionUnit || 'cm'}`
                       : '—'}
+                  </dd>
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3.5 py-2.5 text-xs sm:col-span-2">
+                  <dt className="flex items-center gap-1.5 font-medium text-slate-500">
+                    <Store className="h-3.5 w-3.5 text-slate-400" />
+                    Vendor / Merchant
+                  </dt>
+                  <dd className="font-semibold text-slate-800">
+                    {product.vendorName ||
+                      product.supplierBusinessName ||
+                      (product.supplier !== '—' ? product.supplier : '') ||
+                      'Sellvro Verified Partner'}
                   </dd>
                 </div>
 

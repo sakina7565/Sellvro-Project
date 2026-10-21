@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Image as ImageIcon, Video as VideoIcon, Plus, X, Film } from 'lucide-react'
+import { mediaUrl } from '../../lib/api.js'
 
 const MAX_PHOTOS = 10
 const MAX_BYTES = 100 * 1024 * 1024 // 100MB
@@ -16,7 +17,7 @@ function isVideo(file) {
   return false
 }
 
-function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 1 }) {
+function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 1, helperText, disabled = false }) {
   const inputRefs = useRef([])
 
   useEffect(() => {
@@ -29,11 +30,12 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 1 }) {
   }, [])
 
   const openPicker = (index) => {
+    if (disabled) return
     inputRefs.current[index]?.click()
   }
 
   const applyFile = (index, file) => {
-    if (!file) return
+    if (!file || disabled) return
 
     const isValidType =
       ACCEPTED.includes(file.type) ||
@@ -58,6 +60,7 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 1 }) {
   }
 
   const handleRemove = (index) => {
+    if (disabled) return
     const next = Array.from({ length: MAX_PHOTOS }, (_, i) => photos[i] || null)
     if (next[index]?.preview?.startsWith('blob:')) {
       URL.revokeObjectURL(next[index].preview)
@@ -76,7 +79,7 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 1 }) {
         <div className="flex items-center gap-2">
           <Film className="h-4 w-4 text-teal-600 shrink-0" />
           <span className="font-semibold text-teal-950">
-            Upload up to 10 Product Images &amp; Videos (At least {minPhotos} photos required)
+            {helperText || `Upload up to 10 Product Images & Videos (At least ${minPhotos} photos required)`}
           </span>
         </div>
         <span
@@ -95,7 +98,10 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 1 }) {
         {slots.map((photo, index) => {
           const isMain = index === 0
           const isRequired = index < minPhotos
-          const isVid = photo?.isVideo || (photo?.file && isVideo(photo.file))
+          const isVid = photo?.isVideo || (photo?.file && isVideo(photo.file)) || (photo?.url && isVideo({ name: photo.url }))
+          const mediaSrc = photo?.preview?.startsWith('blob:') || photo?.preview?.startsWith('data:')
+            ? photo.preview
+            : mediaUrl(photo?.url || photo?.preview || '')
 
           return (
             <div key={index} className="relative aspect-square">
@@ -104,6 +110,7 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 1 }) {
                   inputRefs.current[index] = el
                 }}
                 type="file"
+                disabled={disabled}
                 accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,video/ogg"
                 className="hidden"
                 onChange={(e) => {
@@ -117,7 +124,7 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 1 }) {
                 <div className="group relative h-full w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-xs">
                   {isVid ? (
                     <video
-                      src={photo.preview}
+                      src={mediaSrc}
                       className="h-full w-full object-cover"
                       muted
                       playsInline
@@ -126,7 +133,7 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 1 }) {
                     />
                   ) : (
                     <img
-                      src={photo.preview}
+                      src={mediaSrc}
                       alt={isMain ? 'Main product' : `Media ${index + 1}`}
                       className="h-full w-full object-cover"
                     />
@@ -139,27 +146,39 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 1 }) {
                         Main {isRequired ? '*' : ''}
                       </span>
                     )}
+                    {photo.isExisting && (
+                      <span className="rounded-md bg-slate-800/90 backdrop-blur-xs px-1.5 py-0.5 text-[9px] font-bold text-slate-200 shadow-xs">
+                        Existing
+                      </span>
+                    )}
+                    {photo.file && (
+                      <span className="rounded-md bg-emerald-600/90 backdrop-blur-xs px-1.5 py-0.5 text-[9px] font-bold text-white shadow-xs">
+                        New
+                      </span>
+                    )}
                     {isVid && (
                       <span className="inline-flex items-center gap-0.5 rounded-md bg-slate-900/80 backdrop-blur-xs px-1.5 py-0.5 text-[9px] font-bold text-teal-300 shadow-xs">
                         <VideoIcon className="h-2.5 w-2.5" /> Video
                       </span>
                     )}
-                    {!isMain && isRequired && !isVid && (
+                    {!isMain && isRequired && !isVid && !photo.isExisting && (
                       <span className="rounded-md bg-slate-800/80 px-1.5 py-0.5 text-[9px] font-bold text-white">
                         Req *
                       </span>
                     )}
                   </div>
 
-                  {/* Remove Button */}
-                  <button
-                    type="button"
-                    onClick={() => handleRemove(index)}
-                    className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-sm transition-transform hover:scale-110 hover:bg-rose-50 hover:text-rose-600"
-                    aria-label="Remove media"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                  {/* Remove Button (only if not disabled) */}
+                  {!disabled && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(index)}
+                      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-sm transition-transform hover:scale-110 hover:bg-rose-50 hover:text-rose-600"
+                      aria-label="Remove media"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
 
                   <div className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[8px] font-semibold text-white">
                     #{index + 1}
@@ -168,11 +187,14 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 1 }) {
               ) : (
                 <button
                   type="button"
+                  disabled={disabled}
                   onClick={() => openPicker(index)}
                   className={`flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed transition-all ${
-                    isRequired && !isRequirementMet
-                      ? 'border-amber-300 bg-amber-50/40 text-amber-700 hover:border-amber-400 hover:bg-amber-100/50'
-                      : 'border-slate-200 bg-white text-slate-400 hover:border-teal-300 hover:bg-teal-50/40 hover:text-teal-600'
+                    disabled
+                      ? 'border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed'
+                      : isRequired && !isRequirementMet
+                      ? 'border-amber-300 bg-amber-50/40 text-amber-700 hover:border-amber-400 hover:bg-amber-100/50 cursor-pointer'
+                      : 'border-slate-200 bg-white text-slate-400 hover:border-teal-300 hover:bg-teal-50/40 hover:text-teal-600 cursor-pointer'
                   }`}
                 >
                   {isMain ? (

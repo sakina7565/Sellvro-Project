@@ -1,7 +1,7 @@
 export const PRODUCT_STATUS_TONE = {
   draft: 'neutral',
   pending_approval: 'warning',
-  approved: 'pending',
+  approved: 'success',
   active: 'success',
   rejected: 'danger',
 }

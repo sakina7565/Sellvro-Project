@@ -19,6 +19,26 @@ async function withBusinessName(requests) {
   })
 }
 
+export const SUPPORTED_CURRENCIES = [
+  { code: 'USD', name: 'US Dollar', symbol: '$', ratePerUsd: 1, feePercent: 0 },
+  { code: 'PKR', name: 'Pakistani Rupee', symbol: '₨', ratePerUsd: 278.50, feePercent: 2.5 },
+  { code: 'AED', name: 'UAE Dirham', symbol: 'AED', ratePerUsd: 3.67, feePercent: 2.0 },
+  { code: 'SAR', name: 'Saudi Riyal', symbol: 'SAR', ratePerUsd: 3.75, feePercent: 2.0 },
+  { code: 'EUR', name: 'Euro', symbol: '€', ratePerUsd: 0.92, feePercent: 2.0 },
+  { code: 'GBP', name: 'British Pound', symbol: '£', ratePerUsd: 0.79, feePercent: 2.0 },
+  { code: 'INR', name: 'Indian Rupee', symbol: '₹', ratePerUsd: 84.00, feePercent: 2.5 },
+  { code: 'CAD', name: 'Canadian Dollar', symbol: 'CA$', ratePerUsd: 1.38, feePercent: 2.0 },
+  { code: 'TRY', name: 'Turkish Lira', symbol: '₺', ratePerUsd: 34.50, feePercent: 3.0 },
+  { code: 'QAR', name: 'Qatari Riyal', symbol: 'QAR', ratePerUsd: 3.64, feePercent: 2.0 },
+  { code: 'KWD', name: 'Kuwaiti Dinar', symbol: 'KWD', ratePerUsd: 0.31, feePercent: 2.0 },
+  { code: 'OMR', name: 'Omani Rial', symbol: 'OMR', ratePerUsd: 0.385, feePercent: 2.0 },
+  { code: 'BDT', name: 'Bangladeshi Taka', symbol: '৳', ratePerUsd: 120.00, feePercent: 2.5 },
+]
+
+export const getCurrencies = (_req, res) => {
+  return res.json({ currencies: SUPPORTED_CURRENCIES })
+}
+
 export const getBalance = async (req, res) => {
   try {
     const user = await User.findById(req.user._id)
@@ -33,10 +53,19 @@ export const getBalance = async (req, res) => {
 
 export const createWalletRequest = async (req, res) => {
   try {
-    const amount = Number(req.body.amount)
+    const rawCurrency = String(req.body.depositCurrency || req.body.currency || 'USD').trim().toUpperCase()
+    const foundCurrency = SUPPORTED_CURRENCIES.find((c) => c.code === rawCurrency) || {
+      code: 'USD',
+      name: 'US Dollar',
+      symbol: '$',
+      ratePerUsd: 1,
+      feePercent: 0,
+    }
+
+    const rawDepositAmount = Number(req.body.depositAmount ?? req.body.amount)
     const bankTid = String(req.body.bankTid || req.body.tid || '').trim()
 
-    if (!Number.isFinite(amount) || amount <= 0) {
+    if (!Number.isFinite(rawDepositAmount) || rawDepositAmount <= 0) {
       return res.status(400).json({ message: 'A valid deposit amount is required.' })
     }
     if (!bankTid) {
@@ -60,9 +89,22 @@ export const createWalletRequest = async (req, res) => {
       })
     }
 
+    // Currency conversion calculations
+    const rate = foundCurrency.ratePerUsd || 1
+    const grossUsd = Number((rawDepositAmount / rate).toFixed(2))
+    const feeRate = foundCurrency.feePercent || 0
+    const feeUsd = Number(((grossUsd * feeRate) / 100).toFixed(2))
+    const netUsd = Number(Math.max(0.01, grossUsd - feeUsd).toFixed(2))
+
     const request = await WalletRequest.create({
       user: req.user._id,
-      amount,
+      amount: netUsd, // Net amount in USD credited to wallet
+      depositCurrency: foundCurrency.code,
+      depositAmount: rawDepositAmount,
+      exchangeRate: rate,
+      grossAmount: grossUsd,
+      conversionFeeRate: feeRate,
+      conversionFee: feeUsd,
       bankTid,
       receiptImage,
       status: 'pending',

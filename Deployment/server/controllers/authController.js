@@ -140,6 +140,14 @@ export const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password.' })
     }
 
+    // Admin accounts must use the dedicated admin portal — block them here
+    if (user.role === 'admin') {
+      return res.status(403).json({
+        message:
+          'Admin accounts cannot log in from the public portal. Please use the Admin Sign In page at /admin/login.',
+      })
+    }
+
     if (user.status === 'suspended') {
       return res.status(403).json({ message: 'Your account has been suspended.' })
     }
@@ -449,6 +457,48 @@ export const resetPassword = async (req, res) => {
   }
 }
 
+/**
+ * PATCH /auth/change-password
+ * Works for all roles (admin, supplier, user).
+ * Requires: currentPassword, newPassword, confirmPassword.
+ */
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ message: 'All password fields are required.' })
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'New password must be at least 6 characters.' })
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: 'New passwords do not match.' })
+    }
+
+    // Reload user with password field (it's select:false by default)
+    const user = await User.findById(req.user._id).select('+password')
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' })
+    }
+
+    const isMatch = await user.matchPassword(currentPassword)
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Current password is incorrect.' })
+    }
+
+    user.password = newPassword
+    await user.save()
+
+    return res.json({ message: 'Password updated successfully.' })
+  } catch (error) {
+    console.error('changePassword error:', error)
+    return res.status(500).json({ message: error.message || 'Failed to change password.' })
+  }
+}
+
 export const googleAuth = async (req, res) => {
   try {
     const { credential, role = 'user', email, name, googleId, picture } = req.body
@@ -478,6 +528,12 @@ export const googleAuth = async (req, res) => {
     let user = await User.findOne({ email: userEmail })
 
     if (user) {
+      if (user.role === 'admin') {
+        return res.status(403).json({
+          message:
+            'Admin accounts cannot log in from the public portal. Please use the Admin Sign In page at /admin/login.',
+        })
+      }
       if (user.status === 'suspended') {
         return res.status(403).json({ message: 'Your account has been suspended.' })
       }

@@ -11,13 +11,16 @@ import DashboardPage from './pages/admin/DashboardPage.jsx'
 import ProductsListPage from './pages/admin/ProductsListPage.jsx'
 import ProductDetailPage from './pages/admin/ProductDetailPage.jsx'
 import AddProductPage from './pages/admin/AddProductPage.jsx'
+import EditProductPage from './pages/admin/EditProductPage.jsx'
 import AdminSkuReportingPage from './pages/admin/SkuReportingPage.jsx'
+import AdminSupplierSkuLookupPage from './pages/admin/SupplierSkuLookupPage.jsx'
 import AdminBusinessReportingPage from './pages/admin/BusinessReportingPage.jsx'
 import CategoriesPage from './pages/admin/CategoriesPage.jsx'
 import AllSuppliersPage from './pages/admin/AllSuppliersPage.jsx'
 import PendingSuppliersPage from './pages/admin/PendingSuppliersPage.jsx'
 import AllUsersPage from './pages/admin/AllUsersPage.jsx'
 import PendingUsersPage from './pages/admin/PendingUsersPage.jsx'
+import AdminUserReportingPage from './pages/admin/UserReportingPage.jsx'
 import AccountsManagementPage from './pages/admin/AccountsManagementPage.jsx'
 import OrdersPage from './pages/admin/OrdersPage.jsx'
 import WalletsRequestsPage from './pages/admin/WalletsRequestsPage.jsx'
@@ -111,18 +114,26 @@ function App() {
       <Route path="/admin/dashboard" element={<AdminRoute><DashboardPage /></AdminRoute>} />
       <Route path="/admin/products" element={<AdminRoute><ProductsListPage /></AdminRoute>} />
       <Route path="/admin/products/:id" element={<AdminRoute><ProductDetailPage /></AdminRoute>} />
+      <Route path="/admin/product/details/:id" element={<AdminRoute><ProductDetailPage /></AdminRoute>} />
+      <Route path="/admin/products/:id/edit" element={<AdminRoute><EditProductPage /></AdminRoute>} />
+      <Route path="/admin/product/edit/:id" element={<AdminRoute><EditProductPage /></AdminRoute>} />
+      <Route path="/admin/product/edits/:id" element={<AdminRoute><EditProductPage /></AdminRoute>} />
       <Route path="/admin/product/create" element={<AdminRoute><AddProductPage /></AdminRoute>} />
       <Route path="/admin/inventory/sku-reporting" element={<AdminRoute><AdminSkuReportingPage /></AdminRoute>} />
+      <Route path="/admin/products/sku-report" element={<AdminRoute><AdminSkuReportingPage /></AdminRoute>} />
       <Route path="/admin/inventory/my-reporting" element={<AdminRoute><AdminBusinessReportingPage /></AdminRoute>} />
       <Route path="/admin/categories" element={<AdminRoute><CategoriesPage /></AdminRoute>} />
       <Route path="/admin/accounts" element={<AdminRoute><AccountsManagementPage /></AdminRoute>} />
       <Route path="/admin/suppliers" element={<AdminRoute><AllSuppliersPage /></AdminRoute>} />
+      <Route path="/admin/suppliers/sku-lookup" element={<AdminRoute><AdminSupplierSkuLookupPage /></AdminRoute>} />
       <Route path="/admin/suppliers/pending" element={<AdminRoute><PendingSuppliersPage /></AdminRoute>} />
       <Route path="/admin/users" element={<AdminRoute><AllUsersPage /></AdminRoute>} />
       <Route path="/admin/users/pending" element={<AdminRoute><PendingUsersPage /></AdminRoute>} />
+      <Route path="/admin/users/reporting" element={<AdminRoute><AdminUserReportingPage /></AdminRoute>} />
       <Route path="/admin/sales" element={<AdminRoute><OrdersPage /></AdminRoute>} />
       <Route path="/admin/wallets/requests" element={<AdminRoute><WalletsRequestsPage /></AdminRoute>} />
       <Route path="/admin/supplier/payouts" element={<AdminRoute><SupplierPayoutsPage /></AdminRoute>} />
+      <Route path="/admin/finance/suppliers" element={<AdminRoute><SupplierPayoutsPage /></AdminRoute>} />
       <Route path="/admin/supplier/disputes" element={<AdminRoute><SupplierDisputesPage /></AdminRoute>} />
       <Route path="/admin/users/complaines" element={<AdminRoute><UserComplaintsPage /></AdminRoute>} />
       <Route path="/admin/roles" element={<AdminRoute><RolesPage /></AdminRoute>} />
@@ -142,7 +153,10 @@ function App() {
       <Route path="/supplier/products" element={<SupplierRoute><SupplierProductsPage /></SupplierRoute>} />
       <Route path="/supplier/product/create" element={<SupplierRoute><SupplierAddProductPage /></SupplierRoute>} />
       <Route path="/supplier/inventory/sku-reporting" element={<SupplierRoute><SupplierSkuReportingPage /></SupplierRoute>} />
+      <Route path="/supplier/products/sku-report" element={<SupplierRoute><SupplierSkuReportingPage /></SupplierRoute>} />
       <Route path="/supplier/inventory/my-reporting" element={<SupplierRoute><SupplierBusinessReportingPage /></SupplierRoute>} />
+      <Route path="/supplier/inventory/store-reporting" element={<SupplierRoute><SupplierBusinessReportingPage /></SupplierRoute>} />
+      <Route path="/supplier/store-reporting" element={<SupplierRoute><SupplierBusinessReportingPage /></SupplierRoute>} />
       <Route path="/supplier/sales/details" element={<SupplierRoute><SupplierViewOrdersPage /></SupplierRoute>} />
       <Route path="/supplier/finance/index" element={<SupplierRoute><SupplierFinancePage /></SupplierRoute>} />
       <Route path="/supplier/disputes" element={<SupplierRoute><SupplierDisputesPortalPage /></SupplierRoute>} />
@@ -168,7 +182,10 @@ function App() {
         }
       />
       <Route path="/user/inventory/sku-reporting" element={<UserRoute><UserSkuReportingPage /></UserRoute>} />
+      <Route path="/user/products/sku-report" element={<UserRoute><UserSkuReportingPage /></UserRoute>} />
       <Route path="/user/inventory/my-reporting" element={<UserRoute><UserBusinessReportingPage /></UserRoute>} />
+      <Route path="/user/inventory/store-reporting" element={<UserRoute><UserBusinessReportingPage /></UserRoute>} />
+      <Route path="/user/store-reporting" element={<UserRoute><UserBusinessReportingPage /></UserRoute>} />
       <Route path="/user/orders" element={<UserRoute><UserOrdersPage /></UserRoute>} />
       <Route path="/user/wallet" element={<UserRoute><UserWalletPage /></UserRoute>} />
       <Route path="/user/disputes" element={<UserRoute><UserDisputesPage /></UserRoute>} />

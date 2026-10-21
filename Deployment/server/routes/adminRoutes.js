@@ -44,6 +44,7 @@ import {
   activateProduct,
   deactivateProduct,
   createAdminProduct,
+  updateAdminProduct,
 } from '../controllers/productController.js'
 
 import {
@@ -207,6 +208,7 @@ router.get(
 )
 
 router.patch('/products/:id/commission', requirePermission('admin.products.approve'), updateProductCommission)
+router.patch('/products/:id', requirePermission('admin.products.approve', 'admin.products.create'), handleProductPhotos, updateAdminProduct)
 
 router.post(
   '/products',

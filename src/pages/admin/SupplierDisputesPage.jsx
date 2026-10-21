@@ -1,6 +1,6 @@
-import { useCallback, useState } from 'react'
-
-import { Check, MessageSquare, XCircle } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Check, MessageSquare, Search, XCircle } from 'lucide-react'
 
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 
@@ -59,12 +59,29 @@ function SupplierDisputesPage() {
   })
 
   const [busyId, setBusyId] = useState('')
-
   const [selectedId, setSelectedId] = useState('')
-
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const searchQuery = (searchParams.get('q') || '').trim()
 
+  const filteredDisputes = useMemo(() => {
+    if (!searchQuery) return disputes
+    const qLower = searchQuery.toLowerCase()
+    return disputes.filter((d) => {
+      const prodName = String(d.product?.name || d.productName || d.product || '').toLowerCase()
+      const prodSku = String(d.product?.sku || d.productSku || d.sku || '').toLowerCase()
+      const orderMatch = String(d.order?.orderNumber || d.orderNo || d.order || '').toLowerCase()
+      const raisedMatch = String(d.raisedBy?.fullName || d.raisedByName || d.raisedBy || '').toLowerCase()
+      const againstMatch = String(d.againstUser?.fullName || d.againstUserName || d.againstUser || '').toLowerCase()
+      return prodName.includes(qLower) || prodSku.includes(qLower) || orderMatch.includes(qLower) || raisedMatch.includes(qLower) || againstMatch.includes(qLower)
+    })
+  }, [disputes, searchQuery])
 
+  const clearSearch = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('q')
+    setSearchParams(next)
+  }
 
   const handleResolve = async (id) => {
 
@@ -126,61 +143,53 @@ function SupplierDisputesPage() {
 
 
 
-  const isEmpty = !loading && disputes.length === 0
-
-
+  const isEmpty = !loading && filteredDisputes.length === 0
 
   return (
-
     <AdminLayout>
-
       <PageHeader title="Supplier Disputes" />
-
       <FilterBar filters={FILTERS} />
 
-
-
-      {error && (
-
-        <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>
-
+      {searchQuery && (
+        <div className="mb-4 flex items-center justify-between rounded-xl border border-primary-200 bg-primary-50/70 px-4 py-2.5 text-sm text-primary-900">
+          <div className="flex items-center gap-2">
+            <Search className="h-4 w-4 text-primary shrink-0" />
+            <span>
+              Showing disputes for <strong className="font-semibold text-primary-950">"{searchQuery}"</strong> ({filteredDisputes.length} found)
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={clearSearch}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-800 hover:underline"
+          >
+            <XCircle className="h-4 w-4" />
+            Clear
+          </button>
+        </div>
       )}
 
-
+      {error && (
+        <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>
+      )}
 
       <Card className="overflow-hidden shadow-soft">
-
         <div className="hidden overflow-x-auto md:block">
-
           <table className="w-full min-w-[1100px] text-left text-sm">
-
             <thead>
-
               <tr className="border-b border-slate-100 text-xs text-slate-400">
-
                 {TABLE_HEAD.map((head) => (
-
                   <th key={head} className="whitespace-nowrap px-5 py-3 font-medium">
-
                     {head}
-
                   </th>
-
                 ))}
-
               </tr>
-
             </thead>
-
             <tbody>
-
               {isEmpty ? (
-
                 <EmptyState message="No disputes found." colSpan={TABLE_HEAD.length} />
-
               ) : (
-
-                disputes.map((dispute) => {
+                filteredDisputes.map((dispute) => {
 
                   const statusMeta = getDisputeStatusMeta(dispute.status)
 

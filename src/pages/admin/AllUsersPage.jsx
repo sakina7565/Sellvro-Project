@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Plus, LogIn, Pencil, Trash2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Plus, LogIn, Pencil, Trash2, CheckCircle2, XCircle, RefreshCw, Truck, BarChart3 } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import FilterBar from '../../components/admin/FilterBar.jsx'
@@ -16,8 +17,17 @@ import EditAccountModal from '../../components/admin/EditAccountModal.jsx'
 import DeleteAccountModal from '../../components/admin/DeleteAccountModal.jsx'
 import { adminApi, getErrorMessage } from '../../lib/api.js'
 
+function getUserDisplayId(user) {
+  if (user?.clientId) return user.clientId
+  if (user?.id) {
+    const hex = String(user.id)
+    return `USR-${hex.slice(-6).toUpperCase()}`
+  }
+  return 'USR-1001'
+}
+
 const FILTERS = [{ label: 'All Status', options: ['approved', 'suspended'] }]
-const TABLE_HEAD = ['User', 'Wallet', 'Joined', 'Status', 'Actions']
+const TABLE_HEAD = ['User ID', 'User', 'Wallet', 'Joined', 'Status', 'Actions']
 
 function AllUsersPage() {
   const [users, setUsers] = useState([])
@@ -128,6 +138,16 @@ function AllUsersPage() {
               ) : (
                 users.map((user) => (
                   <tr key={user.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/70 transition-colors">
+                    <td className="whitespace-nowrap px-5 py-4">
+                      <Link
+                        to={`/admin/users/reporting?userId=${user.id}`}
+                        className="group inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/80 px-2.5 py-1 text-xs font-mono font-bold text-indigo-700 shadow-2xs hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all cursor-pointer"
+                        title="Click to view User Reporting & Live Parcel Tracking"
+                      >
+                        <Truck className="h-3.5 w-3.5 text-indigo-500 group-hover:text-white transition-colors" />
+                        <span>{getUserDisplayId(user)}</span>
+                      </Link>
+                    </td>
                     <td className="whitespace-nowrap px-5 py-4 font-medium text-slate-800">
                       <div>
                         <p className="font-semibold text-slate-900">{user.fullName}</p>
@@ -155,6 +175,15 @@ function AllUsersPage() {
                           <LogIn className="h-3.5 w-3.5" />
                           <span>Login As</span>
                         </button>
+
+                        <Link
+                          to={`/admin/users/reporting?userId=${user.id}`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-600 hover:text-white transition shadow-2xs"
+                          title="View User Reporting & Live Tracking"
+                        >
+                          <BarChart3 className="h-3.5 w-3.5" />
+                          <span>Reporting</span>
+                        </Link>
 
                         <IconAction
                           icon={Pencil}
@@ -244,6 +273,19 @@ function AllUsersPage() {
                 </div>
               }
             >
+              <DetailRow
+                label="User ID"
+                value={
+                  <Link
+                    to={`/admin/users/reporting?userId=${user.id}`}
+                    className="inline-flex items-center gap-1 font-mono font-bold text-indigo-600 underline"
+                  >
+                    <Truck className="h-3 w-3" />
+                    {getUserDisplayId(user)} (View Report & Tracking)
+                  </Link>
+                }
+                full
+              />
               <DetailRow label="Wallet" value={`$${user.walletBalance?.toFixed(2) ?? '0.00'}`} />
               <DetailRow label="Joined" value={user.joined} />
             </MobileCard>

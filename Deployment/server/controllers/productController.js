@@ -1,6 +1,8 @@
 import mongoose from 'mongoose'
 import Product from '../models/Product.js'
+import BusinessProfile from '../models/BusinessProfile.js'
 import { resolveCategoryName } from './categoryController.js'
+import { createNotification } from '../utils/notifications.js'
 
 const PLACEHOLDER_IMAGE =
   'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80'
@@ -79,6 +81,12 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ message: 'Product name and category are required.' })
     }
 
+    if (!asDraft && (!fields.fulfillBy || !['warehouse', 'self'].includes(fields.fulfillBy))) {
+      return res.status(400).json({
+        message: 'Please specify where the product is kept: Sellvro Inventory (WMS) or with Supplier (Self).',
+      })
+    }
+
     const categoryName = await resolveCategoryName(fields.category)
     if (!categoryName) {
       return res.status(400).json({
@@ -112,7 +120,9 @@ export const createProduct = async (req, res) => {
       })
     }
 
-    const image = images[0] || PLACEHOLDER_IMAGE
+    const isVideoPath = (p) => /\.(mp4|webm|mov|ogg|mkv)$/i.test(p)
+    const firstPhoto = images.find((item) => !isVideoPath(item))
+    const image = firstPhoto || images[0] || PLACEHOLDER_IMAGE
 
     const sku = await uniqueSku(fields.sku)
     const status = asDraft ? 'draft' : 'pending_approval'
@@ -125,6 +135,16 @@ export const createProduct = async (req, res) => {
       supplier: req.user._id,
       status,
     })
+
+    if (!asDraft) {
+      createNotification({
+        targetRole: 'admin',
+        type: 'product',
+        title: 'New Product Submitted',
+        message: `${req.user.fullName || 'A supplier'} submitted product "${product.name}" for review.`,
+        link: '/admin/products',
+      })
+    }
 
     return res.status(201).json({
       message: asDraft
@@ -170,8 +190,11 @@ export const updateMyProduct = async (req, res) => {
       fields.sku = product.sku
     }
 
-    if (Number.isNaN(fields.price) || fields.price < 0) {
-      return res.status(400).json({ message: 'A valid price is required.' })
+    if (fields.price !== undefined && (Number.isNaN(fields.price) || fields.price <= 0)) {
+      return res.status(400).json({ message: 'A valid positive price greater than 0 is required.' })
+    }
+    if (fields.quantity !== undefined && fields.quantity < 0) {
+      return res.status(400).json({ message: 'Quantity cannot be negative.' })
     }
 
     const uploaded = Array.isArray(req.files)
@@ -180,6 +203,13 @@ export const updateMyProduct = async (req, res) => {
     if (uploaded.length > 0) {
       fields.images = [...(product.images || []), ...uploaded]
       fields.image = uploaded[0]
+    }
+
+    const currentImages = fields.images || product.images || []
+    if (currentImages.length < 2) {
+      return res.status(400).json({
+        message: 'Product must have at least 2 images. Multiple images are required.',
+      })
     }
 
     const resubmit = req.body.status === 'pending_approval' || req.body.resubmit === 'true'
@@ -230,7 +260,7 @@ export const listApprovedProducts = async (_req, res) => {
 export const listAllProducts = async (_req, res) => {
   try {
     const products = await Product.find()
-      .populate('supplier', 'fullName email')
+      .populate('supplier', 'fullName email clientId')
       .sort({ createdAt: -1 })
 
     return res.json({ data: products.map((item) => item.toSafeObject()) })
@@ -247,6 +277,9 @@ const REJECTABLE_STATUSES = ['draft', 'pending_approval', 'approved', 'active']
 
 export const getProductById = async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(404).json({ message: 'Product not found.' })
+    }
     const product = await Product.findById(req.params.id).populate(
       'supplier',
       'fullName email phone businessName address',
@@ -254,7 +287,26 @@ export const getProductById = async (req, res) => {
     if (!product) {
       return res.status(404).json({ message: 'Product not found.' })
     }
-    return res.json({ product: product.toSafeObject() })
+
+    const safeObj = product.toSafeObject()
+
+    // Enrich with supplier business profile if available
+    const supplierId = product.supplier?._id || product.supplier
+    if (supplierId) {
+      try {
+        const profile = await BusinessProfile.findOne({ user: supplierId })
+        if (profile) {
+          safeObj.supplierBusinessName = profile.businessName || safeObj.supplierBusinessName
+          safeObj.supplierCity = profile.city || ''
+          safeObj.supplierCountry = profile.country || ''
+          safeObj.supplierAddress = profile.businessAddress || ''
+        }
+      } catch {
+        // ignore profile lookup errors
+      }
+    }
+
+    return res.json({ product: safeObj })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to load product.' })
   }
@@ -326,6 +378,15 @@ export const approveProduct = async (req, res) => {
 
     product.status = alsoActivate ? 'active' : 'approved'
     await product.save()
+
+    createNotification({
+      recipient: product.supplier?._id || product.supplier,
+      targetRole: 'supplier',
+      type: 'product',
+      title: 'Product Approved',
+      message: `Your product "${product.name}" was approved${alsoActivate ? ' and activated on the marketplace' : ''}.`,
+      link: '/supplier/products',
+    })
 
     return res.json({
       message: alsoActivate
@@ -442,15 +503,22 @@ export const createAdminProduct = async (req, res) => {
     }
     fields.category = categoryName
 
-    if (Number.isNaN(fields.price) || fields.price < 0) {
-      return res.status(400).json({ message: 'A valid price is required.' })
+    if (Number.isNaN(fields.price) || fields.price <= 0) {
+      return res.status(400).json({ message: 'A valid positive price greater than 0 is required.' })
+    }
+    if (fields.quantity < 0) {
+      return res.status(400).json({ message: 'Quantity cannot be negative.' })
+    }
+    if (fields.commission < 0) {
+      return res.status(400).json({ message: 'Commission cannot be negative.' })
     }
 
     const uploaded = Array.isArray(req.files)
       ? req.files.map((file) => `/uploads/${file.filename}`)
       : []
-    const images = uploaded.length > 0 ? uploaded : fields.image ? [fields.image] : []
-    const image = images[0] || PLACEHOLDER_IMAGE
+    const isVideoPath = (p) => /\.(mp4|webm|mov|ogg|mkv)$/i.test(p)
+    const firstPhoto = images.find((item) => !isVideoPath(item))
+    const image = firstPhoto || images[0] || PLACEHOLDER_IMAGE
 
     const sku = await uniqueSku(fields.sku)
 
@@ -507,5 +575,121 @@ export const createAdminProduct = async (req, res) => {
     }
     console.error('Create admin product error:', error)
     return res.status(500).json({ message: error.message || 'Failed to create product.' })
+  }
+}
+
+export const updateAdminProduct = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found.' })
+    }
+
+    const {
+      name,
+      sku,
+      category,
+      brand,
+      supplier,
+      client,
+      description,
+      price,
+      quantity,
+      commission,
+      barcode,
+      fulfillBy,
+      location,
+      status,
+      weight,
+      weightUnit,
+      length,
+      width,
+      height,
+      dimensionUnit,
+      existingImages,
+    } = req.body
+
+    if (name !== undefined) product.name = String(name).trim()
+    if (category !== undefined) {
+      const categoryName = await resolveCategoryName(category)
+      product.category = categoryName || category
+    }
+    if (sku !== undefined && sku.trim().toUpperCase() !== product.sku) {
+      product.sku = await uniqueSku(sku, product._id)
+    }
+    if (brand !== undefined) product.brand = String(brand).trim()
+    const chosenSupplier = supplier || client
+    if (chosenSupplier && mongoose.Types.ObjectId.isValid(chosenSupplier)) {
+      product.supplier = chosenSupplier
+    }
+    if (description !== undefined) product.description = String(description).trim()
+    if (price !== undefined && price !== '') {
+      const p = Number(price)
+      if (!Number.isNaN(p) && p > 0) {
+        product.price = p
+      }
+    }
+    if (quantity !== undefined && quantity !== '') {
+      const q = Number(quantity)
+      if (!Number.isNaN(q) && q >= 0) {
+        product.quantity = q
+      }
+    }
+    if (commission !== undefined && commission !== '') {
+      const c = Number(commission)
+      if (!Number.isNaN(c) && c >= 0) {
+        product.commission = c
+      }
+    }
+    if (barcode !== undefined) product.barcode = String(barcode).trim()
+    if (fulfillBy !== undefined) product.fulfillBy = fulfillBy
+    if (location !== undefined) product.location = String(location).trim()
+    if (status !== undefined) product.status = status
+    if (weight !== undefined) product.weight = String(weight).trim()
+    if (weightUnit !== undefined) product.weightUnit = String(weightUnit).trim()
+    if (length !== undefined) product.length = String(length).trim()
+    if (width !== undefined) product.width = String(width).trim()
+    if (height !== undefined) product.height = String(height).trim()
+    if (dimensionUnit !== undefined) product.dimensionUnit = String(dimensionUnit).trim()
+
+    // Handle photo updates
+    const uploaded = Array.isArray(req.files)
+      ? req.files.map((file) => `/uploads/${file.filename}`)
+      : []
+
+    let updatedImages = product.images || []
+    if (existingImages) {
+      try {
+        const parsed = typeof existingImages === 'string' ? JSON.parse(existingImages) : existingImages
+        if (Array.isArray(parsed)) {
+          updatedImages = parsed
+        }
+      } catch {
+        // keep as is
+      }
+    }
+    if (uploaded.length > 0) {
+      updatedImages = [...updatedImages, ...uploaded]
+    }
+    if (updatedImages.length > 0) {
+      product.images = updatedImages
+      product.image = updatedImages[0]
+    }
+
+    await product.save()
+    await product.populate('supplier', 'fullName email clientId')
+
+    return res.json({
+      message: 'Product updated successfully.',
+      product: product.toSafeObject(),
+    })
+  } catch (error) {
+    if (error.status === 400) {
+      return res.status(400).json({ message: error.message })
+    }
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'This SKU is already in use.' })
+    }
+    return res.status(500).json({ message: error.message || 'Failed to update product.' })
   }
 }

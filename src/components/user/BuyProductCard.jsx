@@ -80,6 +80,20 @@ function BuyProductCard({ product }) {
             {product.name}
           </h3>
 
+          {/* Vendor line */}
+          <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-500 truncate">
+            <Store className="h-3 w-3 shrink-0 text-slate-400" />
+            <span className="truncate">
+              Vendor:{' '}
+              <strong className="font-semibold text-slate-700">
+                {product.vendorName ||
+                  product.supplierBusinessName ||
+                  (product.supplier && product.supplier !== '—' ? product.supplier : '') ||
+                  'Verified Vendor'}
+              </strong>
+            </span>
+          </p>
+
           <div className="mt-2 flex items-center justify-between">
             <p className="text-lg font-black text-slate-900">
               ${Number(product.price || 0).toFixed(2)}

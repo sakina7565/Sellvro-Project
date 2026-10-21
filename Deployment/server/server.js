@@ -22,13 +22,12 @@ import { UPLOADS_DIR } from './middleware/upload.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const PASSENGER_PORT = process.env.PORT
+// ── Load .env FIRST — must happen before any process.env reads ──────────────────────
 dotenv.config({ path: path.join(__dirname, '..', '.env') })
-dotenv.config()
+dotenv.config() // fallback: load from process.cwd()/.env
 
 const app = express()
-// Prioritize Passenger's assigned port/socket if present
-const PORT = PASSENGER_PORT || process.env.PORT || 5000
+const PORT = process.env.PORT || 5000
 app.set('trust proxy', 1)
 
 let dbStatus = 'connecting'
@@ -102,7 +101,8 @@ if (distPath) {
   app.use(express.static(distPath))
 
   // SPA fallback for all frontend client-side routes (React Router)
-  app.get('*', (req, res, next) => {
+  // Note: Express 5 requires named wildcards — bare `*` is not supported
+  app.get('/{*path}', (req, res, next) => {
     if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
       return next()
     }
@@ -147,11 +147,14 @@ To fix:
     }
   })
 
-// If run directly as a standalone script (e.g. `node server/server.js`), listen on PORT
-const isDirectRun = Boolean(process.argv[1] && process.argv[1].endsWith('server.js'))
+// ── Start listening ──────────────────────────────────────────────────────────────
+// When run directly (e.g. `node server/server.js`) we bind to PORT ourselves.
+// When loaded via `import()` from app.js/app.cjs, app.js creates the HTTP server.
+const argv1 = process.argv[1] || ''
+const isDirectRun = argv1.endsWith('server.js') || argv1.endsWith('server/server.js')
 if (isDirectRun) {
   app.listen(PORT, () => {
-    console.log(`Server running directly on port ${PORT}`)
+    console.log(`[Sellvro] Server listening on port ${PORT} (direct run)`)
   })
 }
 

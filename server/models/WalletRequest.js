@@ -7,10 +7,44 @@ const walletRequestSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    // The net amount in USD that is credited to user wallet
     amount: {
       type: Number,
       required: [true, 'Amount is required'],
       min: 0.01,
+    },
+    // The currency selected by user for deposit (e.g., 'USD', 'PKR', 'AED', 'EUR')
+    depositCurrency: {
+      type: String,
+      default: 'USD',
+      trim: true,
+      uppercase: true,
+    },
+    // The original amount in the selected deposit currency
+    depositAmount: {
+      type: Number,
+      default: null,
+      min: 0.01,
+    },
+    // Exchange rate to USD (how many units of depositCurrency equal 1 USD)
+    exchangeRate: {
+      type: Number,
+      default: 1,
+    },
+    // Gross amount in USD before conversion fee deduction
+    grossAmount: {
+      type: Number,
+      default: null,
+    },
+    // Conversion fee percentage applied (e.g., 2.5 for 2.5%)
+    conversionFeeRate: {
+      type: Number,
+      default: 0,
+    },
+    // Conversion fee amount in USD deducted from gross amount
+    conversionFee: {
+      type: Number,
+      default: 0,
     },
     bankTid: {
       type: String,
@@ -36,11 +70,14 @@ const walletRequestSchema = new mongoose.Schema(
   { timestamps: true },
 )
 
-walletRequestSchema.methods.toSafeObject = function toSafeObject(businessName = 'No Business') {
+walletRequestSchema.methods.toSafeObject = function toSafeObject(businessName = 'No Business', profile = null) {
   const userDoc = this.user
   const userName =
     userDoc && typeof userDoc === 'object' && userDoc.fullName ? userDoc.fullName : '—'
   const email = userDoc && typeof userDoc === 'object' ? userDoc.email || '' : ''
+  const role = userDoc && typeof userDoc === 'object' ? userDoc.role || 'user' : 'user'
+  const walletBalance = userDoc && typeof userDoc === 'object' ? userDoc.walletBalance ?? 0 : 0
+  const userStatus = userDoc && typeof userDoc === 'object' ? userDoc.status || 'approved' : 'approved'
 
   return {
     id: this._id.toString(),
@@ -48,7 +85,20 @@ walletRequestSchema.methods.toSafeObject = function toSafeObject(businessName = 
     user: userName,
     business: businessName || 'No Business',
     email,
-    amount: this.amount,
+    role,
+    walletBalance,
+    userStatus,
+    phone: profile?.businessPhone || '—',
+    businessAddress: profile?.businessAddress || '',
+    city: profile?.city || '',
+    country: profile?.country || 'Pakistan',
+    amount: this.amount, // Net USD amount credited to wallet
+    depositCurrency: this.depositCurrency || 'USD',
+    depositAmount: this.depositAmount != null ? this.depositAmount : this.amount,
+    exchangeRate: this.exchangeRate || 1,
+    grossAmount: this.grossAmount != null ? this.grossAmount : this.amount,
+    conversionFeeRate: this.conversionFeeRate || 0,
+    conversionFee: this.conversionFee || 0,
     bankTid: this.bankTid,
     receiptImage: this.receiptImage,
     status: this.status,
@@ -65,6 +115,7 @@ walletRequestSchema.methods.toSafeObject = function toSafeObject(businessName = 
         })
       : '—',
     createdAt: this.createdAt,
+    updatedAt: this.updatedAt,
   }
 }
 

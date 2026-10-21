@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import Order from '../models/Order.js'
 import Product from '../models/Product.js'
 import User from '../models/User.js'
+import { createNotification } from '../utils/notifications.js'
 
 function generateOrderNo() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -125,6 +126,33 @@ export const createOrder = async (req, res) => {
 
     await buyer.save()
     await product.save()
+
+    // Dispatch notifications to buyer, supplier and admin
+    createNotification({
+      recipient: buyer._id,
+      targetRole: 'user',
+      type: 'order',
+      title: `Order ${orderNo} Placed`,
+      message: `Your order for ${quantity}x ${product.name} ($${total.toFixed(2)}) has been placed.`,
+      link: '/user/orders',
+    })
+
+    createNotification({
+      recipient: product.supplier,
+      targetRole: 'supplier',
+      type: 'order',
+      title: `New Order Received (${orderNo})`,
+      message: `A new order has been placed for ${quantity}x ${product.name} ($${total.toFixed(2)}).`,
+      link: '/supplier/orders',
+    })
+
+    createNotification({
+      targetRole: 'admin',
+      type: 'order',
+      title: `Order Placed (#${orderNo})`,
+      message: `${buyer.fullName || 'User'} placed an order for ${product.name} totaling $${total.toFixed(2)}.`,
+      link: '/admin/orders',
+    })
 
     const populated = await populateOrder(Order.findById(order._id))
     return res.status(201).json({

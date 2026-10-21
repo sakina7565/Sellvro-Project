@@ -11,7 +11,8 @@ export const ADMIN_DASHBOARD_MODULES = [
     links: [
       { label: 'All Inventory', to: '/admin/products' },
       { label: 'Add Product', to: '/admin/product/create' },
-      { label: 'SKU Reporting', to: '/admin/inventory/sku-reporting' },
+      { label: 'SKU Reporting', to: '/admin/products/sku-report' },
+      { label: 'Supplier Store & SKUs', to: '/admin/suppliers/sku-lookup' },
       { label: 'My Reporting', to: '/admin/inventory/my-reporting' },
     ],
     featured: true,

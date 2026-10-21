@@ -42,11 +42,15 @@ const productSchema = new mongoose.Schema(
 
 productSchema.methods.toSafeObject = function toSafeObject() {
   const supplierDoc = this.supplier
-  const isSupplierObj = supplierDoc && typeof supplierDoc === 'object'
+  const isSupplierObj =
+    supplierDoc &&
+    typeof supplierDoc === 'object' &&
+    !(supplierDoc instanceof mongoose.Types.ObjectId)
   const supplierName = isSupplierObj && supplierDoc.fullName ? supplierDoc.fullName : undefined
   const supplierEmail = isSupplierObj && supplierDoc.email ? supplierDoc.email : undefined
   const supplierPhone = isSupplierObj && supplierDoc.phone ? supplierDoc.phone : undefined
   const supplierBusinessName = isSupplierObj && supplierDoc.businessName ? supplierDoc.businessName : undefined
+  const bestVendorName = supplierBusinessName || supplierName || '—'
 
   return {
     id: this._id.toString(),
@@ -72,7 +76,9 @@ productSchema.methods.toSafeObject = function toSafeObject() {
     image: this.image,
     images: this.images || [],
     supplierId: supplierDoc?._id?.toString?.() || supplierDoc?.toString?.() || '',
-    supplier: supplierName || '—',
+    supplierClientId: isSupplierObj && (supplierDoc.clientId || supplierDoc.supplierCode) ? (supplierDoc.clientId || supplierDoc.supplierCode) : '',
+    supplier: supplierName || bestVendorName,
+    vendorName: bestVendorName,
     supplierEmail: supplierEmail || '',
     supplierPhone: supplierPhone || '',
     supplierBusinessName: supplierBusinessName || '',

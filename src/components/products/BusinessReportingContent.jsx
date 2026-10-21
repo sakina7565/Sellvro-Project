@@ -223,6 +223,7 @@ export default function BusinessReportingContent({ panel = 'admin' }) {
   const [displayChart, setDisplayChart] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [chartPage, setChartPage] = useState(1) // 1 or 2 for carousel paddle
+  const [orderSummaryPage, setOrderSummaryPage] = useState(1)
   const [activeMetricCard, setActiveMetricCard] = useState('orders')
 
   // Chart line visibility toggles
@@ -352,6 +353,10 @@ export default function BusinessReportingContent({ panel = 'admin' }) {
           const past30 = new Date(now)
           past30.setDate(past30.getDate() - 30)
           if (orderDate < past30) return false
+        } else if (dateRangeFilter === 'annual') {
+          const pastYear = new Date(now)
+          pastYear.setFullYear(pastYear.getFullYear() - 1)
+          if (orderDate < pastYear) return false
         } else if (dateRangeFilter === 'this_month') {
           if (
             orderDate.getMonth() !== now.getMonth() ||
@@ -453,6 +458,46 @@ export default function BusinessReportingContent({ panel = 'admin' }) {
       profitMargin: grossSales > 0 ? ((netProfit / grossSales) * 100).toFixed(1) : '0.0',
     }
   }, [filteredOrders, productMap])
+
+  // Dynamic Lifecycle metrics for Order Report (Pending, Out for Delivery/In Transit, Delivered, Returned/Disputes, Failed/Cancelled)
+  const orderLifecycleMetrics = useMemo(() => {
+    const total = filteredOrders.length
+    let pending = 0
+    let inTransit = 0
+    let delivered = 0
+    let returned = 0
+    let cancelled = 0
+
+    filteredOrders.forEach((o) => {
+      const s = String(o.statusLabel || o.status || '').toLowerCase()
+      if (s === 'cancelled' || s === 'failed' || s === 'rejected') {
+        cancelled++
+      } else if (s.includes('return') || s.includes('dispute')) {
+        returned++
+      } else if (s === 'delivered' || s === 'completed' || s === 'success') {
+        delivered++
+      } else if (s.includes('process') || s.includes('ship') || s.includes('transit') || s.includes('delivery')) {
+        inTransit++
+      } else {
+        // 'placed', 'pending'
+        pending++
+      }
+    })
+
+    return {
+      total,
+      pending,
+      inTransit,
+      delivered,
+      returned,
+      cancelled,
+      pendingRate: total > 0 ? ((pending / total) * 100).toFixed(1) : '0.0',
+      inTransitRate: total > 0 ? ((inTransit / total) * 100).toFixed(1) : '0.0',
+      deliveredRate: total > 0 ? ((delivered / total) * 100).toFixed(1) : '0.0',
+      returnRate: total > 0 ? ((returned / total) * 100).toFixed(1) : '0.0',
+      cancelRate: total > 0 ? ((cancelled / total) * 100).toFixed(1) : '0.0',
+    }
+  }, [filteredOrders])
 
   // Real Dynamic Timeline Points for Chart (Converted based on currency)
   const realChartPoints = useMemo(() => {
@@ -1144,18 +1189,23 @@ export default function BusinessReportingContent({ panel = 'admin' }) {
                   </span>
                   <span className="text-xs text-slate-400">|</span>
                   <div className="inline-flex rounded border border-slate-200 bg-white">
-                    {['last_7_days', 'last_15_days', 'last_30_days', 'this_month'].map((key) => (
+                    {[
+                      { id: 'last_7_days', label: 'Last 7 Days' },
+                      { id: 'last_15_days', label: 'Last 15 Days' },
+                      { id: 'last_30_days', label: 'Last 30 Days' },
+                      { id: 'annual', label: 'Annual' },
+                    ].map(({ id, label }) => (
                       <button
-                        key={key}
+                        key={id}
                         type="button"
-                        onClick={() => setDateRangeFilter(key)}
-                        className={`px-2.5 py-1 text-xs font-medium border-r last:border-0 border-slate-200 capitalize ${
-                          dateRangeFilter === key
+                        onClick={() => setDateRangeFilter(id)}
+                        className={`px-2.5 py-1 text-xs font-medium border-r last:border-0 border-slate-200 ${
+                          dateRangeFilter === id
                             ? 'border-[#5932ea] text-[#5932ea] font-bold bg-[#ede7f6]'
                             : 'text-slate-600 hover:bg-slate-50'
                         }`}
                       >
-                        {key.replace(/_/g, ' ')}
+                        {label}
                       </button>
                     ))}
                   </div>
@@ -1543,18 +1593,24 @@ export default function BusinessReportingContent({ panel = 'admin' }) {
                 <div className="flex items-center gap-2">
                   {/* Quick range pills */}
                   <div className="inline-flex rounded border border-slate-200 bg-white">
-                    {['yesterday', 'last_7_days', 'last_15_days', 'last_30_days'].map((key) => (
+                    {[
+                      { id: 'yesterday', label: 'Yesterday' },
+                      { id: 'last_7_days', label: 'Last 7 Days' },
+                      { id: 'last_15_days', label: 'Last 15 Days' },
+                      { id: 'last_30_days', label: 'Last 30 Days' },
+                      { id: 'annual', label: 'Annual' },
+                    ].map(({ id, label }) => (
                       <button
-                        key={key}
+                        key={id}
                         type="button"
-                        onClick={() => setDateRangeFilter(key)}
-                        className={`px-3 py-1 text-xs font-medium border-r last:border-0 border-slate-200 capitalize ${
-                          dateRangeFilter === key
+                        onClick={() => setDateRangeFilter(id)}
+                        className={`px-3 py-1 text-xs font-medium border-r last:border-0 border-slate-200 ${
+                          dateRangeFilter === id
                             ? 'border-[#5932ea] text-[#5932ea] font-bold bg-[#ede7f6]'
                             : 'text-slate-600 hover:bg-slate-50'
                         }`}
                       >
-                        {key.replace(/_/g, ' ')}
+                        {label}
                       </button>
                     ))}
                   </div>
@@ -1571,85 +1627,168 @@ export default function BusinessReportingContent({ panel = 'admin' }) {
                 </div>
               </div>
 
-              {/* Summary 5 Cards Carousel */}
+              {/* Summary Lifecycle Status Cards Carousel */}
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  className="h-7 w-7 rounded-full bg-[#8c9ba5] text-white flex items-center justify-center hover:bg-slate-500 shrink-0 shadow-xs"
+                  onClick={() => setOrderSummaryPage((p) => (p === 1 ? 2 : 1))}
+                  className="h-7 w-7 rounded-full bg-[#8c9ba5] text-white flex items-center justify-center hover:bg-slate-500 shrink-0 shadow-xs cursor-pointer"
+                  title="Scroll Cards"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 flex-1">
-                  <div className="bg-white rounded border-t-[3px] border-[#818cf8] border-x border-b border-slate-200 p-3 shadow-xs">
-                    <div className="flex items-center justify-between text-slate-500 text-xs">
-                      <span>Reconciliation Sales</span>
-                      <HelpCircle className="h-3.5 w-3.5 text-slate-300" />
+                {orderSummaryPage === 1 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 flex-1">
+                    {/* 1. Total Orders */}
+                    <div className="bg-white rounded border-t-[3px] border-[#818cf8] border-x border-b border-slate-200 p-3 shadow-xs">
+                      <div className="flex items-center justify-between text-slate-500 text-xs">
+                        <span>Total Orders</span>
+                        <HelpCircle className="h-3.5 w-3.5 text-slate-300" />
+                      </div>
+                      <div className="mt-2 text-xl font-bold text-slate-900">
+                        {formatInt(orderLifecycleMetrics.total)}
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-[#818cf8]">
+                        100% In Period
+                      </div>
                     </div>
-                    <div className="mt-2 text-lg font-bold text-slate-900 truncate">
-                      {formatWithCurrency(realMetrics.reconciliationSales, currency)}
-                    </div>
-                    <div className="mt-1 text-xs font-semibold text-[#ef4444] flex items-center gap-1">
-                      <span>▼</span> 84.01 %
-                    </div>
-                  </div>
 
-                  <div className="bg-white rounded border-t-[3px] border-[#2dd4bf] border-x border-b border-slate-200 p-3 shadow-xs">
-                    <div className="flex items-center justify-between text-slate-500 text-xs">
-                      <span>Total Orders</span>
-                      <HelpCircle className="h-3.5 w-3.5 text-slate-300" />
+                    {/* 2. Pending Orders */}
+                    <div className="bg-white rounded border-t-[3px] border-[#f59e0b] border-x border-b border-slate-200 p-3 shadow-xs">
+                      <div className="flex items-center justify-between text-slate-500 text-xs">
+                        <span>Pending Orders</span>
+                        <HelpCircle className="h-3.5 w-3.5 text-slate-300" />
+                      </div>
+                      <div className="mt-2 text-xl font-bold text-amber-600">
+                        {formatInt(orderLifecycleMetrics.pending)}
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-amber-600">
+                        {orderLifecycleMetrics.pendingRate}% Awaiting Dispatch
+                      </div>
                     </div>
-                    <div className="mt-2 text-xl font-bold text-slate-900">
-                      {formatInt(realMetrics.totalOrders)}
-                    </div>
-                    <div className="mt-1 text-xs font-semibold text-[#10b981] flex items-center gap-1">
-                      <span>▲</span> 39.18 %
-                    </div>
-                  </div>
 
-                  <div className="bg-white rounded border-t-[3px] border-[#fb923c] border-x border-b border-slate-200 p-3 shadow-xs">
-                    <div className="flex items-center justify-between text-slate-500 text-xs">
-                      <span>Sales</span>
-                      <HelpCircle className="h-3.5 w-3.5 text-slate-300" />
+                    {/* 3. Out for Delivery / In Transit */}
+                    <div className="bg-white rounded border-t-[3px] border-[#0284c7] border-x border-b border-slate-200 p-3 shadow-xs">
+                      <div className="flex items-center justify-between text-slate-500 text-xs">
+                        <span>Out for Delivery</span>
+                        <HelpCircle className="h-3.5 w-3.5 text-slate-300" />
+                      </div>
+                      <div className="mt-2 text-xl font-bold text-sky-600">
+                        {formatInt(orderLifecycleMetrics.inTransit)}
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-sky-600">
+                        {orderLifecycleMetrics.inTransitRate}% In Transit
+                      </div>
                     </div>
-                    <div className="mt-2 text-lg font-bold text-slate-900 truncate">
-                      {formatWithCurrency(realMetrics.sales, currency)}
-                    </div>
-                    <div className="mt-1 text-xs font-semibold text-[#ef4444] flex items-center gap-1">
-                      <span>▼</span> 55.67 %
-                    </div>
-                  </div>
 
-                  <div className="bg-white rounded border-t-[3px] border-[#38bdf8] border-x border-b border-slate-200 p-3 shadow-xs">
-                    <div className="flex items-center justify-between text-slate-500 text-xs">
-                      <span>Gross Revenue</span>
-                      <HelpCircle className="h-3.5 w-3.5 text-slate-300" />
+                    {/* 4. Delivered / Completed */}
+                    <div className="bg-white rounded border-t-[3px] border-[#10b981] border-x border-b border-slate-200 p-3 shadow-xs">
+                      <div className="flex items-center justify-between text-slate-500 text-xs">
+                        <span>Delivered</span>
+                        <HelpCircle className="h-3.5 w-3.5 text-slate-300" />
+                      </div>
+                      <div className="mt-2 text-xl font-bold text-emerald-600">
+                        {formatInt(orderLifecycleMetrics.delivered)}
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-emerald-600">
+                        {orderLifecycleMetrics.deliveredRate}% Fulfilled
+                      </div>
                     </div>
-                    <div className="mt-2 text-lg font-bold text-slate-900 truncate">
-                      {formatWithCurrency(realMetrics.grossRevenue, currency)}
-                    </div>
-                    <div className="mt-1 text-xs font-semibold text-[#ef4444] flex items-center gap-1">
-                      <span>▼</span> 84.07 %
-                    </div>
-                  </div>
 
-                  <div className="bg-white rounded border-t-[3px] border-[#f87171] border-x border-b border-slate-200 p-3 shadow-xs">
-                    <div className="flex items-center justify-between text-slate-500 text-xs">
-                      <span>{panel === 'supplier' ? 'Net Payout' : 'Seller Subsidy Price'}</span>
-                      <HelpCircle className="h-3.5 w-3.5 text-slate-300" />
-                    </div>
-                    <div className="mt-2 text-lg font-bold text-slate-900 truncate">
-                      {formatWithCurrency(panel === 'supplier' ? realMetrics.netPayout : realMetrics.sellerSubsidy, currency)}
-                    </div>
-                    <div className="mt-1 text-xs font-semibold text-[#ef4444] flex items-center gap-1">
-                      <span>▼</span> 84.07 %
+                    {/* 5. Returned / Disputes */}
+                    <div className="bg-white rounded border-t-[3px] border-[#8b5cf6] border-x border-b border-slate-200 p-3 shadow-xs">
+                      <div className="flex items-center justify-between text-slate-500 text-xs">
+                        <span>Returned / Disputes</span>
+                        <HelpCircle className="h-3.5 w-3.5 text-slate-300" />
+                      </div>
+                      <div className="mt-2 text-xl font-bold text-purple-600">
+                        {formatInt(orderLifecycleMetrics.returned)}
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-purple-600">
+                        {orderLifecycleMetrics.returnRate}% Returns
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 flex-1">
+                    {/* Set 2 Card 1: Total Orders */}
+                    <div className="bg-white rounded border-t-[3px] border-[#818cf8] border-x border-b border-slate-200 p-3 shadow-xs">
+                      <div className="flex items-center justify-between text-slate-500 text-xs">
+                        <span>Total Orders</span>
+                        <HelpCircle className="h-3.5 w-3.5 text-slate-300" />
+                      </div>
+                      <div className="mt-2 text-xl font-bold text-slate-900">
+                        {formatInt(orderLifecycleMetrics.total)}
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-[#818cf8]">
+                        100% In Period
+                      </div>
+                    </div>
+
+                    {/* Set 2 Card 2: Delivered */}
+                    <div className="bg-white rounded border-t-[3px] border-[#10b981] border-x border-b border-slate-200 p-3 shadow-xs">
+                      <div className="flex items-center justify-between text-slate-500 text-xs">
+                        <span>Delivered</span>
+                        <HelpCircle className="h-3.5 w-3.5 text-slate-300" />
+                      </div>
+                      <div className="mt-2 text-xl font-bold text-emerald-600">
+                        {formatInt(orderLifecycleMetrics.delivered)}
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-emerald-600">
+                        {orderLifecycleMetrics.deliveredRate}% Fulfilled
+                      </div>
+                    </div>
+
+                    {/* Set 2 Card 3: Returned / Disputes */}
+                    <div className="bg-white rounded border-t-[3px] border-[#8b5cf6] border-x border-b border-slate-200 p-3 shadow-xs">
+                      <div className="flex items-center justify-between text-slate-500 text-xs">
+                        <span>Returned / Disputes</span>
+                        <HelpCircle className="h-3.5 w-3.5 text-slate-300" />
+                      </div>
+                      <div className="mt-2 text-xl font-bold text-purple-600">
+                        {formatInt(orderLifecycleMetrics.returned)}
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-purple-600">
+                        {orderLifecycleMetrics.returnRate}% Returns
+                      </div>
+                    </div>
+
+                    {/* Set 2 Card 4: Failed / Cancelled */}
+                    <div className="bg-white rounded border-t-[3px] border-[#ef4444] border-x border-b border-slate-200 p-3 shadow-xs">
+                      <div className="flex items-center justify-between text-slate-500 text-xs">
+                        <span>Failed / Cancelled</span>
+                        <HelpCircle className="h-3.5 w-3.5 text-slate-300" />
+                      </div>
+                      <div className="mt-2 text-xl font-bold text-rose-600">
+                        {formatInt(orderLifecycleMetrics.cancelled)}
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-rose-600">
+                        {orderLifecycleMetrics.cancelRate}% Defect / Cancel
+                      </div>
+                    </div>
+
+                    {/* Set 2 Card 5: Total Sales Value */}
+                    <div className="bg-white rounded border-t-[3px] border-[#2dd4bf] border-x border-b border-slate-200 p-3 shadow-xs">
+                      <div className="flex items-center justify-between text-slate-500 text-xs">
+                        <span>Period Sales Value</span>
+                        <HelpCircle className="h-3.5 w-3.5 text-slate-300" />
+                      </div>
+                      <div className="mt-2 text-lg font-bold text-slate-900 truncate">
+                        {formatWithCurrency(realMetrics.sales, currency)}
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-teal-600">
+                        Confirmed Value
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <button
                   type="button"
-                  className="h-7 w-7 rounded-full bg-[#8c9ba5] text-white flex items-center justify-center hover:bg-slate-500 shrink-0 shadow-xs"
+                  onClick={() => setOrderSummaryPage((p) => (p === 1 ? 2 : 1))}
+                  className="h-7 w-7 rounded-full bg-[#8c9ba5] text-white flex items-center justify-center hover:bg-slate-500 shrink-0 shadow-xs cursor-pointer"
+                  title="Scroll Cards"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>

@@ -5,6 +5,9 @@ import {
   listApprovedProducts,
   updateMyProduct,
   getProductById,
+  getMyWmsSkus,
+  getWmsProductBySku,
+  attachWmsProductMedia,
 } from '../controllers/productController.js'
 import { protect, authorize, requireApproved } from '../middleware/auth.js'
 import { productUpload } from '../middleware/upload.js'
@@ -19,6 +22,11 @@ function handlePhotos(req, res, next) {
     return next()
   })
 }
+
+// Specific WMS routes (MUST be declared before /:id)
+router.get('/wms/my-skus', protect, authorize('supplier'), requireApproved, getMyWmsSkus)
+router.get('/wms/lookup/:sku', protect, authorize('supplier', 'admin'), requireApproved, getWmsProductBySku)
+router.post('/wms/attach-media/:id', protect, authorize('supplier'), requireApproved, handlePhotos, attachWmsProductMedia)
 
 router.get('/', protect, authorize('user', 'admin'), listApprovedProducts)
 router.get('/mine', protect, authorize('supplier'), requireApproved, listMyProducts)

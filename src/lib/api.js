@@ -164,6 +164,18 @@ export const productApi = {
   mine: () => apiRequest('/products/mine'),
   marketplace: () => apiRequest('/products'),
   get: (id) => apiRequest(`/products/${id}`),
+  wmsSkus: () => apiRequest('/products/wms/my-skus'),
+  wmsLookup: (sku) => apiRequest(`/products/wms/lookup/${encodeURIComponent(sku)}`),
+  attachWmsMedia: (id, payload, files = []) => {
+    const formData = new FormData()
+    Object.entries(payload).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) formData.append(key, String(value))
+    })
+    files.forEach((file) => {
+      if (file) formData.append('photos', file)
+    })
+    return apiRequest(`/products/wms/attach-media/${id}`, { method: 'POST', formData })
+  },
 }
 
 export const categoryApi = {
@@ -174,18 +186,39 @@ export const categoryApi = {
 }
 
 export const orderApi = {
-  create: (payload) => apiRequest('/orders', { method: 'POST', body: payload }),
+  create: (payload, labelFile) => {
+    if (labelFile) {
+      const formData = new FormData()
+      Object.entries(payload).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          if (typeof value === 'object') {
+            formData.append(key, JSON.stringify(value))
+          } else {
+            formData.append(key, String(value))
+          }
+        }
+      })
+      formData.append('shippingLabel', labelFile)
+      return apiRequest('/orders', { method: 'POST', formData })
+    }
+    return apiRequest('/orders', { method: 'POST', body: payload })
+  },
   mine: () => apiRequest('/orders/mine'),
   supplier: () => apiRequest('/orders/supplier'),
   lookup: (ref) => apiRequest(`/orders/lookup?ref=${encodeURIComponent(ref)}`),
   updateStatus: (id, status) =>
     apiRequest(`/orders/${id}/status`, { method: 'PATCH', body: { status } }),
+  updateTracking: (id, payload) =>
+    apiRequest(`/orders/${id}/tracking`, { method: 'PATCH', body: payload }),
   dashboardStats: (period = 'all') =>
     apiRequest(`/orders/dashboard/stats?period=${encodeURIComponent(period)}`),
 }
 
 export const walletApi = {
   balance: () => apiRequest('/wallet/balance'),
+  currencies: () => apiRequest('/wallet/currencies'),
+  settings: () => apiRequest('/wallet/settings'),
+  marketplaceFee: () => apiRequest('/wallet/marketplace-fee'),
   myRequests: () => apiRequest('/wallet/requests/mine'),
   createRequest: (payload, receiptFile) => {
     const formData = new FormData()
@@ -222,6 +255,19 @@ export const adminApi = {
   reject: (id) => apiRequest(`/admin/accounts/${id}/reject`, { method: 'PATCH' }),
   products: () => apiRequest('/admin/products'),
   product: (id) => apiRequest(`/admin/products/${id}`),
+  updateProduct: (id, payload, files = []) => {
+    if (files && files.length > 0) {
+      const formData = new FormData()
+      Object.entries(payload).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) formData.append(key, String(value))
+      })
+      files.forEach((file) => {
+        if (file) formData.append('photos', file)
+      })
+      return apiRequest(`/admin/products/${id}`, { method: 'PATCH', formData })
+    }
+    return apiRequest(`/admin/products/${id}`, { method: 'PATCH', body: payload })
+  },
   updateProductCommission: (id, commission) =>
     apiRequest(`/admin/products/${id}/commission`, { method: 'PATCH', body: { commission } }),
   createProduct: (payload, files = []) => {
@@ -245,7 +291,12 @@ export const adminApi = {
     apiRequest(`/admin/categories/${id}`, { method: 'PATCH', body: payload }),
   deleteCategory: (id) => apiRequest(`/admin/categories/${id}`, { method: 'DELETE' }),
   orders: () => apiRequest('/admin/orders'),
+  updateOrderTracking: (id, payload) =>
+    apiRequest(`/admin/orders/${id}/tracking`, { method: 'PATCH', body: payload }),
   walletRequests: () => apiRequest('/admin/wallet-requests'),
+  walletSettings: () => apiRequest('/admin/wallet-settings'),
+  updateWalletSettings: (payload) =>
+    apiRequest('/admin/wallet-settings', { method: 'PATCH', body: payload }),
   approveWalletRequest: (id, body = {}) =>
     apiRequest(`/admin/wallet-requests/${id}/approve`, { method: 'PATCH', body }),
   rejectWalletRequest: (id, body = {}) =>
@@ -253,6 +304,13 @@ export const adminApi = {
   payouts: () => apiRequest('/admin/payouts'),
   processPayout: (supplierId) =>
     apiRequest(`/admin/payouts/${supplierId}/process`, { method: 'PATCH' }),
+  supplierFinances: () => apiRequest('/admin/finances/suppliers'),
+  supplierMonthlyHistory: (supplierId) =>
+    apiRequest(`/admin/finances/suppliers/${supplierId}/monthly`),
+  supplierMonthOrders: (supplierId, monthKey) =>
+    apiRequest(`/admin/finances/suppliers/${supplierId}/monthly/${monthKey}/orders`),
+  executeSupplierPayout: (supplierId, payload) =>
+    apiRequest(`/admin/finances/suppliers/${supplierId}/payout`, { method: 'POST', body: payload }),
   supplierDisputes: () => apiRequest('/admin/disputes/supplier'),
   userComplaints: () => apiRequest('/admin/disputes/user'),
   disputeUnreadCount: () => apiRequest('/admin/disputes/unread-count'),
@@ -282,7 +340,7 @@ export const adminApi = {
     apiRequest('/admin/notifications/read-all', { method: 'PATCH' }),
   accounts: (params = {}) => {
     const clean = Object.fromEntries(
-      Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== ''),
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''),
     )
     const query = new URLSearchParams(clean).toString()
     return apiRequest(`/admin/accounts${query ? `?${query}` : ''}`)

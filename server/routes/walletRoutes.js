@@ -1,6 +1,10 @@
 import { Router } from 'express'
 import {
   getBalance,
+  getCurrencies,
+  getWalletSettings,
+  updateWalletSettings,
+  getMarketplaceFee,
   createWalletRequest,
   listMyWalletRequests,
   listAllWalletRequests,
@@ -21,6 +25,10 @@ function handleReceipt(req, res, next) {
   })
 }
 
+router.get('/currencies', getCurrencies)
+router.get('/marketplace-fee', protect, getMarketplaceFee)
+router.get('/settings', protect, authorize('user', 'supplier', 'admin'), getWalletSettings)
+router.patch('/settings', protect, authorize('admin'), updateWalletSettings)
 router.get('/balance', protect, authorize('user', 'admin'), getBalance)
 router.get('/requests/mine', protect, authorize('user'), requireApproved, listMyWalletRequests)
 router.post(

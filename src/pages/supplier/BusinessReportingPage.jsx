@@ -1,10 +1,10 @@
 import SupplierLayout from '../../components/layout/SupplierLayout.jsx'
-import BusinessReportingContent from '../../components/products/BusinessReportingContent.jsx'
+import SupplierStoreReportingContent from '../../components/products/SupplierStoreReportingContent.jsx'
 
 function SupplierBusinessReportingPage() {
   return (
     <SupplierLayout>
-      <BusinessReportingContent panel="supplier" />
+      <SupplierStoreReportingContent />
     </SupplierLayout>
   )
 }

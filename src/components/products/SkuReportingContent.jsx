@@ -1,89 +1,36 @@
 import {
   AlertCircle,
-  AlertTriangle,
-  ArrowDownRight,
-  ArrowRight,
-  ArrowUpRight,
   BarChart3,
   Box,
-  Calendar,
   CheckCircle2,
   Clock,
-  Coins,
-  DollarSign,
-  Download,
-  Filter,
+  ExternalLink,
+  HelpCircle,
   Image as ImageIcon,
-  Layers,
   Package,
-  PlusCircle,
-  RefreshCw,
   RotateCcw,
   Search,
   ShieldAlert,
-  ShieldCheck,
-  ShoppingBag,
   ShoppingCart,
-  TrendingDown,
-  TrendingUp,
+  Store,
   Truck,
-  Undo2,
   User,
-  Wallet,
-  Zap,
+  Users,
 } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
-import PageHeader from '../admin/PageHeader.jsx'
-import Card from '../ui/Card.jsx'
-import Button from '../ui/Button.jsx'
 import Badge from '../ui/Badge.jsx'
 import { adminApi, disputeApi, getErrorMessage, mediaUrl, orderApi, productApi } from '../../lib/api.js'
-import { PRODUCT_STATUS_LABEL } from '../../lib/productStatus.js'
-import {
-  badgeToneForStatus,
-  formatMoney,
-  formatReportDate,
-  formatReportDateTime,
-  inDateRange,
-  statusLabel,
-} from '../../lib/reportUtils.js'
-
-const FILTER_INPUT =
-  'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 transition-all'
-
-const PANEL_CONFIG = {
-  admin: {
-    eyebrow: 'Admin Marketplace',
-    title: 'Marketplace SKU Performance & Financials',
-    subtitle: 'Comprehensive SKU analytics, sales velocity, WMS platform fees, returns, and profit margins across all marketplace products.',
-    primaryEntity: 'Supplier',
-  },
-  supplier: {
-    eyebrow: 'Supplier Portal',
-    title: 'My SKU Inventory & Payout Reporting',
-    subtitle: 'Track your product sales performance, WMS commission deductions, stock depletion runway, and net payouts.',
-    primaryEntity: 'Store',
-  },
-  user: {
-    eyebrow: 'Buyer Sourcing Portal',
-    title: 'My Purchased SKUs & Sourcing Intelligence',
-    subtitle: 'Track your purchase history, unit sourcing costs, fulfillment tracking, refund claims, and quick re-ordering.',
-    primaryEntity: 'Sourcing',
-  },
-}
+import { badgeToneForStatus, formatReportDate, inDateRange, statusLabel } from '../../lib/reportUtils.js'
 
 function extractArray(res, key = 'data') {
   if (!res) return []
@@ -99,16 +46,18 @@ function extractArray(res, key = 'data') {
 
 async function fetchPanelData(panel) {
   if (panel === 'admin') {
-    const [productsRes, ordersRes, supplierDisputesRes, userDisputesRes] = await Promise.all([
+    const [productsRes, ordersRes, supplierDisputesRes, userDisputesRes, accountsRes] = await Promise.all([
       adminApi.products().catch(() => ({ data: [] })),
       adminApi.orders().catch(() => ({ data: [] })),
       adminApi.supplierDisputes().catch(() => ({ data: [] })),
       adminApi.userComplaints().catch(() => ({ data: [] })),
+      adminApi.accounts({ role: 'supplier' }).catch(() => ({ data: [] })),
     ])
     return {
       products: extractArray(productsRes, 'products'),
       orders: extractArray(ordersRes, 'orders'),
       disputes: [...extractArray(supplierDisputesRes), ...extractArray(userDisputesRes)],
+      suppliers: extractArray(accountsRes, 'data'),
     }
   }
 
@@ -122,10 +71,10 @@ async function fetchPanelData(panel) {
       products: extractArray(productsRes, 'products'),
       orders: extractArray(ordersRes, 'orders'),
       disputes: extractArray(disputesRes, 'disputes'),
+      suppliers: [],
     }
   }
 
-  // User / Buyer panel
   const [productsRes, ordersRes, disputesRes] = await Promise.all([
     productApi.marketplace().catch(() => ({ data: [] })),
     orderApi.mine().catch(() => ({ data: [] })),
@@ -135,12 +84,31 @@ async function fetchPanelData(panel) {
     products: extractArray(productsRes, 'products'),
     orders: extractArray(ordersRes, 'orders'),
     disputes: extractArray(disputesRes, 'disputes'),
+    suppliers: [],
   }
 }
 
 /**
- * Match order to product
+ * Format deterministic client ID (e.g. WMS-PAK1034) or use explicit supplier clientId.
  */
+function getSupplierClientId(entity) {
+  if (!entity) return 'WMS-PAK1001'
+  if (entity.supplierClientId) return entity.supplierClientId
+  if (entity.clientId) return entity.clientId
+  if (entity.client) return entity.client
+  const idStr = String(entity.id || entity._id || entity.supplierId || '')
+  if (idStr.startsWith('WMS-')) return idStr
+  if (!idStr) return 'WMS-PAK1001'
+
+  let hash = 0
+  for (let i = 0; i < idStr.length; i++) {
+    hash = (hash << 5) - hash + idStr.charCodeAt(i)
+    hash |= 0
+  }
+  const num = 1000 + Math.abs(hash % 9000)
+  return `WMS-PAK${num}`
+}
+
 function isOrderForProduct(order, product) {
   if (!order || !product) return false
   const prodId = String(product.id || product._id || '').trim()
@@ -161,9 +129,6 @@ function isOrderForProduct(order, product) {
   )
 }
 
-/**
- * Match dispute to product
- */
 function isDisputeForProduct(dispute, product) {
   if (!dispute || !product) return false
   const prodId = String(product.id || product._id || '').trim()
@@ -185,211 +150,84 @@ function isDisputeForProduct(dispute, product) {
   )
 }
 
-/**
- * Calculate Sales Velocity & Inventory Runway
- */
-function calculateVelocityAndRunway(orders, currentStock) {
-  const validOrders = orders
-    .filter((o) => o.status !== 'cancelled' && o.createdAt)
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-
-  const totalOrders = validOrders.length
-  if (totalOrders === 0) {
-    return {
-      gapLabel: 'No orders yet',
-      subtext: '0 sales recorded',
-      unitsPerDay: 0,
-      daysOfStockLeft: currentStock > 0 ? 999 : 0,
-      runwayText: currentStock > 0 ? 'Stock Available' : 'Out of Stock',
-      runwayStatus: currentStock > 0 ? 'safe' : 'danger',
-    }
-  }
-
-  if (totalOrders === 1) {
-    const orderDate = new Date(validOrders[0].createdAt)
-    const daysAgo = Math.max(0, Math.floor((Date.now() - orderDate.getTime()) / (1000 * 60 * 60 * 24)))
-    const unitsPerDay = 1 / Math.max(1, daysAgo || 1)
-    const daysLeft = unitsPerDay > 0 ? Math.round(currentStock / unitsPerDay) : 999
-
-    return {
-      gapLabel: daysAgo === 0 ? 'Sold today' : `${daysAgo}d ago`,
-      subtext: '1 single order',
-      unitsPerDay: unitsPerDay.toFixed(1),
-      daysOfStockLeft: daysLeft,
-      runwayText: currentStock <= 10 ? 'Low Stock Warning' : `~${daysLeft} days left`,
-      runwayStatus: currentStock <= 10 ? 'warning' : 'safe',
-    }
-  }
-
-  const firstDate = new Date(validOrders[0].createdAt).getTime()
-  const lastDate = new Date(validOrders[totalOrders - 1].createdAt).getTime()
-  const totalDurationMs = Math.max(1000 * 60 * 60 * 24, lastDate - firstDate)
-  const totalDurationDays = totalDurationMs / (1000 * 60 * 60 * 24)
-
-  const avgGapHours = (totalDurationDays * 24) / (totalOrders - 1)
-  const avgGapDays = avgGapHours / 24
-
-  let gapLabel = ''
-  if (avgGapHours < 24) {
-    gapLabel = `Every ${avgGapHours.toFixed(1)} hrs`
-  } else {
-    gapLabel = `Every ${avgGapDays.toFixed(1)} days`
-  }
-
-  const totalUnits = validOrders.reduce((acc, o) => acc + (Number(o.quantity) || 1), 0)
-  const unitsPerDay = totalDurationDays > 0 ? totalUnits / totalDurationDays : totalUnits
-  const daysOfStockLeft = unitsPerDay > 0 ? Math.round(currentStock / unitsPerDay) : 999
-
-  let runwayStatus = 'safe'
-  let runwayText = `~${daysOfStockLeft} days of stock`
-
-  if (currentStock === 0) {
-    runwayStatus = 'danger'
-    runwayText = 'Out of Stock'
-  } else if (daysOfStockLeft <= 7 || currentStock <= 10) {
-    runwayStatus = 'warning'
-    runwayText = `⚠️ Restock Soon (~${daysOfStockLeft}d)`
-  }
-
-  return {
-    gapLabel,
-    subtext: `${totalOrders} orders (${unitsPerDay.toFixed(1)}/day)`,
-    unitsPerDay: unitsPerDay.toFixed(1),
-    daysOfStockLeft,
-    runwayText,
-    runwayStatus,
-  }
+function formatAddedDate(dateStr) {
+  if (!dateStr) return '15 Oct 2024'
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '15 Oct 2024'
+  const day = d.getDate()
+  const month = d.toLocaleString('en-US', { month: 'short' })
+  const year = d.getFullYear()
+  return `${day} ${month} ${year}`
 }
 
-/**
- * Filter orders & disputes by timeframe
- */
-function filterByTimeframe(items, timeframe, selectedMonth, selectedYear, fromDate, toDate) {
-  if (!Array.isArray(items)) return []
-
-  return items.filter((item) => {
-    const rawDate = item.createdAt || item.date
-    if (!rawDate) return timeframe === 'overall'
-
-    const d = new Date(rawDate)
-    if (Number.isNaN(d.getTime())) return false
-
-    if (timeframe === 'overall') return true
-
-    if (timeframe === 'monthly') {
-      if (!selectedMonth) return true
-      const [yearStr, monthStr] = selectedMonth.split('-')
-      return d.getFullYear() === parseInt(yearStr, 10) && d.getMonth() === parseInt(monthStr, 10) - 1
-    }
-
-    if (timeframe === 'annually') {
-      if (!selectedYear) return true
-      return d.getFullYear() === parseInt(selectedYear, 10)
-    }
-
-    if (timeframe === 'custom') {
-      return inDateRange(rawDate, fromDate, toDate)
-    }
-
-    return true
-  })
-}
-
-/**
- * Generate chart breakdown
- */
-function buildChartData(orders, product, timeframe, selectedYear, panel) {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+function generateLast6MonthsData(orders = []) {
+  const months = []
   const now = new Date()
-  const activeYear = timeframe === 'annually' && selectedYear ? parseInt(selectedYear, 10) : now.getFullYear()
-  const commissionRate = Number(product?.commission || 10)
-  const baseCost = Number(product?.price || 0)
 
-  if (timeframe === 'monthly') {
-    const weeks = [
-      { name: 'Week 1', sales: 0, wmsFee: 0, payout: 0, units: 0, delivered: 0 },
-      { name: 'Week 2', sales: 0, wmsFee: 0, payout: 0, units: 0, delivered: 0 },
-      { name: 'Week 3', sales: 0, wmsFee: 0, payout: 0, units: 0, delivered: 0 },
-      { name: 'Week 4', sales: 0, wmsFee: 0, payout: 0, units: 0, delivered: 0 },
-    ]
-
-    orders.forEach((o) => {
-      if (o.status === 'cancelled') return
-      const d = new Date(o.createdAt)
-      const weekIndex = Math.min(3, Math.floor((d.getDate() - 1) / 7))
-      const qty = Number(o.quantity) || 1
-      const total = Number(o.total) || qty * Number(o.unitPrice || baseCost)
-      const fee = Number(o.commission) || (commissionRate / 100) * total
-      const payout = Math.max(0, total - fee)
-
-      weeks[weekIndex].sales += total
-      weeks[weekIndex].wmsFee += fee
-      weeks[weekIndex].payout += payout
-      weeks[weekIndex].units += qty
-      if (o.status === 'placed' || o.status === 'delivered') weeks[weekIndex].delivered += qty
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const label = `${d.toLocaleString('en-US', { month: 'short' })} ${d.getFullYear()}`
+    months.push({
+      name: label,
+      month: d.getMonth(),
+      year: d.getFullYear(),
+      received: 0,
+      dispatched: 0,
     })
-
-    return weeks
   }
-
-  const monthlyBuckets = months.map((m, idx) => ({
-    name: m,
-    monthIdx: idx,
-    sales: 0,
-    wmsFee: 0,
-    payout: 0,
-    units: 0,
-    delivered: 0,
-  }))
 
   orders.forEach((o) => {
     if (o.status === 'cancelled') return
-    const d = new Date(o.createdAt)
-    if (timeframe === 'annually' && d.getFullYear() !== activeYear) return
+    const orderDate = new Date(o.createdAt || o.date)
+    if (Number.isNaN(orderDate.getTime())) return
+    const oMonth = orderDate.getMonth()
+    const oYear = orderDate.getFullYear()
 
-    const mIdx = d.getMonth()
-    if (mIdx >= 0 && mIdx < 12) {
+    const bucket = months.find((m) => m.month === oMonth && m.year === oYear)
+    if (bucket) {
       const qty = Number(o.quantity) || 1
-      const total = Number(o.total) || qty * Number(o.unitPrice || baseCost)
-      const fee = Number(o.commission) || (commissionRate / 100) * total
-      const payout = Math.max(0, total - fee)
-
-      monthlyBuckets[mIdx].sales += total
-      monthlyBuckets[mIdx].wmsFee += fee
-      monthlyBuckets[mIdx].payout += payout
-      monthlyBuckets[mIdx].units += qty
-      if (o.status === 'placed' || o.status === 'delivered') monthlyBuckets[mIdx].delivered += qty
+      bucket.dispatched += qty
     }
   })
 
-  return monthlyBuckets
+  return months
 }
 
-function SkuReportingContent({ panel = 'admin' }) {
-  const navigate = useNavigate()
+function SkuReportingContent({ panel = 'admin', defaultMode = 'sku' }) {
+  const [searchParams] = useSearchParams()
+  // Mode: 'sku' (single SKU product report) or 'supplier' (Supplier Store & SKU Lookup)
+  const [activeMode, setActiveMode] = useState(() => {
+    if (defaultMode === 'supplier') return 'supplier'
+    if (typeof window !== 'undefined' && window.location.pathname.includes('sku-lookup')) return 'supplier'
+    return 'sku'
+  })
+
+  // SKU Mode State
   const [skuQuery, setSkuQuery] = useState('')
-  const [timeframe, setTimeframe] = useState('overall')
-
-  const currentMonthStr = useMemo(() => {
-    const d = new Date()
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-  }, [])
-
-  const currentYearStr = useMemo(() => String(new Date().getFullYear()), [])
-
-  const [selectedMonth, setSelectedMonth] = useState(currentMonthStr)
-  const [selectedYear, setSelectedYear] = useState(currentYearStr)
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+  const [showSkuSuggestions, setShowSkuSuggestions] = useState(false)
+  const [searchError, setSearchError] = useState('')
+  const [selectedProduct, setSelectedProduct] = useState(null)
 
+  // Supplier Lookup Mode State
+  const [supplierQuery, setSupplierQuery] = useState('')
+  const [showSupplierSuggestions, setShowSupplierSuggestions] = useState(false)
+  const [selectedSupplier, setSelectedSupplier] = useState(null)
+  const [supplierSkuFilter, setSupplierSkuFilter] = useState('')
+  const [supplierError, setSupplierError] = useState('')
+  const [actionLoading, setActionLoading] = useState(false)
+
+  // Global Data
   const [products, setProducts] = useState([])
   const [allOrders, setAllOrders] = useState([])
   const [allDisputes, setAllDisputes] = useState([])
+  const [suppliers, setSuppliers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [selectedProduct, setSelectedProduct] = useState(null)
 
-  const config = PANEL_CONFIG[panel] || PANEL_CONFIG.admin
+  const skuDropdownRef = useRef(null)
+  const supplierDropdownRef = useRef(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -399,6 +237,7 @@ function SkuReportingContent({ panel = 'admin' }) {
       setProducts(data.products)
       setAllOrders(data.orders)
       setAllDisputes(data.disputes)
+      setSuppliers(data.suppliers || [])
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to load SKU reporting data.'))
     } finally {
@@ -410,223 +249,419 @@ function SkuReportingContent({ panel = 'admin' }) {
     loadData()
   }, [loadData])
 
-  const filteredOrders = useMemo(() => {
-    return filterByTimeframe(allOrders, timeframe, selectedMonth, selectedYear, fromDate, toDate)
-  }, [allOrders, timeframe, selectedMonth, selectedYear, fromDate, toDate])
-
-  const filteredDisputes = useMemo(() => {
-    return filterByTimeframe(allDisputes, timeframe, selectedMonth, selectedYear, fromDate, toDate)
-  }, [allDisputes, timeframe, selectedMonth, selectedYear, fromDate, toDate])
-
-  // Calculated Product Summary List
-  const productsSummary = useMemo(() => {
-    // If User panel, filter products to those they have purchased (or all available)
-    let baseList = products
-
-    return baseList.map((prod) => {
-      const prodOrders = filteredOrders.filter((o) => isOrderForProduct(o, prod) && o.status !== 'cancelled')
-      const prodDisputes = filteredDisputes.filter((d) => isDisputeForProduct(d, prod))
-
-      const baseCost = Number(prod.price || 0)
-      const commissionPercent = Number(prod.commission || 10)
-
-      const unitsSold = prodOrders.reduce((sum, o) => sum + (Number(o.quantity) || 1), 0)
-      const totalSales = prodOrders.reduce(
-        (sum, o) => sum + (Number(o.total) || (Number(o.quantity) || 1) * Number(o.unitPrice || baseCost)),
-        0,
-      )
-      const totalCost = unitsSold * baseCost
-
-      // Platform WMS Fee
-      const wmsFee = prodOrders.reduce((sum, o) => {
-        if (o.commission && Number(o.commission) > 0) return sum + Number(o.commission)
-        const orderTotal = Number(o.total) || (Number(o.quantity) || 1) * Number(o.unitPrice || baseCost)
-        return sum + (commissionPercent / 100) * orderTotal
-      }, 0)
-
-      // Net Payout (Supplier) / Net Margin
-      const netPayout = Math.max(0, totalSales - wmsFee)
-      const returnsCount = prodDisputes.length
-      const returnRate = unitsSold > 0 ? ((returnsCount / unitsSold) * 100).toFixed(1) : '0'
-
-      // Delivered / In-transit counts for buyer
-      const deliveredUnits = prodOrders
-        .filter((o) => o.status === 'placed' || o.status === 'delivered')
-        .reduce((sum, o) => sum + (Number(o.quantity) || 1), 0)
-      const inTransitUnits = prodOrders
-        .filter((o) => o.status === 'in_process' || o.status === 'pending')
-        .reduce((sum, o) => sum + (Number(o.quantity) || 1), 0)
-
-      const currentStock = prod.quantity ?? 0
-      const velocity = calculateVelocityAndRunway(prodOrders, currentStock)
-
-      return {
-        product: prod,
-        id: prod.id || prod._id,
-        name: prod.name,
-        sku: prod.sku,
-        image: prod.image || (Array.isArray(prod.images) ? prod.images[0] : ''),
-        category: prod.category || 'General',
-        supplierName: prod.supplier?.fullName || prod.supplier || prod.supplierBusinessName || 'Supplier',
-        baseCost,
-        commissionPercent,
-        unitsSold,
-        totalSales,
-        totalCost,
-        wmsFee,
-        netPayout,
-        returnsCount,
-        returnRate,
-        deliveredUnits,
-        inTransitUnits,
-        velocity,
-        stock: currentStock,
-        status: prod.status || 'active',
-      }
-    })
-  }, [products, filteredOrders, filteredDisputes])
-
-  // Filtered Products for Display
-  const displayedProducts = useMemo(() => {
-    if (!skuQuery.trim()) return productsSummary
-    const q = skuQuery.trim().toLowerCase()
-    return productsSummary.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q),
-    )
-  }, [productsSummary, skuQuery])
-
-  // Selected Product Statistics
-  const selectedProductStats = useMemo(() => {
-    if (!selectedProduct) return null
-    return (
-      productsSummary.find(
+  // Handle URL params like ?sku=... or ?supplier=...
+  useEffect(() => {
+    const paramSku = searchParams.get('sku') || searchParams.get('id')
+    if (paramSku && products.length > 0 && !selectedProduct) {
+      const q = paramSku.trim().toLowerCase()
+      const match = products.find(
         (p) =>
-          String(p.id) === String(selectedProduct.id || selectedProduct._id) ||
-          String(p.sku).toUpperCase() === String(selectedProduct.sku).toUpperCase(),
-      ) || null
-    )
-  }, [selectedProduct, productsSummary])
+          String(p.sku || '').toLowerCase() === q ||
+          String(p.id || p._id || '').toLowerCase() === q ||
+          String(p.name || '').toLowerCase() === q,
+      )
+      if (match) {
+        setSelectedProduct(match)
+        setSkuQuery(match.sku || match.name)
+        setActiveMode('sku')
+      }
+    }
 
-  const [showMasterChart, setShowMasterChart] = useState(true)
+    const paramSupplier = searchParams.get('supplier')
+    if (paramSupplier && suppliers.length > 0 && !selectedSupplier) {
+      const q = paramSupplier.trim().toLowerCase()
+      const match = suppliers.find(
+        (s) =>
+          String(s.id || s._id || '').toLowerCase() === q ||
+          String(s.fullName || '').toLowerCase() === q ||
+          getSupplierClientId(s).toLowerCase() === q,
+      )
+      if (match) {
+        setSelectedSupplier(match)
+        setSupplierQuery(getSupplierClientId(match))
+        setActiveMode('supplier')
+      }
+    }
+  }, [searchParams, products, suppliers, selectedProduct, selectedSupplier])
 
-  // Category vs Total Sales / Spend Chart Data (Category on X-axis, Total Sales/Spend on Y-axis) across Admin, Supplier, and User
-  const categoryChartData = useMemo(() => {
-    const catMap = new Map()
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (skuDropdownRef.current && !skuDropdownRef.current.contains(event.target)) {
+        setShowSkuSuggestions(false)
+      }
+      if (supplierDropdownRef.current && !supplierDropdownRef.current.contains(event.target)) {
+        setShowSupplierSuggestions(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
-    displayedProducts.forEach((p) => {
-      const cat = p.category || 'General'
-      if (!catMap.has(cat)) {
-        catMap.set(cat, {
-          name: cat,
-          category: cat,
-          sales: 0,
-          wmsFee: 0,
-          payout: 0,
-          units: 0,
+  // Comprehensive Supplier Directory List (combining accounts & products)
+  const allSuppliersList = useMemo(() => {
+    const map = new Map()
+
+    suppliers.forEach((s) => {
+      const sId = String(s.id || s._id || '')
+      const clientId = getSupplierClientId(s)
+      map.set(sId, {
+        id: sId,
+        clientId,
+        fullName: s.fullName || 'Supplier',
+        businessName: s.businessProfile?.businessName || s.fullName || 'Store',
+        email: s.email || '',
+        phone: s.businessProfile?.businessPhone || s.phone || '—',
+        location:
+          s.businessProfile?.location ||
+          [s.businessProfile?.city, s.businessProfile?.country].filter(Boolean).join(', ') ||
+          '—',
+        status: s.status || 'Approved',
+        joined: s.joined || '—',
+        account: s,
+      })
+    })
+
+    products.forEach((p) => {
+      const sId = String(p.supplierId || '')
+      if (sId && !map.has(sId)) {
+        const clientId = getSupplierClientId(p)
+        map.set(sId, {
+          id: sId,
+          clientId,
+          fullName: p.supplier || 'Supplier',
+          businessName: p.supplierBusinessName || p.supplier || 'Store',
+          email: p.supplierEmail || '',
+          phone: p.supplierPhone || '—',
+          location: p.location || '—',
+          status: 'Approved',
+          joined: '—',
+          account: null,
         })
       }
-      const entry = catMap.get(cat)
-      entry.sales += p.totalSales || 0
-      entry.wmsFee += p.wmsFee || 0
-      entry.payout += p.netPayout || 0
-      entry.units += p.unitsSold || 0
     })
 
-    return Array.from(catMap.values())
-  }, [displayedProducts])
+    return Array.from(map.values())
+  }, [suppliers, products])
 
-  // Top SKUs comparison chart data for deep fallback
-  const topSkusChartData = useMemo(() => {
-    return displayedProducts
-      .slice(0, 8)
-      .map((p) => ({
-        name: p.sku || p.name.substring(0, 10),
-        fullName: p.name,
-        category: p.category || 'General',
-        sales: p.totalSales,
-        wmsFee: p.wmsFee,
-        units: p.unitsSold,
-        payout: p.netPayout,
-      }))
-  }, [displayedProducts])
+  // Filtered Suppliers for autocomplete
+  const filteredSupplierSuggestions = useMemo(() => {
+    if (!allSuppliersList.length) return []
+    const q = (supplierQuery || '').trim().toLowerCase()
+    if (!q) return allSuppliersList.slice(0, 10)
+    return allSuppliersList
+      .filter(
+        (s) =>
+          s.clientId.toLowerCase().includes(q) ||
+          s.fullName.toLowerCase().includes(q) ||
+          s.businessName.toLowerCase().includes(q) ||
+          s.email.toLowerCase().includes(q),
+      )
+      .slice(0, 10)
+  }, [allSuppliersList, supplierQuery])
 
-  // CSV Export utility for SKU report
-  const exportSkuReport = () => {
-    let csv = 'data:text/csv;charset=utf-8,Product Name,SKU,Category,Base Cost,Units,Total Amount,WMS Fee,Net Payout,Stock,Status\n'
-    displayedProducts.forEach((p) => {
-      csv += `"${p.name.replace(/"/g, '""')}","${p.sku}","${p.category}",${p.baseCost},${p.unitsSold},${p.totalSales},${p.wmsFee},${p.netPayout},${p.stock},"${p.status}"\n`
+  // Products belonging to the selected supplier
+  const selectedSupplierProducts = useMemo(() => {
+    if (!selectedSupplier) return []
+    const sId = String(selectedSupplier.id || '').toLowerCase()
+    const sClientId = String(selectedSupplier.clientId || '').toLowerCase()
+    const sName = String(selectedSupplier.fullName || '').toLowerCase()
+    const sBiz = String(selectedSupplier.businessName || '').toLowerCase()
+
+    let list = products.filter((p) => {
+      const pSupId = String(p.supplierId || '').toLowerCase()
+      const pClientId = getSupplierClientId(p).toLowerCase()
+      const pSupName = String(p.supplier || '').toLowerCase()
+      const pBiz = String(p.supplierBusinessName || '').toLowerCase()
+
+      return (
+        (sId && pSupId && sId === pSupId) ||
+        (sClientId && pClientId && sClientId === pClientId) ||
+        (sName && pSupName && sName === pSupName) ||
+        (sBiz && pBiz && sBiz === pBiz)
+      )
     })
-    const encoded = encodeURI(csv)
-    const link = document.createElement('a')
-    link.setAttribute('href', encoded)
-    link.setAttribute('download', `sku_reporting_${panel}_${timeframe}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
 
+    if (supplierSkuFilter.trim()) {
+      const q = supplierSkuFilter.trim().toLowerCase()
+      list = list.filter(
+        (p) =>
+          String(p.sku || '').toLowerCase().includes(q) ||
+          String(p.name || '').toLowerCase().includes(q) ||
+          String(p.category || '').toLowerCase().includes(q),
+      )
+    }
+
+    return list
+  }, [selectedSupplier, products, supplierSkuFilter])
+
+  // Total stock for selected supplier
+  const supplierTotalStock = useMemo(() => {
+    return selectedSupplierProducts.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0)
+  }, [selectedSupplierProducts])
+
+  // Filter orders by From/To date
+  const filteredOrders = useMemo(() => {
+    if (!fromDate && !toDate) return allOrders
+    return allOrders.filter((o) => inDateRange(o.createdAt || o.date, fromDate, toDate))
+  }, [allOrders, fromDate, toDate])
+
+  const filteredDisputes = useMemo(() => {
+    if (!fromDate && !toDate) return allDisputes
+    return allDisputes.filter((d) => inDateRange(d.createdAt || d.date, fromDate, toDate))
+  }, [allDisputes, fromDate, toDate])
+
+  // Suggestions for SKU autocomplete
+  const filteredSkuSuggestions = useMemo(() => {
+    if (!products.length) return []
+    const q = (skuQuery || '').trim().toLowerCase()
+
+    // Find SKUs this user/supplier has ordered or listed
+    const userOrderedSkus = new Set(
+      allOrders
+        .map((o) => (o.productSku || (typeof o.product === 'object' ? o.product?.sku : '') || '').toUpperCase())
+        .filter(Boolean),
+    )
+
+    let candidateList = products
+    if (panel === 'user' && !q && userOrderedSkus.size > 0) {
+      // Prioritize products the user actually ordered for their store
+      candidateList = [
+        ...products.filter((p) => p.sku && userOrderedSkus.has(p.sku.toUpperCase())),
+        ...products.filter((p) => !p.sku || !userOrderedSkus.has(p.sku.toUpperCase())),
+      ]
+    }
+
+    if (!q) return candidateList.slice(0, 10)
+    return candidateList
+      .filter((p) => (p.sku && p.sku.toLowerCase().includes(q)) || (p.name && p.name.toLowerCase().includes(q)))
+      .slice(0, 10)
+  }, [products, skuQuery, panel, allOrders])
+
+  // Orders for current selected product
   const selectedProductOrders = useMemo(() => {
     if (!selectedProduct) return []
     return filteredOrders.filter((o) => isOrderForProduct(o, selectedProduct))
   }, [filteredOrders, selectedProduct])
 
+  // Disputes for current selected product
   const selectedProductDisputes = useMemo(() => {
     if (!selectedProduct) return []
     return filteredDisputes.filter((d) => isDisputeForProduct(d, selectedProduct))
   }, [filteredDisputes, selectedProduct])
 
+  // Calculated Stats matching the screenshot cards
+  const stats = useMemo(() => {
+    if (!selectedProduct) {
+      return {
+        currentStock: 0,
+        newUnits: 0,
+        unitsReturned: 0,
+        unitsInspected: 0,
+        disputes: 0,
+        damagedUnits: 0,
+        missingUnits: 0,
+        fulfillments: 0,
+        pendingFulfillments: 0,
+        fulfillmentByAdmin: 0,
+        fulfillmentByClient: 0,
+      }
+    }
+
+    const currentStock = Number(selectedProduct.quantity ?? 0)
+    const validOrders = selectedProductOrders.filter((o) => o.status !== 'cancelled')
+    const fulfillments = validOrders.length
+    const pendingFulfillments = validOrders.filter((o) => o.status === 'pending' || o.status === 'in_process').length
+
+    // Categorized fulfillments
+    const fulfillmentByAdmin = validOrders.filter((o) => o.brandLabel === 'Sellvro' || !o.brandLabel).length
+    const fulfillmentByClient = validOrders.filter((o) => o.brandLabel && o.brandLabel !== 'Sellvro').length
+
+    // Returns & Disputes
+    const disputesCount = selectedProductDisputes.length
+    const unitsReturned = selectedProductDisputes.filter((d) => String(d.type || '').toLowerCase().includes('return')).length
+    const damagedUnits = selectedProductDisputes.filter((d) => String(d.type || '').toLowerCase().includes('damage')).length
+    const missingUnits = selectedProductDisputes.filter((d) => String(d.type || '').toLowerCase().includes('missing')).length
+
+    return {
+      currentStock,
+      newUnits: 0,
+      unitsReturned,
+      unitsInspected: currentStock,
+      disputes: disputesCount,
+      damagedUnits,
+      missingUnits,
+      fulfillments,
+      pendingFulfillments,
+      fulfillmentByAdmin,
+      fulfillmentByClient,
+    }
+  }, [selectedProduct, selectedProductOrders, selectedProductDisputes])
+
+  // Chart data for Last 6 Months (Received vs Dispatched)
   const chartData = useMemo(() => {
-    if (!selectedProduct) return []
-    return buildChartData(selectedProductOrders, selectedProduct, timeframe, selectedYear, panel)
-  }, [selectedProductOrders, selectedProduct, timeframe, selectedYear, panel])
+    return generateLast6MonthsData(selectedProductOrders)
+  }, [selectedProductOrders])
+
+  // Load Report Action (SKU Mode)
+  const handleLoadReport = () => {
+    setShowSkuSuggestions(false)
+    const query = (skuQuery || '').trim().toLowerCase()
+    if (!query) {
+      setSearchError('Please type or select a SKU / Product name.')
+      return
+    }
+
+    let match = products.find((p) => String(p.sku || '').toLowerCase() === query)
+    if (!match) {
+      match = products.find((p) => String(p.name || '').toLowerCase() === query)
+    }
+    if (!match) {
+      match = products.find((p) => String(p.sku || '').toLowerCase().includes(query))
+    }
+    if (!match) {
+      match = products.find((p) => String(p.name || '').toLowerCase().includes(query))
+    }
+
+    if (match) {
+      setSelectedProduct(match)
+      setSkuQuery(match.sku || match.name)
+      setSearchError('')
+    } else {
+      setSearchError(`No product found matching "${skuQuery}". Please select a valid SKU from suggestions.`)
+    }
+  }
+
+  // Clear Action (SKU Mode)
+  const handleClear = () => {
+    setSkuQuery('')
+    setFromDate('')
+    setToDate('')
+    setSelectedProduct(null)
+    setSearchError('')
+    setShowSkuSuggestions(false)
+  }
+
+  // Load Supplier Action (Supplier Lookup Mode)
+  const handleLoadSupplier = () => {
+    setShowSupplierSuggestions(false)
+    const query = (supplierQuery || '').trim().toLowerCase()
+    if (!query) {
+      setSupplierError('Please enter a Supplier ID (e.g. WMS-PAK1001), Store Name, or Supplier Name.')
+      return
+    }
+
+    let match = allSuppliersList.find((s) => s.clientId.toLowerCase() === query)
+    if (!match) {
+      match = allSuppliersList.find((s) => s.fullName.toLowerCase() === query || s.businessName.toLowerCase() === query)
+    }
+    if (!match) {
+      match = allSuppliersList.find(
+        (s) =>
+          s.clientId.toLowerCase().includes(query) ||
+          s.fullName.toLowerCase().includes(query) ||
+          s.businessName.toLowerCase().includes(query) ||
+          s.email.toLowerCase().includes(query),
+      )
+    }
+
+    if (match) {
+      setSelectedSupplier(match)
+      setSupplierQuery(match.clientId)
+      setSupplierError('')
+    } else {
+      setSupplierError(`No supplier found matching "${supplierQuery}". Please check the Supplier ID or pick from the list.`)
+    }
+  }
+
+  // Clear Supplier Action
+  const handleClearSupplier = () => {
+    setSupplierQuery('')
+    setSelectedSupplier(null)
+    setSupplierSkuFilter('')
+    setSupplierError('')
+    setShowSupplierSuggestions(false)
+  }
+
+  // Impersonate / Jump to Supplier Panel
+  const handleImpersonateSupplier = async (supplier) => {
+    if (!supplier) return
+    const confirmed = window.confirm(
+      `Login as "${supplier.businessName || supplier.fullName || 'Supplier'}" (Supplier)?\n\nYou will be redirected to the supplier dashboard in Admin Impersonation Mode.`,
+    )
+    if (!confirmed) return
+
+    setActionLoading(true)
+    try {
+      const res = await adminApi.impersonate(supplier.id)
+      window.location.href = res.redirectUrl || '/supplier/dashboard'
+    } catch (err) {
+      alert(getErrorMessage(err, 'Failed to switch to supplier panel.'))
+      setActionLoading(false)
+    }
+  }
+
+  // Select a product from supplier list to view its SKU report
+  const handleSelectProductFromSupplier = (prod) => {
+    setSelectedProduct(prod)
+    setSkuQuery(prod.sku || prod.name)
+    setActiveMode('sku')
+  }
+
+  const supplierClientId = getSupplierClientId(selectedProduct)
+  const productImage = selectedProduct?.image || (Array.isArray(selectedProduct?.images) ? selectedProduct.images[0] : '')
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Page Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
+      {/* Page Header with Mode Switcher */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center rounded-md bg-primary-50 px-2 py-0.5 text-xs font-bold text-primary">
-              {config.eyebrow}
-            </span>
-            <h1 className="text-xl font-bold text-slate-900">{config.title}</h1>
-          </div>
-          <p className="mt-1 text-xs text-slate-500">{config.subtitle}</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            {panel === 'supplier' ? 'SUPPLIER PORTAL' : panel === 'user' ? 'STORE CLIENT PORTAL' : 'ADMIN PANEL'}
+          </p>
+          <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            {activeMode === 'sku'
+              ? (panel === 'supplier' ? 'My Store SKU Report' : panel === 'user' ? 'My Store SKU Report' : 'SKU Product Report')
+              : 'Supplier Store & SKU Lookup'}
+          </h1>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9 border-slate-200 bg-white text-xs font-semibold"
-            onClick={loadData}
-            disabled={loading}
-          >
-            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          {panel === 'supplier' && (
-            <Link to="/supplier/product/create">
-              <Button size="sm" className="h-9 text-xs font-semibold shadow-xs">
-                <PlusCircle className="mr-1.5 h-3.5 w-3.5" />
-                Add New SKU
-              </Button>
-            </Link>
-          )}
-          {panel === 'user' && (
-            <Link to="/user/products">
-              <Button size="sm" className="h-9 text-xs font-semibold shadow-xs">
-                <ShoppingCart className="mr-1.5 h-3.5 w-3.5" />
-                Browse Catalog
-              </Button>
-            </Link>
-          )}
-        </div>
+        {/* Feature Switcher Tabs */}
+        {panel === 'admin' && (
+          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100/80 p-1 text-xs font-semibold shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setActiveMode('sku')}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 transition-all cursor-pointer ${
+                activeMode === 'sku'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <Search className="h-3.5 w-3.5" />
+              SKU Report
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMode('supplier')}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 transition-all cursor-pointer ${
+                activeMode === 'supplier'
+                  ? 'bg-[#05004e] text-white shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <Store className="h-3.5 w-3.5" />
+              Supplier Store & SKU Lookup
+            </button>
+          </div>
+        )}
       </div>
+
+      {loading && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 text-center text-xs text-slate-500">
+          Loading SKU reporting data…
+        </div>
+      )}
 
       {error && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
@@ -634,762 +669,834 @@ function SkuReportingContent({ panel = 'admin' }) {
         </div>
       )}
 
-      {/* Top Filter Bar: Timeframe Selection & SKU Search */}
-      <Card className="border border-slate-200 bg-white p-4 shadow-soft">
-        <div className="flex flex-col gap-3.5">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-primary" />
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                Reporting Period
-              </span>
-            </div>
-
-            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
-              {['overall', 'monthly', 'annually', 'custom'].map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setTimeframe(mode)}
-                  className={`rounded-md px-3 py-1.5 text-xs font-semibold capitalize transition-all ${
-                    timeframe === mode
-                      ? 'bg-white text-primary shadow-xs font-bold'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {mode === 'overall' ? 'Overall (Lifetime)' : mode}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end">
-            <div className="md:col-span-5">
-              <label htmlFor="sku-search" className="mb-1.5 block text-xs font-medium text-slate-500">
-                Search SKU or Product
-              </label>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  id="sku-search"
-                  type="search"
-                  placeholder="Enter SKU, Product name, or Category…"
-                  value={skuQuery}
-                  onChange={(e) => setSkuQuery(e.target.value)}
-                  className={`${FILTER_INPUT} pl-10`}
-                />
-              </div>
-            </div>
-
-            {timeframe === 'monthly' && (
-              <div className="md:col-span-4">
-                <label htmlFor="month-picker" className="mb-1.5 block text-xs font-medium text-slate-500">
-                  Select Month
-                </label>
+      {/* ======================================================== */}
+      {/* MODE 1: SKU REPORT (Matches Screenshot) */}
+      {/* ======================================================== */}
+      {activeMode === 'sku' && (
+        <>
+          {/* Search & Filter Bar: Matching Screenshot */}
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-xs">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* SKU Search Input with Autocomplete */}
+              <div ref={skuDropdownRef} className="relative flex-1 min-w-[260px]">
                 <div className="relative">
-                  <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
-                    id="month-picker"
-                    type="month"
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    className={`${FILTER_INPUT} pl-10`}
+                    type="text"
+                    placeholder="Type or select a SKU / Product name..."
+                    value={skuQuery}
+                    onChange={(e) => {
+                      setSkuQuery(e.target.value)
+                      setShowSkuSuggestions(true)
+                      setSearchError('')
+                    }}
+                    onFocus={() => setShowSkuSuggestions(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleLoadReport()
+                      }
+                    }}
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300 transition-all"
                   />
                 </div>
-              </div>
-            )}
 
-            {timeframe === 'annually' && (
-              <div className="md:col-span-4">
-                <label htmlFor="year-picker" className="mb-1.5 block text-xs font-medium text-slate-500">
-                  Select Year
-                </label>
-                <select
-                  id="year-picker"
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(e.target.value)}
-                  className={FILTER_INPUT}
-                >
-                  {[2026, 2025, 2024].map((y) => (
-                    <option key={y} value={String(y)}>
-                      Year {y}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {timeframe === 'custom' && (
-              <div className="grid grid-cols-2 gap-2 md:col-span-4">
-                <div>
-                  <label htmlFor="from-date" className="mb-1.5 block text-xs font-medium text-slate-500">
-                    From
-                  </label>
-                  <input
-                    id="from-date"
-                    type="date"
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    className={FILTER_INPUT}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="to-date" className="mb-1.5 block text-xs font-medium text-slate-500">
-                    To
-                  </label>
-                  <input
-                    id="to-date"
-                    type="date"
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    className={FILTER_INPUT}
-                  />
-                </div>
-              </div>
-            )}
-
-            {timeframe === 'overall' && (
-              <div className="hidden md:block md:col-span-4">
-                <div className="flex h-10 items-center rounded-lg bg-slate-50 px-3 text-xs text-slate-500 border border-slate-100">
-                  <Clock className="mr-1.5 h-3.5 w-3.5 text-slate-400" />
-                  Showing lifetime all-time SKU intelligence
-                </div>
-              </div>
-            )}
-
-            <div className="flex items-center gap-2 md:col-span-3">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-10 w-full border-slate-200 bg-white font-semibold"
-                onClick={() => {
-                  setSkuQuery('')
-                  setSelectedProduct(null)
-                  setTimeframe('overall')
-                }}
-              >
-                <RotateCcw className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
-                Reset Filter
-              </Button>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* MAIN VIEW: 1) Master Overview Table OR 2) Single SKU Deep Dive */}
-      {!selectedProduct ? (
-        <Card className="overflow-hidden border border-slate-200 shadow-soft">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 bg-slate-50/50">
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                {panel === 'supplier'
-                  ? 'My Products SKU Performance'
-                  : panel === 'user'
-                  ? 'My Purchased SKUs & Sourcing History'
-                  : 'Marketplace All SKUs Overview'}
-              </h3>
-              <p className="mt-0.5 text-xs text-slate-500">
-                {panel === 'supplier'
-                  ? 'Review product sales, WMS commission, stock runway, and net earnings.'
-                  : panel === 'user'
-                  ? 'Review items sourced, total spend, fulfillment progress, and re-order frequency.'
-                  : 'Platform-wide SKU sales, velocity, commission, and profit metrics.'}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs font-semibold bg-white border-slate-200"
-                onClick={() => setShowMasterChart(!showMasterChart)}
-              >
-                <BarChart3 className="mr-1.5 h-3.5 w-3.5 text-primary" />
-                {showMasterChart ? 'Hide Visual Chart' : 'Show Visual Chart'}
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs font-semibold bg-white border-slate-200"
-                onClick={exportSkuReport}
-              >
-                <Download className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
-                Export CSV
-              </Button>
-
-              <span className="rounded-full bg-primary-50 px-3 py-1 text-xs font-bold text-primary">
-                {displayedProducts.length} SKUs
-              </span>
-            </div>
-          </div>
-
-          {/* Visual Category vs Total Sales / Spend Chart (Category on X-axis, Total Sales on Y-axis) */}
-          {showMasterChart && categoryChartData.length > 0 && (
-            <div className="border-b border-slate-100 bg-slate-50/30 p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                <span className="text-xs font-bold text-slate-800">
-                  {panel === 'user'
-                    ? `Category Performance: Category (X) vs Total Spend / Sourced ($) (Y) (${timeframe.toUpperCase()})`
-                    : panel === 'supplier'
-                    ? `Category Sales Breakdown: Category (X) vs Total Sales ($) (Y) (${timeframe.toUpperCase()})`
-                    : `Marketplace Category Analytics: Category (X) vs Gross Sales ($) (Y) (${timeframe.toUpperCase()})`}
-                </span>
-                <div className="flex items-center gap-4 text-[11px] font-semibold">
-                  <span className="inline-flex items-center gap-1.5 text-slate-600">
-                    <span className="h-2.5 w-2.5 rounded-full bg-primary" />
-                    {panel === 'user' ? 'Total Spend ($)' : 'Gross Sales ($)'}
-                  </span>
-                  {panel !== 'user' && (
-                    <span className="inline-flex items-center gap-1.5 text-slate-600">
-                      <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-                      WMS Fee ($)
-                    </span>
-                  )}
-                  {panel === 'supplier' && (
-                    <span className="inline-flex items-center gap-1.5 text-slate-600">
-                      <span className="h-2.5 w-2.5 rounded-full bg-teal-500" />
-                      Net Payout ($)
-                    </span>
-                  )}
-                  <span className="inline-flex items-center gap-1.5 text-slate-600">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                    Units {panel === 'user' ? 'Sourced' : 'Sold'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="h-60 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={categoryChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="category" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} width={55} />
-                    <Tooltip
-                      formatter={(val, name) => [name.includes('Units') ? val : formatMoney(val), name]}
-                      contentStyle={{ borderRadius: 8, borderColor: '#e2e8f0', fontSize: 11 }}
-                    />
-                    <Bar dataKey="sales" name={panel === 'user' ? 'Total Spend ($)' : 'Gross Sales ($)'} fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={26} />
-                    {panel !== 'user' && (
-                      <Bar dataKey="wmsFee" name="WMS Fee ($)" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={26} />
-                    )}
-                    {panel === 'supplier' && (
-                      <Bar dataKey="payout" name="Net Payout ($)" fill="#0d9488" radius={[4, 4, 0, 0]} barSize={26} />
-                    )}
-                    <Bar dataKey="units" name={panel === 'user' ? 'Units Sourced' : 'Units Sold'} fill="#10b981" radius={[4, 4, 0, 0]} barSize={26} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-xs">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  <th className="px-5 py-3.5">Product & SKU</th>
-                  <th className="px-4 py-3.5">
-                    {panel === 'user' ? 'Unit Price Paid' : 'Product Cost'}
-                  </th>
-                  <th className="px-4 py-3.5 text-center">
-                    {panel === 'user' ? 'Units Bought' : 'Units Sold'}
-                  </th>
-                  <th className="px-4 py-3.5">
-                    {panel === 'user' ? 'Total Spent' : 'Gross Sales'}
-                  </th>
-                  {panel !== 'user' && <th className="px-4 py-3.5">WMS Fee</th>}
-                  <th className="px-4 py-3.5">
-                    {panel === 'supplier'
-                      ? 'Stock Runway / Alert'
-                      : panel === 'user'
-                      ? 'Delivery Progress'
-                      : 'Sales Velocity'}
-                  </th>
-                  <th className="px-4 py-3.5 text-right">
-                    {panel === 'supplier' ? 'Net Payout' : panel === 'user' ? 'Disputes / Claims' : 'Net Profit'}
-                  </th>
-                  <th className="px-5 py-3.5 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {displayedProducts.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="p-12 text-center text-slate-400">
-                      <Package className="mx-auto mb-2 h-8 w-8 text-slate-300" />
-                      No products found for this criteria.
-                    </td>
-                  </tr>
-                ) : (
-                  displayedProducts.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50/80 transition-colors group">
-                      {/* Product Thumbnail & SKU */}
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-                            {item.image ? (
-                              <img
-                                src={mediaUrl(item.image)}
-                                alt={item.name}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <ImageIcon className="h-5 w-5 text-slate-300" />
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-bold text-slate-900 line-clamp-1 group-hover:text-primary transition-colors text-sm">
-                              {item.name}
-                            </p>
-                            <div className="flex items-center gap-2 text-xs mt-0.5">
-                              <span className="font-mono font-semibold text-primary">{item.sku}</span>
-                              <span className="text-slate-300">•</span>
-                              <span className="text-slate-500">{item.category}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Base Cost / Price */}
-                      <td className="px-4 py-4">
-                        <p className="font-bold text-slate-900">{formatMoney(item.baseCost)}</p>
-                        <p className="text-[10px] text-slate-400">
-                          {panel === 'user' ? 'Per unit' : 'Supplier cost'}
-                        </p>
-                      </td>
-
-                      {/* Units Sold / Bought */}
-                      <td className="px-4 py-4 text-center">
-                        <span className="inline-flex items-center justify-center rounded-full bg-slate-100 px-2.5 py-1 font-bold text-slate-800">
-                          {item.unitsSold}
-                        </span>
-                      </td>
-
-                      {/* Total Sales / Spend */}
-                      <td className="px-4 py-4">
-                        <p className="font-bold text-emerald-600 text-sm">
-                          {formatMoney(item.totalSales)}
-                        </p>
-                        <p className="text-[10px] text-slate-400">
-                          {panel === 'user' ? 'Wallet deduction' : `${item.unitsSold} orders`}
-                        </p>
-                      </td>
-
-                      {/* WMS Fee (Commission) for Admin/Supplier */}
-                      {panel !== 'user' && (
-                        <td className="px-4 py-4">
-                          <p className="font-semibold text-amber-600">{formatMoney(item.wmsFee)}</p>
-                          <p className="text-[10px] text-slate-400">
-                            {item.commissionPercent}% platform cut
-                          </p>
-                        </td>
-                      )}
-
-                      {/* Runway / Velocity / Delivery Status */}
-                      <td className="px-4 py-4">
-                        {panel === 'supplier' ? (
-                          <div>
-                            <span
-                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                                item.velocity.runwayStatus === 'danger'
-                                  ? 'bg-rose-50 text-rose-600 border border-rose-200'
-                                  : item.velocity.runwayStatus === 'warning'
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              }`}
-                            >
-                              {item.velocity.runwayText}
-                            </span>
-                            <p className="text-[10px] text-slate-400 mt-0.5">
-                              Stock: {item.stock} in warehouse
-                            </p>
-                          </div>
-                        ) : panel === 'user' ? (
-                          <div>
-                            <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 text-sky-700 px-2 py-0.5 text-[11px] font-bold">
-                              <Truck className="h-3 w-3" />
-                              {item.deliveredUnits} Delivered / {item.inTransitUnits} In-Transit
-                            </span>
-                          </div>
-                        ) : (
-                          <div>
-                            <p className="font-bold text-slate-800">{item.velocity.gapLabel}</p>
-                            <p className="text-[10px] text-slate-400">{item.velocity.subtext}</p>
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Net Payout / Disputes */}
-                      <td className="px-4 py-4 text-right">
-                        {panel === 'supplier' ? (
-                          <div>
-                            <p className="font-extrabold text-slate-900 text-sm">
-                              {formatMoney(item.netPayout)}
-                            </p>
-                            <p className="text-[10px] text-emerald-600 font-semibold">Net Earnings</p>
-                          </div>
-                        ) : panel === 'user' ? (
-                          <div>
-                            {item.returnsCount > 0 ? (
-                              <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600">
-                                {item.returnsCount} Claims
-                              </span>
-                            ) : (
-                              <span className="text-slate-400">0 Claims</span>
-                            )}
-                          </div>
-                        ) : (
-                          <div>
-                            <p className="font-bold text-slate-900">{formatMoney(item.netPayout)}</p>
-                            <p className="text-[10px] text-emerald-600">After WMS cut</p>
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Action buttons */}
-                      <td className="px-5 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-8 text-xs font-semibold hover:border-primary hover:bg-primary-50 hover:text-primary transition-all"
-                            onClick={() => setSelectedProduct(item.product)}
-                          >
-                            <BarChart3 className="mr-1 h-3.5 w-3.5 text-primary" />
-                            Report
-                          </Button>
-
-                          {panel === 'user' && (
-                            <Link to={`/user/checkout/${item.id}`}>
-                              <Button
-                                size="sm"
-                                className="h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
-                              >
-                                <Zap className="mr-1 h-3.5 w-3.5" />
-                                Re-Order
-                              </Button>
-                            </Link>
+                {/* Suggestions Dropdown */}
+                {showSkuSuggestions && filteredSkuSuggestions.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full z-40 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+                    {filteredSkuSuggestions.map((item) => (
+                      <button
+                        key={item.id || item._id}
+                        type="button"
+                        onClick={() => {
+                          setSkuQuery(item.sku || item.name)
+                          setSelectedProduct(item)
+                          setShowSkuSuggestions(false)
+                          setSearchError('')
+                        }}
+                        className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left hover:bg-slate-50 transition-colors cursor-pointer"
+                      >
+                        <div className="h-9 w-9 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-50 flex items-center justify-center">
+                          {item.image || (Array.isArray(item.images) && item.images[0]) ? (
+                            <img
+                              src={mediaUrl(item.image || item.images[0])}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <Package className="h-4 w-4 text-slate-400" />
                           )}
                         </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      ) : (
-        /* SINGLE SKU DEEP DIVE ANALYTICS */
-        <div className="flex flex-col gap-6">
-          {/* Top Banner Card */}
-          <Card className="border border-slate-200 bg-white p-5 shadow-soft">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-              <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-inner">
-                {selectedProductStats?.image ? (
-                  <img
-                    src={mediaUrl(selectedProductStats.image)}
-                    alt={selectedProduct.name}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <ImageIcon className="h-8 w-8 text-slate-300" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-[#05004e]">{item.sku}</span>
+                            <span className="text-slate-300">•</span>
+                            <span className="truncate text-xs font-semibold text-slate-800">{item.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                            <span>{item.category || 'General'}</span>
+                            <span>•</span>
+                            <span>Stock: {item.quantity ?? 0}</span>
+                            <span>•</span>
+                            <span>Client: {getSupplierClientId(item)}</span>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
 
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-xl font-bold text-slate-900">{selectedProduct.name}</h2>
-                      <Badge tone={badgeToneForStatus(selectedProduct.status)}>
-                        {PRODUCT_STATUS_LABEL[selectedProduct.status] || statusLabel(selectedProduct.status)}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 font-mono text-xs font-bold text-primary tracking-wide">
-                      SKU: {selectedProduct.sku}
-                    </p>
-                  </div>
+              {/* From Date */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs sm:text-sm font-normal text-slate-500">From</span>
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs sm:text-sm text-slate-700 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300"
+                />
+              </div>
 
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-xs font-semibold border-slate-200"
-                      onClick={() => setSelectedProduct(null)}
-                    >
-                      <Layers className="mr-1.5 h-3.5 w-3.5" />
-                      Back to SKU List
-                    </Button>
-                    {panel === 'user' && (
-                      <Link to={`/user/checkout/${selectedProduct.id || selectedProduct._id}`}>
-                        <Button size="sm" className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white">
-                          <Zap className="mr-1.5 h-3.5 w-3.5" />
-                          Buy Again
-                        </Button>
-                      </Link>
+              {/* To Date */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs sm:text-sm font-normal text-slate-500">To</span>
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs sm:text-sm text-slate-700 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300"
+                />
+              </div>
+
+              {/* Load Report Button */}
+              <button
+                type="button"
+                onClick={handleLoadReport}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#05004e] px-5 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-[#09026b] transition-all cursor-pointer"
+              >
+                <BarChart3 className="h-4 w-4" />
+                Load Report
+              </button>
+
+              {/* Clear Button */}
+              <button
+                type="button"
+                onClick={handleClear}
+                className="inline-flex h-10 items-center justify-center gap-1.5 px-3 text-xs sm:text-sm font-normal text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+              >
+                <RotateCcw className="h-3.5 w-3.5 text-slate-400" />
+                Clear
+              </button>
+            </div>
+
+            {searchError && (
+              <p className="mt-2 text-xs font-medium text-amber-600">
+                {searchError}
+              </p>
+            )}
+          </div>
+
+          {/* SKU BODY */}
+          {!selectedProduct ? (
+            /* Empty State */
+            <div className="flex flex-col items-center justify-center py-28 text-center select-none">
+              <div className="mb-4 flex items-center justify-center">
+                <svg
+                  width="76"
+                  height="76"
+                  viewBox="0 0 76 76"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="mx-auto"
+                >
+                  <polygon points="38,16 60,28 38,40 16,28" fill="#E2E8F0" />
+                  <polygon points="38,22 52,30 38,38 24,30" fill="#CBD5E1" opacity="0.6" />
+                  <polygon points="16,28 5,20 25,10 38,16" fill="#F1F5F9" stroke="#CBD5E1" strokeWidth="1.2" strokeLinejoin="round" />
+                  <polygon points="60,28 71,20 51,10 38,16" fill="#E2E8F0" stroke="#CBD5E1" strokeWidth="1.2" strokeLinejoin="round" />
+                  <polygon points="16,28 38,40 38,64 16,52" fill="#E2E8F0" stroke="#CBD5E1" strokeWidth="1.2" strokeLinejoin="round" />
+                  <polygon points="38,40 60,28 60,52 38,64" fill="#CBD5E1" stroke="#94A3B8" strokeWidth="1.2" strokeLinejoin="round" />
+                  <polygon points="16,28 27,34 38,40 16,28" fill="#FFFFFF" opacity="0.4" />
+                  <polygon points="60,28 49,34 38,40 60,28" fill="#CBD5E1" opacity="0.4" />
+                </svg>
+              </div>
+              <p className="text-sm font-normal text-slate-400">
+                Enter a SKU above to load its complete reporting history
+              </p>
+            </div>
+          ) : (
+            /* LOADED SKU REPORT: Exact Structure from Screenshot */
+            <div className="flex flex-col gap-4">
+              {/* 1. Product Banner Card */}
+              <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                    {productImage ? (
+                      <img
+                        src={mediaUrl(productImage)}
+                        alt={selectedProduct.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <ImageIcon className="h-6 w-6 text-slate-300" />
                     )}
                   </div>
+
+                  <div className="min-w-0">
+                    <h2 className="text-base font-bold text-slate-900 truncate">
+                      {selectedProduct.name}
+                    </h2>
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-500 mt-1">
+                      <span>
+                        <strong className="font-semibold text-slate-700">SKU:</strong>{' '}
+                        <span className="font-mono text-slate-800">{selectedProduct.sku}</span>
+                      </span>
+                      <span className="text-slate-300">•</span>
+                      <span>
+                        <strong className="font-semibold text-slate-700">Category:</strong>{' '}
+                        {selectedProduct.category || 'Other Leather Products'}
+                      </span>
+                      <span className="text-slate-300">•</span>
+                      <span>
+                        <strong className="font-semibold text-slate-700">Brand:</strong>{' '}
+                        {selectedProduct.brand || '-'}
+                      </span>
+                      <span className="text-slate-300">•</span>
+                      <span>
+                        <strong className="font-semibold text-slate-700">Client:</strong>{' '}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const supMatch = allSuppliersList.find(
+                              (s) =>
+                                s.clientId.toLowerCase() === supplierClientId.toLowerCase() ||
+                                String(s.id).toLowerCase() === String(selectedProduct.supplierId || '').toLowerCase(),
+                            )
+                            if (supMatch) {
+                              setSelectedSupplier(supMatch)
+                              setSupplierQuery(supMatch.clientId)
+                              setActiveMode('supplier')
+                            }
+                          }}
+                          title="Click to view Supplier Store & all SKUs"
+                          className="font-mono text-indigo-600 hover:underline font-bold"
+                        >
+                          {supplierClientId}
+                        </button>
+                      </span>
+                      <span className="text-slate-300">•</span>
+                      <span>
+                        <strong className="font-semibold text-slate-700">Vendor:</strong>{' '}
+                        <span className="font-medium text-slate-800">
+                          {selectedProduct.vendorName ||
+                            selectedProduct.supplierBusinessName ||
+                            (selectedProduct.supplier && selectedProduct.supplier !== '—'
+                              ? selectedProduct.supplier
+                              : '') ||
+                            '—'}
+                        </span>
+                      </span>
+                      <span className="text-slate-300">•</span>
+                      <span>
+                        <strong className="font-semibold text-slate-700">Price:</strong> Rs.{' '}
+                        {selectedProduct.price || 0}
+                      </span>
+                      <span className="text-slate-300">•</span>
+                      <span>
+                        <strong className="font-semibold text-slate-700">Added:</strong>{' '}
+                        {formatAddedDate(selectedProduct.createdAt)}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-5 text-xs text-slate-600">
-                  <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
-                    <span className="text-[10px] text-slate-400 block">Category:</span>
-                    <strong className="text-slate-800">{selectedProduct.category || 'General'}</strong>
-                  </div>
-                  <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
-                    <span className="text-[10px] text-slate-400 block">Supplier:</span>
-                    <strong className="text-slate-800 truncate block">
-                      {selectedProductStats?.supplierName}
-                    </strong>
-                  </div>
-                  <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
-                    <span className="text-[10px] text-slate-400 block">Base Price:</span>
-                    <strong className="text-slate-900 font-bold">{formatMoney(selectedProduct.price)}</strong>
-                  </div>
-                  <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
-                    <span className="text-[10px] text-slate-400 block">In Warehouse:</span>
-                    <strong className="text-slate-800">{selectedProduct.quantity ?? 0} units</strong>
-                  </div>
-                  <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
-                    <span className="text-[10px] text-slate-400 block">WMS Commission:</span>
-                    <strong className="text-primary font-bold">{selectedProduct.commission ?? 10}%</strong>
-                  </div>
+                {/* Status Badge */}
+                <div className="shrink-0 flex items-center gap-2">
+                  <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                    {selectedProduct.status || 'approved'}
+                  </span>
                 </div>
               </div>
-            </div>
-          </Card>
 
-          {/* 6 Tailored KPI Cards */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            {/* 1. Volume */}
-            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-soft">
-              <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                <ShoppingCart className="h-4 w-4" />
-              </div>
-              <p className="text-xs font-semibold text-slate-400">
-                {panel === 'user' ? 'Total Sourced' : 'Units Sold'}
-              </p>
-              <p className="text-xl font-extrabold text-slate-900">
-                {selectedProductStats?.unitsSold || 0} Units
-              </p>
-              <p className="mt-1 text-[11px] font-semibold text-emerald-600">
-                {formatMoney(selectedProductStats?.totalSales || 0)}
-              </p>
-            </div>
+              {/* 2. Metric Stat Cards Grid */}
+              {/* Row 1: 7 Cards */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-7">
+                {/* CURRENT STOCK */}
+                <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-2xs">
+                  <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                    <Box className="h-4 w-4" />
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{stats.currentStock}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                    CURRENT STOCK
+                  </p>
+                </div>
 
-            {/* 2. Sourcing / Unit Cost */}
-            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-soft">
-              <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
-                <Coins className="h-4 w-4" />
-              </div>
-              <p className="text-xs font-semibold text-slate-400">
-                {panel === 'user' ? 'Unit Price Paid' : 'Product Base Cost'}
-              </p>
-              <p className="text-xl font-extrabold text-slate-900">
-                {formatMoney(selectedProductStats?.baseCost || 0)}
-              </p>
-              <p className="mt-1 text-[11px] text-slate-500">
-                Total COGS: {formatMoney(selectedProductStats?.totalCost || 0)}
-              </p>
-            </div>
+                {/* NEW UNITS */}
+                <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-2xs">
+                  <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                    <Package className="h-4 w-4" />
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{stats.newUnits}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                    NEW UNITS
+                  </p>
+                </div>
 
-            {/* 3. WMS Fee / Fulfillment */}
-            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-soft">
-              <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-                <DollarSign className="h-4 w-4" />
-              </div>
-              <p className="text-xs font-semibold text-slate-400">
-                {panel === 'user' ? 'Delivery Status' : 'WMS Fee (Admin Cut)'}
-              </p>
-              <p className="text-xl font-extrabold text-amber-600">
-                {panel === 'user'
-                  ? `${selectedProductStats?.deliveredUnits || 0} Delivered`
-                  : formatMoney(selectedProductStats?.wmsFee || 0)}
-              </p>
-              <p className="mt-1 text-[11px] text-slate-500">
-                {panel === 'user'
-                  ? `${selectedProductStats?.inTransitUnits || 0} in-transit`
-                  : `@${selectedProductStats?.commissionPercent || 10}% rate`}
-              </p>
-            </div>
+                {/* UNITS RETURNED */}
+                <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-2xs">
+                  <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+                    <RotateCcw className="h-4 w-4" />
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{stats.unitsReturned}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                    UNITS RETURNED
+                  </p>
+                </div>
 
-            {/* 4. Runway / Velocity */}
-            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-soft">
-              <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50 text-violet-600">
-                <Clock className="h-4 w-4" />
-              </div>
-              <p className="text-xs font-semibold text-slate-400">
-                {panel === 'supplier' ? 'Stock Depletion Runway' : 'Order Frequency'}
-              </p>
-              <p className="text-base font-extrabold text-slate-900 truncate">
-                {selectedProductStats?.velocity?.runwayText || selectedProductStats?.velocity?.gapLabel}
-              </p>
-              <p className="mt-1 text-[11px] text-violet-600 truncate">
-                {selectedProductStats?.velocity?.subtext}
-              </p>
-            </div>
+                {/* UNITS INSPECTED */}
+                <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-2xs">
+                  <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-50 text-cyan-600">
+                    <CheckCircle2 className="h-4 w-4" />
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{stats.unitsInspected}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                    UNITS INSPECTED
+                  </p>
+                </div>
 
-            {/* 5. Return & Defect Rate */}
-            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-soft">
-              <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
-                <Undo2 className="h-4 w-4" />
-              </div>
-              <p className="text-xs font-semibold text-slate-400">
-                {panel === 'user' ? 'Refund Claims' : 'Defects & Returns'}
-              </p>
-              <p className="text-xl font-extrabold text-rose-600">
-                {selectedProductStats?.returnsCount || 0}
-              </p>
-              <p className="mt-1 text-[11px] text-slate-500">
-                Return rate: {selectedProductStats?.returnRate || '0'}%
-              </p>
-            </div>
+                {/* DISPUTES */}
+                <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-2xs">
+                  <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                    <AlertCircle className="h-4 w-4" />
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{stats.disputes}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                    DISPUTES
+                  </p>
+                </div>
 
-            {/* 6. Net Payout / Total Value */}
-            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-soft">
-              <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
-                <TrendingUp className="h-4 w-4" />
+                {/* DAMAGED UNITS */}
+                <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-2xs">
+                  <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
+                    <ShieldAlert className="h-4 w-4" />
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{stats.damagedUnits}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                    DAMAGED UNITS
+                  </p>
+                </div>
+
+                {/* MISSING UNITS */}
+                <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-2xs">
+                  <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
+                    <HelpCircle className="h-4 w-4" />
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{stats.missingUnits}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                    MISSING UNITS
+                  </p>
+                </div>
               </div>
-              <p className="text-xs font-semibold text-slate-400">
-                {panel === 'supplier'
-                  ? 'Net Payout Balance'
-                  : panel === 'user'
-                  ? 'Total Spend'
-                  : 'Net Margin'}
-              </p>
-              <p className="text-xl font-extrabold text-teal-600">
-                {formatMoney(selectedProductStats?.netPayout || 0)}
-              </p>
-              <p className="mt-1 text-[11px] text-slate-500">
-                {panel === 'supplier' ? 'After WMS Fee' : 'Wallet Deductions'}
-              </p>
+
+              {/* Row 2: 4 Cards */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {/* FULFILLMENTS */}
+                <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-2xs">
+                  <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                    <Truck className="h-4 w-4" />
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{stats.fulfillments}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                    FULFILLMENTS
+                  </p>
+                </div>
+
+                {/* PENDING FULFILLMENTS */}
+                <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-2xs">
+                  <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                    <Clock className="h-4 w-4" />
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{stats.pendingFulfillments}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                    PENDING FULFILL...
+                  </p>
+                </div>
+
+                {/* FULFILLMENT BY ADMIN */}
+                <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-2xs">
+                  <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
+                    <Users className="h-4 w-4" />
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{stats.fulfillmentByAdmin}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                    FULFILLMENT BY ADMIN
+                  </p>
+                </div>
+
+                {/* FULFILLMENT BY CLIENT */}
+                <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-2xs">
+                  <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+                    <User className="h-4 w-4" />
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{stats.fulfillmentByClient}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                    FULFILLMENT BY CLIENT
+                  </p>
+                </div>
+              </div>
+
+              {/* 3. Monthly In vs Out Chart Card */}
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4 text-blue-600" />
+                    <h3 className="text-xs font-bold text-slate-800">
+                      Monthly In vs Out (Last 6 months)
+                    </h3>
+                  </div>
+
+                  <div className="flex items-center gap-4 text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1.5 text-slate-600">
+                      <span className="h-2 w-2 rounded-full bg-blue-500" />
+                      Received
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 text-slate-600">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      Dispatched
+                    </span>
+                  </div>
+                </div>
+
+                <div className="h-56 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                      <Tooltip
+                        contentStyle={{ borderRadius: 8, borderColor: '#e2e8f0', fontSize: 12 }}
+                      />
+                      <Bar dataKey="received" name="Received" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={16} />
+                      <Bar dataKey="dispatched" name="Dispatched" fill="#22c55e" radius={[4, 4, 0, 0]} barSize={16} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* 4. Table 1: Shipments Timeline */}
+              <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs">
+                <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3.5 bg-slate-50/50">
+                  <Package className="h-4 w-4 text-blue-600" />
+                  <h3 className="text-xs font-bold text-slate-800">Shipments Timeline</h3>
+                  <span className="rounded-full bg-slate-200/60 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                    0
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-left text-xs">
+                    <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <th className="px-5 py-3">DATE</th>
+                    <th className="px-4 py-3">SHIPMENT #</th>
+                    <th className="px-4 py-3">COURIER</th>
+                    <th className="px-4 py-3 text-center">EXPECTED</th>
+                    <th className="px-4 py-3 text-center">RECEIVED</th>
+                    <th className="px-4 py-3 text-center">DAMAGED</th>
+                    <th className="px-4 py-3 text-center">MISSING</th>
+                    <th className="px-5 py-3 text-right">STATUS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colSpan={8} className="p-8 text-center text-xs text-slate-400">
+                      <Package className="mx-auto mb-2 h-6 w-6 text-slate-300" />
+                      No shipments found
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
-          {/* Interactive Chart */}
-          <Card className="border border-slate-200 bg-white p-5 shadow-soft">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">
-                  {panel === 'supplier'
-                    ? 'Sales, WMS Fee & Net Payout Trend'
-                    : panel === 'user'
-                    ? 'Purchasing & Delivery Trend'
-                    : 'Performance & Revenue Trend'}
-                </h3>
-                <p className="text-xs text-slate-400">
-                  {timeframe === 'monthly'
-                    ? `Weekly performance breakdown for ${selectedMonth}`
-                    : timeframe === 'annually'
-                    ? `Monthly performance breakdown for ${selectedYear}`
-                    : 'All-time timeline'}
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-4 text-xs font-semibold">
-                <span className="inline-flex items-center gap-1.5 text-slate-700">
-                  <span className="h-2.5 w-2.5 rounded-full bg-primary" />
-                  {panel === 'user' ? 'Total Spend' : 'Sales GMV'}
-                </span>
-                <span className="inline-flex items-center gap-1.5 text-slate-700">
-                  <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-                  {panel === 'user' ? 'Delivered' : 'WMS Fee'}
-                </span>
-                <span className="inline-flex items-center gap-1.5 text-slate-700">
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                  {panel === 'supplier' ? 'Net Payout' : 'Units'}
-                </span>
-              </div>
-            </div>
-
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} width={50} />
-                  <Tooltip formatter={(val) => formatMoney(val)} contentStyle={{ borderRadius: 10, borderColor: '#e2e8f0', fontSize: 12 }} />
-                  <Bar dataKey="sales" name={panel === 'user' ? 'Total Spend' : 'Sales GMV'} fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={22} />
-                  <Bar dataKey="wmsFee" name={panel === 'user' ? 'Delivered Qty' : 'WMS Fee'} fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={22} />
-                  <Bar dataKey="payout" name={panel === 'supplier' ? 'Net Payout' : 'Net Value'} fill="#10b981" radius={[4, 4, 0, 0]} barSize={22} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-
-          {/* Orders Breakdown Table */}
-          <Card className="overflow-hidden border border-slate-200 shadow-soft">
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 bg-slate-50/50">
-              <h3 className="text-sm font-bold text-slate-900">
-                {panel === 'user' ? 'Purchase & Order History' : 'Orders & Fulfillment Logs'}
-              </h3>
-              <span className="rounded-full bg-primary-50 px-2.5 py-0.5 text-xs font-bold text-primary">
-                {selectedProductOrders.length} Orders
+          {/* 5. Table 2: Fulfillment Requests */}
+          <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs">
+            <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3.5 bg-slate-50/50">
+              <ShoppingCart className="h-4 w-4 text-blue-600" />
+              <h3 className="text-xs font-bold text-slate-800">Fulfillment Requests</h3>
+              <span className="rounded-full bg-slate-200/60 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                {selectedProductOrders.length}
               </span>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[840px] text-left text-xs">
+              <table className="w-full min-w-[760px] text-left text-xs">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/70 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    <th className="px-5 py-3">Order #</th>
-                    <th className="px-4 py-3">Date</th>
-                    <th className="px-4 py-3">{panel === 'user' ? 'Supplier' : 'Customer'}</th>
-                    <th className="px-4 py-3 text-center">Qty</th>
-                    <th className="px-4 py-3">Unit Price</th>
-                    <th className="px-4 py-3">Total Amount</th>
-                    {panel !== 'user' && <th className="px-4 py-3">WMS Fee</th>}
-                    {panel !== 'user' && <th className="px-4 py-3">Net Payout</th>}
-                    <th className="px-5 py-3 text-right">Status</th>
+                  <tr className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <th className="px-5 py-3">DATE</th>
+                    <th className="px-4 py-3">TRACKING #</th>
+                    <th className="px-4 py-3 text-center">QUANTITY</th>
+                    <th className="px-4 py-3">SOURCE</th>
+                    <th className="px-4 py-3">LOCATION</th>
+                    <th className="px-5 py-3 text-right">STATUS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {selectedProductOrders.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="p-8 text-center text-slate-400">
-                        No orders recorded in this timeframe.
+                      <td colSpan={6} className="p-8 text-center text-xs text-slate-400">
+                        <Package className="mx-auto mb-2 h-6 w-6 text-slate-300" />
+                        No fulfillment requests found
                       </td>
                     </tr>
                   ) : (
-                    selectedProductOrders.map((order) => {
-                      const qty = Number(order.quantity) || 1
-                      const unitPrice = Number(order.unitPrice || selectedProduct.price || 0)
-                      const total = Number(order.total) || qty * unitPrice
-                      const fee = Number(order.commission) || ((selectedProduct.commission || 10) / 100) * total
-                      const payout = Math.max(0, total - fee)
-
-                      return (
-                        <tr key={order.id || order._id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-5 py-3.5 font-mono text-xs font-bold text-primary">
-                            {order.orderNo || order.id}
-                          </td>
-                          <td className="px-4 py-3.5 text-slate-600">{formatReportDateTime(order.createdAt)}</td>
-                          <td className="px-4 py-3.5 font-medium text-slate-800">
-                            {panel === 'user' ? order.supplier || 'Supplier' : order.user || 'Customer'}
-                          </td>
-                          <td className="px-4 py-3.5 text-center font-bold text-slate-900">{qty}</td>
-                          <td className="px-4 py-3.5 text-slate-600">{formatMoney(unitPrice)}</td>
-                          <td className="px-4 py-3.5 font-bold text-slate-900">{formatMoney(total)}</td>
-                          {panel !== 'user' && <td className="px-4 py-3.5 font-semibold text-amber-600">{formatMoney(fee)}</td>}
-                          {panel !== 'user' && <td className="px-4 py-3.5 font-bold text-emerald-600">{formatMoney(payout)}</td>}
-                          <td className="px-5 py-3.5 text-right">
-                            <Badge tone={badgeToneForStatus(order.status)}>
-                              {order.statusLabel || statusLabel(order.status)}
-                            </Badge>
-                          </td>
-                        </tr>
-                      )
-                    })
+                    selectedProductOrders.map((o) => (
+                      <tr key={o.id || o._id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-5 py-3.5 text-slate-600">{formatReportDate(o.createdAt)}</td>
+                        <td className="px-4 py-3.5 font-mono font-bold text-slate-900">{o.orderNo || o.id}</td>
+                        <td className="px-4 py-3.5 text-center font-bold text-slate-900">{o.quantity || 1}</td>
+                        <td className="px-4 py-3.5 text-slate-700">{o.brandLabel || 'Customer Direct'}</td>
+                        <td className="px-4 py-3.5 text-slate-500">
+                          {o.shippingAddress?.city ? `${o.shippingAddress.city}, ${o.shippingAddress.country || 'PK'}` : 'Local Hub'}
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          <Badge tone={badgeToneForStatus(o.status)}>
+                            {o.statusLabel || statusLabel(o.status)}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
             </div>
-          </Card>
+          </div>
+
+          {/* 6. Table 3: Disputes */}
+          <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs">
+            <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3.5 bg-slate-50/50">
+              <AlertCircle className="h-4 w-4 text-amber-500" />
+              <h3 className="text-xs font-bold text-slate-800">Disputes</h3>
+              <span className="rounded-full bg-slate-200/60 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                {selectedProductDisputes.length}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <th className="px-5 py-3">DATE</th>
+                    <th className="px-4 py-3">TYPE</th>
+                    <th className="px-4 py-3">MESSAGE</th>
+                    <th className="px-4 py-3">RAISED BY</th>
+                    <th className="px-5 py-3 text-right">STATUS</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {selectedProductDisputes.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-xs text-slate-400">
+                        <Package className="mx-auto mb-2 h-6 w-6 text-slate-300" />
+                        No disputes found
+                      </td>
+                    </tr>
+                  ) : (
+                    selectedProductDisputes.map((d) => (
+                      <tr key={d.id || d._id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-5 py-3.5 text-slate-600">{formatReportDate(d.createdAt)}</td>
+                        <td className="px-4 py-3.5 font-semibold text-slate-800">{d.type || 'Quality Issue'}</td>
+                        <td className="px-4 py-3.5 text-slate-600 max-w-xs truncate">{d.message || d.requests || '—'}</td>
+                        <td className="px-4 py-3.5 text-slate-700">
+                          {d.raisedByName || (typeof d.user === 'object' ? d.user?.fullName : d.user) || 'Customer'}
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          <Badge tone={badgeToneForStatus(d.status)}>
+                            {d.statusLabel || statusLabel(d.status)}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )}
+
+      {/* ======================================================== */}
+      {/* MODE 2: SUPPLIER STORE & SKU LOOKUP (New Feature) */}
+      {/* ======================================================== */}
+      {activeMode === 'supplier' && (
+        <div className="flex flex-col gap-5">
+          {/* Supplier Search Bar */}
+          <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-xs">
+            <div className="flex flex-wrap items-center gap-3">
+              <div ref={supplierDropdownRef} className="relative flex-1 min-w-[280px]">
+                <div className="relative">
+                  <Store className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Enter Supplier ID (e.g. WMS-PAK1001), Store Name, or Supplier Name..."
+                    value={supplierQuery}
+                    onChange={(e) => {
+                      setSupplierQuery(e.target.value)
+                      setShowSupplierSuggestions(true)
+                      setSupplierError('')
+                    }}
+                    onFocus={() => setShowSupplierSuggestions(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleLoadSupplier()
+                      }
+                    }}
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300 transition-all"
+                  />
+                </div>
+
+                {/* Autocomplete suggestions for suppliers */}
+                {showSupplierSuggestions && filteredSupplierSuggestions.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full z-40 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
+                    {filteredSupplierSuggestions.map((sup) => (
+                      <button
+                        key={sup.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedSupplier(sup)
+                          setSupplierQuery(sup.clientId)
+                          setShowSupplierSuggestions(false)
+                          setSupplierError('')
+                        }}
+                        className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left hover:bg-slate-50 transition-colors cursor-pointer"
+                      >
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 font-bold text-indigo-700 text-xs">
+                          <Store className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-[#05004e]">{sup.clientId}</span>
+                            <span className="text-slate-300">•</span>
+                            <span className="truncate text-xs font-semibold text-slate-800">{sup.businessName}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                            <span>Owner: {sup.fullName}</span>
+                            <span>•</span>
+                            <span>{sup.location}</span>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Search Supplier Button */}
+              <button
+                type="button"
+                onClick={handleLoadSupplier}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#05004e] px-5 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-[#09026b] transition-all cursor-pointer"
+              >
+                <Search className="h-4 w-4" />
+                Find Store & SKUs
+              </button>
+
+              {/* Clear Button */}
+              <button
+                type="button"
+                onClick={handleClearSupplier}
+                className="inline-flex h-10 items-center justify-center gap-1.5 px-3 text-xs sm:text-sm font-normal text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+              >
+                <RotateCcw className="h-3.5 w-3.5 text-slate-400" />
+                Clear
+              </button>
+            </div>
+
+            {supplierError && (
+              <p className="mt-2 text-xs font-medium text-amber-600">
+                {supplierError}
+              </p>
+            )}
+          </div>
+
+          {/* Supplier View: Empty State OR Loaded Store Details & SKUs */}
+          {!selectedSupplier ? (
+            <div className="flex flex-col items-center justify-center py-24 text-center select-none">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                <Store className="h-8 w-8" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-800">No Supplier Selected</h3>
+              <p className="mt-1 text-xs text-slate-400 max-w-sm">
+                Enter a Supplier ID (e.g. WMS-PAK1001) or Store name above to view their store profile, total inventory, and inspect all their SKUs.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-5">
+              {/* Supplier Store Profile Card */}
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
+                <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                  <div className="flex items-center gap-3.5">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700 shadow-inner">
+                      <Store className="h-7 w-7" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2.5">
+                        <h2 className="text-lg font-bold text-slate-900">
+                          {selectedSupplier.businessName || selectedSupplier.fullName}
+                        </h2>
+                        <span className="font-mono text-xs font-bold bg-[#05004e] text-white px-2.5 py-0.5 rounded-md">
+                          {selectedSupplier.clientId}
+                        </span>
+                        <span className="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold">
+                          {selectedSupplier.status || 'Approved'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Owner: <strong className="text-slate-700">{selectedSupplier.fullName}</strong> • Email: {selectedSupplier.email || '—'} • Phone: {selectedSupplier.phone || '—'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Option to Go to Supplier Panel (Impersonate / Switch) */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={actionLoading}
+                      onClick={() => handleImpersonateSupplier(selectedSupplier)}
+                      className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white px-4 py-2 text-xs font-bold shadow-xs transition-all cursor-pointer active:scale-95"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      {actionLoading ? 'Switching...' : 'Go to Supplier Panel'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Key Store Stats */}
+                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Total Active SKUs</span>
+                    <p className="mt-1 text-xl font-extrabold text-slate-900">{selectedSupplierProducts.length} Products</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Total Warehouse Stock</span>
+                    <p className="mt-1 text-xl font-extrabold text-indigo-600">{supplierTotalStock} Units</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Location / City</span>
+                    <p className="mt-1 text-sm font-bold text-slate-800 truncate">{selectedSupplier.location || 'Local Warehouse'}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Joined Date</span>
+                    <p className="mt-1 text-sm font-bold text-slate-800">{selectedSupplier.joined || 'Active'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Supplier Products & SKUs Explorer */}
+              <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 bg-slate-50/50">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      All Products & SKUs ({selectedSupplierProducts.length})
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Click &ldquo;View SKU Report&rdquo; to load the complete reporting history for any product.
+                    </p>
+                  </div>
+
+                  {/* Filter within this supplier's SKUs */}
+                  <div className="relative w-64">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Filter by SKU or name..."
+                      value={supplierSkuFilter}
+                      onChange={(e) => setSupplierSkuFilter(e.target.value)}
+                      className="h-8 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-700 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        <th className="px-5 py-3">PRODUCT TITLE & SKU</th>
+                        <th className="px-4 py-3">CATEGORY</th>
+                        <th className="px-4 py-3 text-center">WAREHOUSE STOCK</th>
+                        <th className="px-4 py-3 text-right">UNIT PRICE</th>
+                        <th className="px-4 py-3 text-center">STATUS</th>
+                        <th className="px-5 py-3 text-right">ACTION</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {selectedSupplierProducts.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-8 text-center text-xs text-slate-400">
+                            <Package className="mx-auto mb-2 h-6 w-6 text-slate-300" />
+                            No products found for this supplier.
+                          </td>
+                        </tr>
+                      ) : (
+                        selectedSupplierProducts.map((p) => {
+                          const img = p.image || (Array.isArray(p.images) ? p.images[0] : '')
+                          return (
+                            <tr key={p.id || p._id} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="px-5 py-3.5">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                                    {img ? (
+                                      <img src={mediaUrl(img)} alt="" className="h-full w-full object-cover" />
+                                    ) : (
+                                      <Package className="h-4 w-4 text-slate-400" />
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-slate-900 truncate">{p.name}</p>
+                                    <p className="font-mono text-xs font-bold text-[#05004e] mt-0.5">
+                                      {p.sku}
+                                    </p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3.5 text-slate-600">{p.category || 'General'}</td>
+                              <td className="px-4 py-3.5 text-center">
+                                <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                                  (p.quantity ?? 0) > 0 ? 'bg-slate-100 text-slate-800' : 'bg-rose-50 text-rose-600'
+                                }`}>
+                                  {p.quantity ?? 0}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3.5 text-right font-bold text-slate-900">
+                                Rs. {p.price || 0}
+                              </td>
+                              <td className="px-4 py-3.5 text-center">
+                                <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                                  {p.status || 'approved'}
+                                </span>
+                              </td>
+                              <td className="px-5 py-3.5 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectProductFromSupplier(p)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#05004e] hover:bg-[#09026b] text-white px-3 py-1.5 text-xs font-bold shadow-2xs transition-all cursor-pointer"
+                                >
+                                  <BarChart3 className="h-3.5 w-3.5" />
+                                  View SKU Report
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

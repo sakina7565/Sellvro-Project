@@ -4,6 +4,7 @@ import {
   listMyProducts,
   listApprovedProducts,
   updateMyProduct,
+  getProductById,
 } from '../controllers/productController.js'
 import { protect, authorize, requireApproved } from '../middleware/auth.js'
 import { productUpload } from '../middleware/upload.js'
@@ -21,6 +22,7 @@ function handlePhotos(req, res, next) {
 
 router.get('/', protect, authorize('user', 'admin'), listApprovedProducts)
 router.get('/mine', protect, authorize('supplier'), requireApproved, listMyProducts)
+router.get('/:id', protect, getProductById)
 router.post('/', protect, authorize('supplier'), requireApproved, handlePhotos, createProduct)
 router.patch('/:id', protect, authorize('supplier'), requireApproved, handlePhotos, updateMyProduct)
 

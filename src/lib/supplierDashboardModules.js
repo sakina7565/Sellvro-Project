@@ -11,7 +11,7 @@ export const SUPPLIER_DASHBOARD_MODULES = [
       { label: 'All Products', to: '/supplier/products' },
       { label: 'Add New Product', to: '/supplier/product/create' },
       { label: 'SKU Reporting', to: '/supplier/inventory/sku-reporting' },
-      { label: 'My Reporting', to: '/supplier/inventory/my-reporting' },
+      { label: 'Store Reporting', to: '/supplier/inventory/my-reporting' },
     ],
     featured: true,
   },

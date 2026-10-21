@@ -44,6 +44,7 @@ import {
   activateProduct,
   deactivateProduct,
   createAdminProduct,
+  updateAdminProduct,
 } from '../controllers/productController.js'
 
 import {
@@ -58,19 +59,24 @@ import {
 
 } from '../controllers/categoryController.js'
 
-import { listAllOrders } from '../controllers/orderController.js'
+import { listAllOrders, updateOrderTracking } from '../controllers/orderController.js'
 
 import {
-
   listAllWalletRequests,
-
   approveWalletRequest,
-
   rejectWalletRequest,
-
+  getWalletSettings,
+  updateWalletSettings,
 } from '../controllers/walletController.js'
 
-import { listAdminPayouts, processSupplierPayout } from '../controllers/payoutController.js'
+import {
+  listAdminPayouts,
+  processSupplierPayout,
+  getSuppliersFinancialOverview,
+  getSupplierMonthlyHistory,
+  getSupplierMonthOrders,
+  executeSupplierPayout,
+} from '../controllers/payoutController.js'
 
 import {
 
@@ -207,6 +213,7 @@ router.get(
 )
 
 router.patch('/products/:id/commission', requirePermission('admin.products.approve'), updateProductCommission)
+router.patch('/products/:id', requirePermission('admin.products.approve', 'admin.products.create'), handleProductPhotos, updateAdminProduct)
 
 router.post(
   '/products',
@@ -261,20 +268,23 @@ router.patch(
 )
 
 router.patch(
-
   '/wallet-requests/:id/reject',
-
   requirePermission('admin.wallets.approve'),
-
   rejectWalletRequest,
-
 )
 
-
+router.get('/wallet-settings', requirePermission('admin.wallets.view'), getWalletSettings)
+router.patch('/wallet-settings', requirePermission('admin.wallets.approve'), updateWalletSettings)
+router.patch('/orders/:id/tracking', requirePermission('admin.sales.manage'), updateOrderTracking)
 
 router.get('/payouts', requirePermission('admin.payouts.view'), listAdminPayouts)
-
 router.patch('/payouts/:supplierId/process', requirePermission('admin.payouts.process'), processSupplierPayout)
+
+// Detailed Supplier Finances, Monthly Breakdowns & Payout Processing
+router.get('/finances/suppliers', requirePermission('admin.payouts.view'), getSuppliersFinancialOverview)
+router.get('/finances/suppliers/:supplierId/monthly', requirePermission('admin.payouts.view'), getSupplierMonthlyHistory)
+router.get('/finances/suppliers/:supplierId/monthly/:monthKey/orders', requirePermission('admin.payouts.view'), getSupplierMonthOrders)
+router.post('/finances/suppliers/:supplierId/payout', requirePermission('admin.payouts.process'), executeSupplierPayout)
 
 
 

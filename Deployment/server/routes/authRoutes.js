@@ -12,6 +12,7 @@ import {
   verifyResetCode,
   resetPassword,
   googleAuth,
+  changePassword,
 } from '../controllers/authController.js'
 import { protect } from '../middleware/auth.js'
 import { authLimiter } from '../middleware/authLimiter.js'
@@ -30,6 +31,7 @@ router.post('/forgot-password', authLimiter, forgotPassword)
 router.post('/verify-code', authLimiter, verifyResetCode)
 router.post('/reset-password', authLimiter, resetPassword)
 router.post('/google', googleAuth)
+router.patch('/change-password', protect, changePassword)
 
 export default router
 
