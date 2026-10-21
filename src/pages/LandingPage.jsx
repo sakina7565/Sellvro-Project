@@ -76,7 +76,7 @@ function LandingPage() {
       />
 
       {/* Main Content Sections */}
-      <main className="pb-12">
+      <main className="relative z-0 pb-12">
         {/* 4. Top Hero Banner Carousel */}
         <MarketplaceHeroCarousel />
 

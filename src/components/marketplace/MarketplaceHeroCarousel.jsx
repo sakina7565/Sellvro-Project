@@ -26,7 +26,7 @@ function MarketplaceHeroCarousel() {
   }
 
   return (
-    <section className="relative mx-auto mt-4 max-w-7xl px-4 sm:px-6">
+    <section className="relative z-0 mx-auto mt-4 max-w-7xl px-4 sm:px-6">
       <div className="relative h-[340px] sm:h-[400px] md:h-[440px] w-full overflow-hidden rounded-2xl bg-slate-900 shadow-md">
         {/* Background Image with Overlay */}
         <div className="absolute inset-0">

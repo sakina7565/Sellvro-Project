@@ -157,25 +157,26 @@ function MarketplaceCategoryNav({ activeCategory, onSelectCategory }) {
   }
 
   return (
-    <nav className="relative border-b border-slate-200 bg-white" ref={navRef}>
+    <nav className="relative z-40 border-b border-slate-200 bg-white" ref={navRef}>
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <div className="flex items-center space-x-7 overflow-x-auto py-2.5 scrollbar-none text-xs text-slate-700">
-          {categories.map((cat) => {
+        <div className="flex flex-wrap items-center justify-between gap-y-2 py-2 text-xs text-slate-700">
+          {categories.map((cat, index) => {
             const isOpen = openDropdownId === cat.id
             const isActive = activeCategory === cat.name
             const hasSubs = Array.isArray(cat.subcategories) && cat.subcategories.length > 0
+            const isRightSide = index >= categories.length - 2
 
             return (
               <div
                 key={cat.id || cat.name}
-                className="relative shrink-0"
+                className="relative"
                 onMouseEnter={() => setOpenDropdownId(cat.id)}
                 onMouseLeave={() => setOpenDropdownId(null)}
               >
                 <button
                   type="button"
                   onClick={() => handleCategoryClick(cat)}
-                  className={`flex items-center gap-1.5 py-1 transition-colors focus:outline-none ${
+                  className={`flex items-center gap-1.5 py-1.5 transition-colors focus:outline-none ${
                     isActive || isOpen
                       ? 'font-bold text-blue-600'
                       : 'hover:text-blue-600 font-medium'
@@ -198,7 +199,11 @@ function MarketplaceCategoryNav({ activeCategory, onSelectCategory }) {
 
                 {/* Subcategory Dropdown Panel (eBay Style) */}
                 {isOpen && hasSubs && (
-                  <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-xl ring-1 ring-black/5 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div
+                    className={`absolute ${
+                      isRightSide ? 'right-0' : 'left-0'
+                    } top-full z-50 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-2xl ring-1 ring-black/5 animate-in fade-in slide-in-from-top-1 duration-150`}
+                  >
                     <div className="mb-2 border-b border-slate-100 pb-2">
                       <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                         {cat.name}
