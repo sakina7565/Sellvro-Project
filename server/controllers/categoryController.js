@@ -22,6 +22,7 @@ export const createCategory = async (req, res) => {
   try {
     const name = String(req.body.name || '').trim()
     const description = String(req.body.description || '').trim()
+    const subcategories = parseSubcategories(req.body.subcategories)
 
     if (!name) {
       return res.status(400).json({ message: 'Category name is required.' })
@@ -32,7 +33,7 @@ export const createCategory = async (req, res) => {
       return res.status(400).json({ message: 'A category with this name already exists.' })
     }
 
-    const category = await Category.create({ name, description })
+    const category = await Category.create({ name, description, subcategories })
     return res.status(201).json({
       message: 'Category created.',
       category: category.toSafeObject(0),
@@ -73,6 +74,9 @@ export const updateCategory = async (req, res) => {
     const oldName = category.name
     category.name = name
     category.description = description
+    if (req.body.subcategories !== undefined) {
+      category.subcategories = parseSubcategories(req.body.subcategories)
+    }
     await category.save()
 
     if (oldName !== name) {
@@ -127,3 +131,15 @@ export async function resolveCategoryName(input) {
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
+
+function parseSubcategories(input) {
+  if (!input) return []
+  if (Array.isArray(input)) {
+    return [...new Set(input.map((s) => String(s).trim()).filter(Boolean))]
+  }
+  if (typeof input === 'string') {
+    return [...new Set(input.split(',').map((s) => s.trim()).filter(Boolean))]
+  }
+  return []
+}
+
