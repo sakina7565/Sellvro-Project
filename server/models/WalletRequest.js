@@ -56,6 +56,58 @@ const walletRequestSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    // Shipping Courier Option selected by client (USPS, UPS, FedEx)
+    courier: {
+      type: String,
+      enum: ['USPS', 'UPS', 'FedEx', 'None'],
+      default: 'None',
+    },
+    courierService: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    // Payment Method & Client Account Details for International Real Transfer
+    paymentMethod: {
+      type: String,
+      trim: true,
+      default: 'bank_wire', // 'wise', 'payoneer', 'stripe', 'bank_wire', 'usdt', 'pkr_ibft'
+    },
+    clientAccountNumber: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    clientIban: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    clientBankName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    // Real Payment Transfer Execution Status & Tracking Reference
+    realTransferStatus: {
+      type: String,
+      enum: ['pending', 'processing', 'completed', 'failed'],
+      default: 'pending',
+    },
+    realTransferRef: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    realTransferProvider: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    realTransferDate: {
+      type: Date,
+      default: null,
+    },
     status: {
       type: String,
       enum: ['pending', 'approved', 'rejected'],
@@ -101,6 +153,16 @@ walletRequestSchema.methods.toSafeObject = function toSafeObject(businessName = 
     conversionFee: this.conversionFee || 0,
     bankTid: this.bankTid,
     receiptImage: this.receiptImage,
+    courier: this.courier || 'None',
+    courierService: this.courierService || '',
+    paymentMethod: this.paymentMethod || 'bank_wire',
+    clientAccountNumber: this.clientAccountNumber || '',
+    clientIban: this.clientIban || '',
+    clientBankName: this.clientBankName || '',
+    realTransferStatus: this.realTransferStatus || 'pending',
+    realTransferRef: this.realTransferRef || '',
+    realTransferProvider: this.realTransferProvider || '',
+    realTransferDate: this.realTransferDate,
     status: this.status,
     statusLabel:
       this.status === 'pending'

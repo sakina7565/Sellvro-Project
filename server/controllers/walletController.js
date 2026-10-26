@@ -2,6 +2,7 @@ import WalletRequest from '../models/WalletRequest.js'
 import BusinessProfile from '../models/BusinessProfile.js'
 import User from '../models/User.js'
 import WalletSetting from '../models/WalletSetting.js'
+import { executeRealPaymentTransfer } from '../services/paymentTransferService.js'
 
 async function withBusinessName(requests) {
   const userIds = [
@@ -86,6 +87,22 @@ export const updateWalletSettings = async (req, res) => {
       setting.usdAccounts = usdAccounts
     }
 
+    if (req.body.internationalPaymentMethods) {
+      setting.internationalPaymentMethods = {
+        ...(setting.internationalPaymentMethods?.toObject?.() || setting.internationalPaymentMethods || {}),
+        ...req.body.internationalPaymentMethods,
+      }
+      setting.markModified('internationalPaymentMethods')
+    }
+
+    if (req.body.courierIntegrations) {
+      setting.courierIntegrations = {
+        ...(setting.courierIntegrations?.toObject?.() || setting.courierIntegrations || {}),
+        ...req.body.courierIntegrations,
+      }
+      setting.markModified('courierIntegrations')
+    }
+
     await setting.save()
     return res.json({
       message: 'Platform settings & exchange rate updated successfully.',
@@ -167,6 +184,16 @@ export const createWalletRequest = async (req, res) => {
     const feeUsd = 0
     const netUsd = Number(Math.max(0.01, grossUsd).toFixed(2))
 
+    const rawCourier = String(req.body.courier || '').toUpperCase()
+    const courier = ['USPS', 'UPS', 'FEDEX'].includes(rawCourier)
+      ? (rawCourier === 'FEDEX' ? 'FedEx' : rawCourier)
+      : 'None'
+    const courierService = String(req.body.courierService || '').trim()
+    const paymentMethod = String(req.body.paymentMethod || 'bank_wire').trim()
+    const clientAccountNumber = String(req.body.clientAccountNumber || '').trim()
+    const clientIban = String(req.body.clientIban || '').trim()
+    const clientBankName = String(req.body.clientBankName || '').trim()
+
     const request = await WalletRequest.create({
       user: req.user._id,
       amount: netUsd, // Net amount in USD credited to wallet
@@ -178,6 +205,12 @@ export const createWalletRequest = async (req, res) => {
       conversionFee: feeUsd,
       bankTid,
       receiptImage,
+      courier,
+      courierService,
+      paymentMethod,
+      clientAccountNumber,
+      clientIban,
+      clientBankName,
       status: 'pending',
     })
 
@@ -276,5 +309,35 @@ export const rejectWalletRequest = async (req, res) => {
     })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to reject wallet request.' })
+  }
+}
+
+/**
+ * Execute real payment transfer to client account via Wise, Stripe, Payoneer, or Bank Wire
+ */
+export const transferRealPayment = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { provider = 'wise', accountNumber, iban, bankName, adminNote } = req.body
+
+    const result = await executeRealPaymentTransfer({
+      requestId: id,
+      provider,
+      accountNumber,
+      iban,
+      bankName,
+      adminNote,
+    })
+
+    const updated = await WalletRequest.findById(id).populate('user', 'fullName email role walletBalance status')
+    const [safe] = await withBusinessName([updated])
+
+    return res.json({
+      message: result.message,
+      transfer: result,
+      request: safe,
+    })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Payment transfer execution failed.' })
   }
 }

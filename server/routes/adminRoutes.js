@@ -65,6 +65,7 @@ import {
   listAllWalletRequests,
   approveWalletRequest,
   rejectWalletRequest,
+  transferRealPayment,
   getWalletSettings,
   updateWalletSettings,
 } from '../controllers/walletController.js'
@@ -281,6 +282,12 @@ router.patch(
   '/wallet-requests/:id/reject',
   requirePermission('admin.wallets.approve'),
   rejectWalletRequest,
+)
+
+router.post(
+  '/wallet-requests/:id/transfer-payment',
+  requirePermission('admin.wallets.approve'),
+  transferRealPayment,
 )
 
 router.get('/wallet-settings', requirePermission('admin.wallets.view'), getWalletSettings)

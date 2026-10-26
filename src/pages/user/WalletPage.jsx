@@ -16,6 +16,10 @@ import {
   QrCode,
   FileText,
   Upload,
+  Truck,
+  Send,
+  Globe,
+  Zap,
 } from 'lucide-react'
 import UserLayout from '../../components/layout/UserLayout.jsx'
 import StatCard from '../../components/dashboard/StatCard.jsx'
@@ -25,11 +29,85 @@ import Badge from '../../components/ui/Badge.jsx'
 import Input from '../../components/ui/Input.jsx'
 import { walletApi, getErrorMessage, mediaUrl } from '../../lib/api.js'
 
+export const COURIER_OPTIONS = [
+  {
+    id: 'USPS',
+    name: 'USPS (United States Postal Service)',
+    tag: 'Web Tools API',
+    service: 'Priority Mail / Ground Advantage',
+    deliveryTime: '1-3 Business Days',
+    badgeColor: 'border-blue-500 bg-blue-50 text-blue-800',
+    iconColor: 'text-blue-700',
+    description: 'Official US postal carrier. Automatic barcode label tracking & commercial shipping rates.',
+  },
+  {
+    id: 'UPS',
+    name: 'UPS (United Parcel Service)',
+    tag: 'UPS Developer API',
+    service: 'UPS Ground / Next Day Air',
+    deliveryTime: '1-4 Business Days',
+    badgeColor: 'border-amber-500 bg-amber-50 text-amber-900',
+    iconColor: 'text-amber-800',
+    description: 'Premier worldwide courier with automated dispatch, pallet tracking & scheduled pickup.',
+  },
+  {
+    id: 'FedEx',
+    name: 'FedEx (Federal Express)',
+    tag: 'FedEx REST API',
+    service: 'FedEx 2Day / Ground Economy',
+    deliveryTime: '2-3 Business Days',
+    badgeColor: 'border-purple-500 bg-purple-50 text-purple-900',
+    iconColor: 'text-purple-700',
+    description: 'Fast express courier logistics with real-time barcode scanning & global coverage.',
+  },
+]
+
+export const INTERNATIONAL_PAYMENT_METHODS = [
+  {
+    id: 'wise',
+    name: 'Wise (TransferWise)',
+    subtitle: 'Direct Bank & IBAN Real-Time Transfer',
+    accountFieldLabel: 'Your Wise Email or Account Number *',
+    placeholder: 'e.g. client@example.com or 890123456789',
+    requiresIban: false,
+    badge: 'Real-Time API',
+  },
+  {
+    id: 'payoneer',
+    name: 'Payoneer',
+    subtitle: 'Global In-Network Payment & Bank Transfer',
+    accountFieldLabel: 'Your Payoneer Customer ID or Email *',
+    placeholder: 'e.g. PAY-12345678 or client@payoneer.com',
+    requiresIban: false,
+    badge: 'Mass Payout API',
+  },
+  {
+    id: 'stripe',
+    name: 'Stripe Connect',
+    subtitle: 'Direct Payout to Bank Card or Bank Account',
+    accountFieldLabel: 'Your Stripe Account ID or Email *',
+    placeholder: 'e.g. acct_1Nxxxxxxxxxxxx or user@domain.com',
+    requiresIban: false,
+    badge: 'Stripe Payouts',
+  },
+  {
+    id: 'bank_wire',
+    name: 'Direct Bank Wire (SWIFT / IBAN)',
+    subtitle: 'International Wire Transfer to Global Bank',
+    accountFieldLabel: 'Your Bank Account Number / SWIFT *',
+    placeholder: 'e.g. 0123456789 / CHASUS33',
+    requiresIban: true,
+    badge: 'Global SWIFT',
+  },
+]
+
 const TABLE_HEAD = [
   'TID / NO',
-  'SCREENSHOT',
+  'COURIER',
+  'PAYMENT / CLIENT ACCOUNT',
   'DEPOSIT AMOUNT',
-  'FINAL WALLET CREDIT',
+  'WALLET CREDIT',
+  'REAL TRANSFER REF',
   'STATUS',
   'DATE',
 ]
@@ -125,6 +203,14 @@ export default function UserWalletPage() {
   const [receipt, setReceipt] = useState(null)
   const [saving, setSaving] = useState(false)
   const [copiedId, setCopiedId] = useState('')
+
+  // Courier (USPS, UPS, FedEx) & Client International Account States
+  const [selectedCourier, setSelectedCourier] = useState('USPS')
+  const [selectedCourierService, setSelectedCourierService] = useState('Priority Mail / Ground Advantage')
+  const [clientPaymentMethod, setClientPaymentMethod] = useState('wise')
+  const [clientAccountNumber, setClientAccountNumber] = useState('')
+  const [clientIban, setClientIban] = useState('')
+  const [clientBankName, setClientBankName] = useState('')
 
   const handleCopy = (text, id) => {
     if (!text) return
@@ -254,14 +340,23 @@ export default function UserWalletPage() {
           depositCurrency: selectedCurrency.code,
           depositAmount: numAmount,
           bankTid: bankTid.trim(),
+          courier: selectedCourier,
+          courierService: selectedCourierService,
+          paymentMethod: clientPaymentMethod,
+          clientAccountNumber: clientAccountNumber.trim(),
+          clientIban: clientIban.trim(),
+          clientBankName: clientBankName.trim(),
         },
         receipt,
       )
       setSuccess(
-        `Deposit request for ${numAmount.toLocaleString()} ${selectedCurrency.code} (~$${creditedUsd.toFixed(2)} USD net credit) submitted successfully! Admin will verify and approve your wallet credit.`,
+        `Wallet request for ${numAmount.toLocaleString()} ${selectedCurrency.code} (~$${creditedUsd.toFixed(2)} USD) with ${selectedCourier} Courier submitted successfully! Admin can verify and execute real payment transfer.`,
       )
       setDepositAmount('')
       setBankTid('')
+      setClientAccountNumber('')
+      setClientIban('')
+      setClientBankName('')
       setReceipt(null)
       setShowForm(false)
       await loadWallet()
@@ -472,7 +567,163 @@ export default function UserWalletPage() {
           </div>
 
           {/* DEPOSIT FORM */}
-          <form className="space-y-5" onSubmit={handleSubmit}>
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            {/* 3. COURIER LOGISTICS INTEGRATION SELECTION */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  3. Select Preferred Shipping Courier Partner (USPS, UPS, FedEx APIs) *
+                </label>
+                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700">
+                  <Truck className="h-3.5 w-3.5" /> API Connected
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mb-3">
+                Select your preferred shipping carrier API for automated order label creation, barcode tracking, and warehouse dispatch.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {COURIER_OPTIONS.map((c) => {
+                  const isSelected = selectedCourier === c.id
+                  return (
+                    <div
+                      key={c.id}
+                      onClick={() => {
+                        setSelectedCourier(c.id)
+                        setSelectedCourierService(c.service)
+                      }}
+                      className={`cursor-pointer rounded-xl border-2 p-3.5 transition flex flex-col justify-between ${
+                        isSelected
+                          ? `${c.badgeColor} shadow-sm ring-1 ring-indigo-500`
+                          : 'border-slate-200 bg-white hover:border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-extrabold text-sm flex items-center gap-1.5">
+                            <Truck className={`h-4 w-4 ${c.iconColor}`} />
+                            {c.name}
+                          </span>
+                          {isSelected ? (
+                            <span className="rounded-full bg-emerald-600 p-0.5 text-white">
+                              <Check className="h-3.5 w-3.5" />
+                            </span>
+                          ) : (
+                            <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                              {c.tag}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs space-y-1">
+                          <div className="font-semibold text-slate-800">
+                            Service: <span className="font-normal">{c.service}</span>
+                          </div>
+                          <div className="text-slate-500">
+                            Delivery: <span className="font-medium text-slate-700">{c.deliveryTime}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-2 line-clamp-2">
+                            {c.description}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                        <span className="font-bold text-indigo-700">API Status: Ready</span>
+                        <span className="font-medium text-slate-500">Auto Barcode</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* 4. CLIENT INTERNATIONAL PAYOUT ACCOUNT DETAILS */}
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-indigo-950">
+                  4. International Payment & Client Account Details (Wise, Payoneer, Stripe, Bank Wire)
+                </label>
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-100 px-2.5 py-0.5 rounded-full">
+                  <Zap className="h-3.5 w-3.5" /> Real Money Payouts
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mb-3">
+                Provide your client account numbers so the admin can process real payment transfers and instant wallet settlements directly to your international account.
+              </p>
+
+              {/* Select International Method Tabs */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                {INTERNATIONAL_PAYMENT_METHODS.map((pm) => {
+                  const isSelected = clientPaymentMethod === pm.id
+                  return (
+                    <button
+                      key={pm.id}
+                      type="button"
+                      onClick={() => setClientPaymentMethod(pm.id)}
+                      className={`p-2.5 rounded-lg border text-left transition flex flex-col justify-between ${
+                        isSelected
+                          ? 'border-indigo-600 bg-white shadow-xs ring-1 ring-indigo-500'
+                          : 'border-slate-200 bg-white/70 hover:bg-white text-slate-600'
+                      }`}
+                    >
+                      <div className="font-bold text-xs text-slate-900 flex items-center justify-between">
+                        <span>{pm.name}</span>
+                        {isSelected && <Check className="h-3 w-3 text-indigo-600" />}
+                      </div>
+                      <span className="text-[10px] text-slate-500 mt-1 block truncate">
+                        {pm.badge}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Client Account Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white p-3.5 rounded-xl border border-slate-200">
+                <div className="sm:col-span-1">
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    {INTERNATIONAL_PAYMENT_METHODS.find((m) => m.id === clientPaymentMethod)?.accountFieldLabel || 'Client Account Number / Email'}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={INTERNATIONAL_PAYMENT_METHODS.find((m) => m.id === clientPaymentMethod)?.placeholder || 'Account number or email'}
+                    value={clientAccountNumber}
+                    onChange={(e) => setClientAccountNumber(e.target.value)}
+                    className="w-full text-xs font-mono rounded-lg border border-slate-300 px-3 py-2 text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-400">Real transfer will be sent to this client account.</p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Client Bank / Institution Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. JPMorgan Chase, Barclays, Wise"
+                    value={clientBankName}
+                    onChange={(e) => setClientBankName(e.target.value)}
+                    className="w-full text-xs rounded-lg border border-slate-300 px-3 py-2 text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-400">Optional bank or provider name.</p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Client IBAN / SWIFT Code
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. US44CHAS0000440189230198"
+                    value={clientIban}
+                    onChange={(e) => setClientIban(e.target.value)}
+                    className="w-full text-xs font-mono rounded-lg border border-slate-300 px-3 py-2 text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-400">Required for international wire transfers.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 5. DEPOSIT AMOUNT & PROOF */}
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               {/* Amount Input */}
               <div>
@@ -579,11 +830,11 @@ export default function UserWalletPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[750px] text-left text-sm">
+          <table className="w-full min-w-[900px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-400 bg-slate-50/70">
                 {TABLE_HEAD.map((head) => (
-                  <th key={head} className="whitespace-nowrap px-5 py-3">
+                  <th key={head} className="whitespace-nowrap px-4 py-3">
                     {head}
                   </th>
                 ))}
@@ -599,24 +850,65 @@ export default function UserWalletPage() {
               )}
               {requests.map((request) => (
                 <tr key={request.id} className="hover:bg-slate-50/50 transition">
-                  <td className="whitespace-nowrap px-5 py-4 font-mono font-medium text-slate-800">
-                    {request.bankTid}
-                  </td>
-                  <td className="whitespace-nowrap px-5 py-4 text-slate-500">
+                  {/* 1. TID / NO */}
+                  <td className="whitespace-nowrap px-4 py-4">
+                    <div className="font-mono font-medium text-slate-800">{request.bankTid}</div>
                     {request.receiptImage ? (
                       <a
                         href={mediaUrl(request.receiptImage)}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                        className="mt-1 inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
                       >
-                        View Slip
+                        <FileText className="h-3 w-3" /> View Slip
                       </a>
                     ) : (
-                      '—'
+                      <span className="text-[11px] text-slate-400">No Slip</span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-5 py-4">
+
+                  {/* 2. COURIER */}
+                  <td className="whitespace-nowrap px-4 py-4">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold border ${
+                        request.courier === 'UPS'
+                          ? 'border-amber-400 bg-amber-50 text-amber-900'
+                          : request.courier === 'FedEx'
+                          ? 'border-purple-400 bg-purple-50 text-purple-900'
+                          : 'border-blue-400 bg-blue-50 text-blue-900'
+                      }`}
+                    >
+                      <Truck className="h-3 w-3" />
+                      {request.courier || 'USPS'}
+                    </span>
+                    <span className="block text-[11px] text-slate-500 mt-0.5 max-w-[150px] truncate" title={request.courierService}>
+                      {request.courierService || 'Standard Ground'}
+                    </span>
+                  </td>
+
+                  {/* 3. PAYMENT / CLIENT ACCOUNT */}
+                  <td className="whitespace-nowrap px-4 py-4">
+                    <div className="text-xs">
+                      <span className="font-bold uppercase tracking-wider text-slate-700 block">
+                        {request.paymentMethod ? request.paymentMethod.toUpperCase() : 'INTERNATIONAL'}
+                      </span>
+                      {request.clientAccountNumber ? (
+                        <span className="font-mono font-medium text-indigo-700 block truncate max-w-[170px]" title={request.clientAccountNumber}>
+                          Acc: {request.clientAccountNumber}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 italic">No Client Account</span>
+                      )}
+                      {request.clientIban && (
+                        <span className="font-mono text-[10px] text-slate-500 block truncate max-w-[170px]" title={request.clientIban}>
+                          IBAN: {request.clientIban}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* 4. DEPOSIT AMOUNT */}
+                  <td className="whitespace-nowrap px-4 py-4">
                     <span className="font-semibold text-slate-800">
                       {request.depositAmount != null
                         ? `${Number(request.depositAmount).toLocaleString()} ${request.depositCurrency || 'USD'}`
@@ -628,12 +920,40 @@ export default function UserWalletPage() {
                       </span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-5 py-4">
+
+                  {/* 5. WALLET CREDIT */}
+                  <td className="whitespace-nowrap px-4 py-4">
                     <span className="font-bold text-emerald-600 text-sm">
-                      ${Number(request.amount).toFixed(2)} USD
+                      +${Number(request.amount).toFixed(2)} USD
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-5 py-4">
+
+                  {/* 6. REAL TRANSFER REF */}
+                  <td className="whitespace-nowrap px-4 py-4">
+                    {request.realTransferStatus === 'completed' ? (
+                      <div className="space-y-0.5">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">
+                          <Check className="h-3 w-3" /> Transferred
+                        </span>
+                        <span className="block font-mono text-[11px] text-slate-700 select-all font-semibold max-w-[140px] truncate" title={request.realTransferRef}>
+                          {request.realTransferRef || 'REF-CONFIRMED'}
+                        </span>
+                      </div>
+                    ) : request.realTransferStatus === 'processing' ? (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                        <Zap className="h-3 w-3" /> Processing
+                      </span>
+                    ) : request.realTransferStatus === 'failed' ? (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">
+                        Transfer Failed
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400 italic">Pending Transfer</span>
+                    )}
+                  </td>
+
+                  {/* 7. STATUS */}
+                  <td className="whitespace-nowrap px-4 py-4">
                     <Badge
                       tone={
                         request.status === 'approved'
@@ -646,7 +966,9 @@ export default function UserWalletPage() {
                       {request.statusLabel || request.status}
                     </Badge>
                   </td>
-                  <td className="whitespace-nowrap px-5 py-4 text-xs text-slate-500">
+
+                  {/* 8. DATE */}
+                  <td className="whitespace-nowrap px-4 py-4 text-xs text-slate-500">
                     {request.date}
                   </td>
                 </tr>

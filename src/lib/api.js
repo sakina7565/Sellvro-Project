@@ -306,6 +306,8 @@ export const adminApi = {
     apiRequest(`/admin/wallet-requests/${id}/approve`, { method: 'PATCH', body }),
   rejectWalletRequest: (id, body = {}) =>
     apiRequest(`/admin/wallet-requests/${id}/reject`, { method: 'PATCH', body }),
+  transferRealPayment: (id, body = {}) =>
+    apiRequest(`/admin/wallet-requests/${id}/transfer-payment`, { method: 'POST', body }),
   payouts: () => apiRequest('/admin/payouts'),
   processPayout: (supplierId) =>
     apiRequest(`/admin/payouts/${supplierId}/process`, { method: 'PATCH' }),

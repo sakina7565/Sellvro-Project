@@ -10,6 +10,7 @@ import {
   listAllWalletRequests,
   approveWalletRequest,
   rejectWalletRequest,
+  transferRealPayment,
 } from '../controllers/walletController.js'
 import { protect, authorize, requireApproved } from '../middleware/auth.js'
 import { productUpload } from '../middleware/upload.js'
@@ -43,5 +44,6 @@ router.post(
 router.get('/requests', protect, authorize('admin'), listAllWalletRequests)
 router.patch('/requests/:id/approve', protect, authorize('admin'), approveWalletRequest)
 router.patch('/requests/:id/reject', protect, authorize('admin'), rejectWalletRequest)
+router.post('/requests/:id/transfer-payment', protect, authorize('admin'), transferRealPayment)
 
 export default router
