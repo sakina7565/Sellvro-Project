@@ -38,6 +38,13 @@ export function getDashboardPathForUser(user) {
 export function canAccessPath(user, path) {
   if (!user) return false
 
+  // Suppliers can never access the landing page, products catalog, or buyer panel
+  if (user.role === 'supplier') {
+    if (path === '/' || path.startsWith('/products') || path.startsWith('/user')) {
+      return false
+    }
+  }
+
   if (path.startsWith('/admin')) {
     if (user.role !== 'admin') return false
     return canAccessAdminPath(user, path)

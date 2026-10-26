@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams, Navigate } from 'react-router-dom'
 import {
   LogIn,
   UserPlus,
@@ -25,12 +25,17 @@ import { MARKETPLACE_CATEGORIES } from '../components/marketplace/marketplaceDat
 
 function LandingPage() {
   const navigate = useNavigate()
+  const { user, isAuthenticated } = useAuth()
+
+  // Supplier can NEVER access the landing page with their account
+  if (user?.role === 'supplier') {
+    return <Navigate to="/supplier/dashboard" replace />
+  }
+
   const [searchParams, setSearchParams] = useSearchParams()
   const searchQuery = searchParams.get('q') || ''
   const categoryFromUrl = searchParams.get('category') || 'All Categories'
   const subcategoryFromUrl = searchParams.get('sub') || ''
-
-  const { user, isAuthenticated } = useAuth()
   const [activeCategory, setActiveCategory] = useState(categoryFromUrl)
   const [activeSubcategory, setActiveSubcategory] = useState(subcategoryFromUrl)
   const [categories, setCategories] = useState(MARKETPLACE_CATEGORIES)

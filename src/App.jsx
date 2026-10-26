@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { useAuth } from './context/AuthContext.jsx'
 import ProtectedRoute from './components/auth/ProtectedRoute.jsx'
 import PublicOnlyRoute from './components/auth/PublicOnlyRoute.jsx'
 import LandingPage from './pages/LandingPage.jsx'
@@ -66,9 +67,21 @@ function UserRoute({ children }) {
 }
 
 function App() {
+  const { user } = useAuth()
+  const isSupplier = user?.role === 'supplier'
+
   return (
     <Routes>
-      <Route path="/" element={<LandingPage />} />
+      <Route
+        path="/"
+        element={
+          isSupplier ? (
+            <Navigate to="/supplier/dashboard" replace />
+          ) : (
+            <LandingPage />
+          )
+        }
+      />
       <Route
         path="/login"
         element={
@@ -173,8 +186,26 @@ function App() {
       <Route path="/user/dashboard" element={<UserRoute><UserDashboardPage /></UserRoute>} />
       {/* Products only exist on landing page - redirect /user/products to root */}
       <Route path="/user/products" element={<Navigate to="/" replace />} />
-      <Route path="/products/:id" element={<UserProductDetailPage />} />
-      <Route path="/user/products/:id" element={<UserProductDetailPage />} />
+      <Route
+        path="/products/:id"
+        element={
+          isSupplier ? (
+            <Navigate to="/supplier/dashboard" replace />
+          ) : (
+            <UserProductDetailPage />
+          )
+        }
+      />
+      <Route
+        path="/user/products/:id"
+        element={
+          isSupplier ? (
+            <Navigate to="/supplier/dashboard" replace />
+          ) : (
+            <UserProductDetailPage />
+          )
+        }
+      />
       {/* Store removed from user panel - redirect to root */}
       <Route path="/user/store/:supplierId" element={<Navigate to="/" replace />} />
       <Route path="/user/store" element={<Navigate to="/" replace />} />
@@ -196,7 +227,15 @@ function App() {
       <Route path="/user/wallet" element={<UserRoute><UserWalletPage /></UserRoute>} />
       <Route path="/user/disputes" element={<UserRoute><UserDisputesPage /></UserRoute>} />
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route
+        path="*"
+        element={
+          <Navigate
+            to={isSupplier ? '/supplier/dashboard' : '/'}
+            replace
+          />
+        }
+      />
     </Routes>
   )
 }

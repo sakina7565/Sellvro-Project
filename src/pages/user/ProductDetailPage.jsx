@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, Navigate } from 'react-router-dom'
 import {
   AlertCircle,
   ArrowLeft,
@@ -92,7 +92,12 @@ function PaymentBadges() {
 function ProductDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { isAuthenticated } = useAuth()
+  const { user, isAuthenticated } = useAuth()
+
+  // Supplier can NEVER access public shop / product pages
+  if (user?.role === 'supplier') {
+    return <Navigate to="/supplier/dashboard" replace />
+  }
 
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)
