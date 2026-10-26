@@ -72,6 +72,7 @@ import {
 import {
   listAdminPayouts,
   processSupplierPayout,
+  getPendingWeeklyPayouts,
   getSuppliersFinancialOverview,
   getSupplierMonthlyHistory,
   getSupplierMonthOrders,
@@ -126,6 +127,15 @@ function handleProductPhotos(req, res, next) {
   productUpload.array('photos', 10)(req, res, (err) => {
     if (err) {
       return res.status(400).json({ message: err.message || 'Photo upload failed.' })
+    }
+    return next()
+  })
+}
+
+function handleReceiptUpload(req, res, next) {
+  productUpload.single('receipt')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ message: err.message || 'Receipt upload failed.' })
     }
     return next()
   })
@@ -281,10 +291,11 @@ router.get('/payouts', requirePermission('admin.payouts.view'), listAdminPayouts
 router.patch('/payouts/:supplierId/process', requirePermission('admin.payouts.process'), processSupplierPayout)
 
 // Detailed Supplier Finances, Monthly Breakdowns & Payout Processing
+router.get('/finances/pending-weeks', requirePermission('admin.payouts.view'), getPendingWeeklyPayouts)
 router.get('/finances/suppliers', requirePermission('admin.payouts.view'), getSuppliersFinancialOverview)
 router.get('/finances/suppliers/:supplierId/monthly', requirePermission('admin.payouts.view'), getSupplierMonthlyHistory)
 router.get('/finances/suppliers/:supplierId/monthly/:monthKey/orders', requirePermission('admin.payouts.view'), getSupplierMonthOrders)
-router.post('/finances/suppliers/:supplierId/payout', requirePermission('admin.payouts.process'), executeSupplierPayout)
+router.post('/finances/suppliers/:supplierId/payout', requirePermission('admin.payouts.process'), handleReceiptUpload, executeSupplierPayout)
 
 
 
