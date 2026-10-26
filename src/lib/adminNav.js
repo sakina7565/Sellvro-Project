@@ -50,6 +50,7 @@ export const ADMIN_NAV_ITEMS = [
     children: [
       { label: 'Wallets Requests', to: '/admin/wallets/requests' },
       { label: 'Supplier Finances & Payouts', to: '/admin/supplier/payouts' },
+      { label: 'Pending Payouts', to: '/admin/supplier/payouts?filter=mature' },
     ],
   },
   {

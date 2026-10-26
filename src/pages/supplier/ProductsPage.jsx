@@ -39,7 +39,7 @@ const TABLE_HEAD = [
   'Product',
   'SKU',
   'Category',
-  'Price',
+  'Price & You Earn',
   'Stock (WMS Verified)',
   'Marketplace Fee',
   'Status',
@@ -265,9 +265,15 @@ function SupplierProductsPage() {
                       {product.category}
                     </td>
 
-                    {/* Price */}
-                    <td className="whitespace-nowrap px-4 py-4 font-extrabold text-slate-900">
-                      ${Number(product.price || 0).toFixed(2)}
+                    {/* Price & You Earn */}
+                    <td className="whitespace-nowrap px-4 py-4">
+                      <p className="font-extrabold text-slate-900">${Number(product.price || 0).toFixed(2)}</p>
+                      {product.commission !== undefined && product.commission !== null ? (
+                        <p className="text-[11px] font-semibold text-emerald-600">
+                          Net: +${((Number(product.price || 0) * (100 - Number(product.commission || 0))) / 100).toFixed(2)}
+                          <span className="text-[10px] text-slate-400 font-normal ml-1">({product.commission}% fee)</span>
+                        </p>
+                      ) : null}
                     </td>
 
                     {/* Stock (WMS Verified vs Self) */}

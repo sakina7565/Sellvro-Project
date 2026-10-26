@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Check, SquarePen, ArrowLeft } from 'lucide-react'
+import { Check, SquarePen, ArrowLeft, Percent, DollarSign, Sparkles } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import Card from '../../components/ui/Card.jsx'
 import { adminApi, getErrorMessage } from '../../lib/api.js'
@@ -13,6 +13,11 @@ function ProductDetailPage() {
   const [actionLoading, setActionLoading] = useState(false)
   const [activeImageIndex, setActiveImageIndex] = useState(0)
 
+  // Commission state and revenue split
+  const [commission, setCommission] = useState('10')
+  const [commissionSuccess, setCommissionSuccess] = useState('')
+  const [isSavingCommission, setIsSavingCommission] = useState(false)
+
   const loadProduct = async () => {
     setLoading(true)
     setError('')
@@ -20,6 +25,11 @@ function ProductDetailPage() {
       const res = await adminApi.product(id)
       const data = res?.product || res?.data || res
       setProduct(data)
+      if (data?.commission !== undefined && data?.commission !== null && Number(data.commission) > 0) {
+        setCommission(String(data.commission))
+      } else {
+        setCommission('10')
+      }
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to load product details.'))
     } finally {
@@ -34,14 +44,43 @@ function ProductDetailPage() {
   }, [id])
 
   const handleApprove = async () => {
+    const commVal = Number(commission)
+    if (Number.isNaN(commVal) || commVal <= 0) {
+      setError('Please specify a valid commission percentage greater than 0% before approving.')
+      return
+    }
+
     setActionLoading(true)
+    setError('')
     try {
-      await adminApi.approveProduct(id, { activate: false })
+      await adminApi.approveProduct(id, { commission: commVal, activate: true })
+      setCommissionSuccess(`Product approved and activated with ${commVal}% marketplace commission!`)
       await loadProduct()
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to approve product.'))
     } finally {
       setActionLoading(false)
+    }
+  }
+
+  const handleUpdateCommission = async () => {
+    const commVal = Number(commission)
+    if (Number.isNaN(commVal) || commVal <= 0) {
+      setError('Please specify a valid commission percentage greater than 0%.')
+      return
+    }
+
+    setIsSavingCommission(true)
+    setError('')
+    setCommissionSuccess('')
+    try {
+      await adminApi.updateProductCommission(id, commVal)
+      setCommissionSuccess(`Commission updated to ${commVal}%. Orders will reflect this rate.`)
+      await loadProduct()
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to update commission.'))
+    } finally {
+      setIsSavingCommission(false)
     }
   }
 
@@ -238,17 +277,127 @@ function ProductDetailPage() {
                 </div>
               </div>
 
+              {/* Marketplace Commission & Revenue Split */}
+              <div className="mt-6 rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50/50 via-white to-slate-50 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Percent className="h-4 w-4 text-indigo-600" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-indigo-950">
+                      Marketplace Commission &amp; Revenue Split
+                    </span>
+                  </div>
+                  {product.commission ? (
+                    <span className="rounded bg-indigo-100 px-2 py-0.5 text-xs font-bold text-indigo-700">
+                      Active: {product.commission}%
+                    </span>
+                  ) : null}
+                </div>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Set the platform cut for this SKU. When an order is placed, this commission is deducted and retained by Sellvro, and the remainder is credited to the supplier.
+                </p>
+
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <div className="relative w-32">
+                    <input
+                      type="number"
+                      min="0.1"
+                      max="99"
+                      step="0.5"
+                      value={commission}
+                      onChange={(e) => setCommission(e.target.value)}
+                      placeholder="10"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 pr-8 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    />
+                    <span className="pointer-events-none absolute right-3 top-2.5 text-xs font-bold text-slate-400">
+                      %
+                    </span>
+                  </div>
+
+                  {/* Presets */}
+                  <div className="flex items-center gap-1.5">
+                    {[5, 10, 12, 15, 20].map((pct) => (
+                      <button
+                        key={pct}
+                        type="button"
+                        onClick={() => setCommission(String(pct))}
+                        className={`rounded-md px-2 py-1 text-xs font-semibold transition-colors ${
+                          commission === String(pct)
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        {pct}%
+                      </button>
+                    ))}
+                  </div>
+
+                  {isApproved && (
+                    <button
+                      type="button"
+                      onClick={handleUpdateCommission}
+                      disabled={isSavingCommission || Number(commission) === Number(product.commission)}
+                      className="ml-auto inline-flex items-center gap-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-3 py-1.5 text-xs font-semibold transition-colors shadow-xs"
+                    >
+                      {isSavingCommission ? 'Saving…' : 'Update Commission'}
+                    </button>
+                  )}
+                </div>
+
+                {/* Live Financial Breakdown Card */}
+                {(() => {
+                  const price = Number(product.price || 0)
+                  const commPct = Number(commission) || 0
+                  const adminCut = (price * commPct) / 100
+                  const supplierNet = price - adminCut
+
+                  return (
+                    <div className="mt-4 grid grid-cols-3 gap-2 rounded-lg border border-indigo-100/80 bg-white p-3 text-center shadow-2xs">
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          Listing Price
+                        </span>
+                        <span className="text-sm font-bold text-slate-900">
+                          ${price.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="border-x border-slate-100">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-rose-500">
+                          Admin Cut ({commPct}%)
+                        </span>
+                        <span className="text-sm font-bold text-rose-600">
+                          +${adminCut.toFixed(2)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-600">
+                          Supplier Net
+                        </span>
+                        <span className="text-sm font-bold text-emerald-600">
+                          ${supplierNet.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+
+              {commissionSuccess && (
+                <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-800 flex items-center gap-2">
+                  <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>{commissionSuccess}</span>
+                </div>
+              )}
+
               {/* Action Buttons */}
-              <div className="flex items-center gap-3 mt-8 pt-5 border-t border-slate-100">
+              <div className="flex items-center gap-3 mt-6 pt-5 border-t border-slate-100">
                 {isApproved ? (
-                  <button
-                    type="button"
-                    disabled
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400 bg-white px-5 py-2 text-xs font-semibold text-emerald-600 shadow-xs cursor-default"
-                  >
-                    <Check className="h-4 w-4 text-emerald-600" />
-                    <span>Already Approved</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400 bg-white px-4 py-2 text-xs font-semibold text-emerald-600 shadow-xs cursor-default">
+                      <Check className="h-4 w-4 text-emerald-600" />
+                      <span>Approved ({product.commission || commission}% Cut)</span>
+                    </span>
+                  </div>
                 ) : (
                   <button
                     type="button"
@@ -257,7 +406,7 @@ function ProductDetailPage() {
                     className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 text-xs font-semibold shadow-xs transition-colors"
                   >
                     <Check className="h-4 w-4" />
-                    <span>{actionLoading ? 'Approving…' : 'Approve Product'}</span>
+                    <span>{actionLoading ? 'Approving…' : `Approve & Activate (${commission || 10}% Commission)`}</span>
                   </button>
                 )}
 

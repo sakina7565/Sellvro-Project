@@ -51,6 +51,7 @@ function EditProductPage() {
     description: '',
     sku: '',
     price: '',
+    commission: '10',
     quantity: '0',
     location: '',
     status: 'active',
@@ -116,6 +117,7 @@ function EditProductPage() {
           description: prod.description || '',
           sku: prod.sku || '',
           price: prod.price !== undefined ? String(prod.price) : '',
+          commission: prod.commission !== undefined && prod.commission !== null && Number(prod.commission) > 0 ? String(prod.commission) : '10',
           quantity: prod.quantity !== undefined ? String(prod.quantity) : '0',
           location: prod.location && prod.location !== '—' ? prod.location : '',
           status: prod.status || 'approved',
@@ -229,6 +231,7 @@ function EditProductPage() {
         description: form.description.trim(),
         sku: form.sku.trim().toUpperCase(),
         price: Number(form.price || 0),
+        commission: Number(form.commission || 0),
         quantity: Number(form.quantity || 0),
         location: form.location,
         status: form.status,
@@ -555,7 +558,7 @@ function EditProductPage() {
                   {/* Price */}
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-slate-700">
-                      Price ($)
+                      Price ($) *
                     </label>
                     <Input
                       type="number"
@@ -564,9 +567,51 @@ function EditProductPage() {
                       value={form.price}
                       onChange={updateField('price')}
                       placeholder="0.00"
+                      required
+                    />
+                  </div>
+
+                  {/* Platform Commission */}
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">
+                      Marketplace Commission (%) *
+                    </label>
+                    <Input
+                      type="number"
+                      step="0.5"
+                      min="0.1"
+                      max="99"
+                      value={form.commission}
+                      onChange={updateField('commission')}
+                      placeholder="10"
+                      required
                     />
                   </div>
                 </div>
+
+                {/* Financial split preview */}
+                {Number(form.price) > 0 && (
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3.5 text-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100/60 pb-2">
+                      <span className="font-bold text-indigo-950">Financial Split Breakdown (Per Unit):</span>
+                      <span className="font-semibold text-slate-500">Auto-calculated upon order placement</span>
+                    </div>
+                    <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-3 gap-2 text-center">
+                      <div className="rounded-lg bg-white p-2 border border-slate-100">
+                        <span className="block text-[10px] uppercase font-bold text-slate-400">Customer Price</span>
+                        <span className="font-bold text-slate-900">${Number(form.price || 0).toFixed(2)}</span>
+                      </div>
+                      <div className="rounded-lg bg-white p-2 border border-slate-100">
+                        <span className="block text-[10px] uppercase font-bold text-rose-500">Sellvro Cut ({form.commission || 0}%)</span>
+                        <span className="font-bold text-rose-600">+${((Number(form.price || 0) * Number(form.commission || 0)) / 100).toFixed(2)}</span>
+                      </div>
+                      <div className="rounded-lg bg-white p-2 border border-slate-100">
+                        <span className="block text-[10px] uppercase font-bold text-emerald-600">Supplier Net Payout</span>
+                        <span className="font-bold text-emerald-700">${((Number(form.price || 0) * (100 - Number(form.commission || 0))) / 100).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
 

@@ -169,6 +169,13 @@ export const getSupplierFinance = async (req, res) => {
         .toFixed(2),
     )
 
+    const grossTotal = Number(
+      pendingOrders.reduce((sum, order) => sum + Number(order.total || 0), 0).toFixed(2),
+    )
+    const commissionTotal = Number(
+      pendingOrders.reduce((sum, order) => sum + Number(order.commission || 0), 0).toFixed(2),
+    )
+
     const payouts = await Payout.find({ supplier: supplierId })
       .sort({ createdAt: -1 })
       .populate('supplier', 'fullName email')
@@ -187,6 +194,9 @@ export const getSupplierFinance = async (req, res) => {
         transactionId: order.orderNo,
         status: 'Pending',
         total: Number((order.total - order.commission).toFixed(2)),
+        grossTotal: Number(order.total || 0),
+        commission: Number(order.commission || 0),
+        commissionPercent: order.commissionPercent || 0,
         date: order.createdAt
           ? new Date(order.createdAt).toLocaleDateString('en-US', {
               month: 'short',
@@ -202,6 +212,9 @@ export const getSupplierFinance = async (req, res) => {
         transactionId: `PAY-${payout._id.toString().slice(-8).toUpperCase()}`,
         status: payout.status === 'processed' ? 'Processed' : 'Pending',
         total: payout.amount,
+        grossTotal: payout.amount,
+        commission: 0,
+        commissionPercent: 0,
         date: (payout.processedAt || payout.createdAt)
           ? new Date(payout.processedAt || payout.createdAt).toLocaleDateString('en-US', {
               month: 'short',
@@ -217,6 +230,8 @@ export const getSupplierFinance = async (req, res) => {
       summary: {
         pendingPayouts: pendingOrders.length > 0 ? 1 : 0,
         pendingAmount,
+        grossTotal,
+        commissionTotal,
         processedTotal,
       },
       data: transactions,
@@ -238,7 +253,221 @@ function formatMonthLabel(date) {
   return d.toLocaleString('en-US', { month: 'long', year: 'numeric' })
 }
 
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+export function isOrderMature(order) {
+  if (!order) return false
+  const status = String(order.status || '').toLowerCase()
+  const tracking = String(order.trackingStatus || '').toLowerCase()
+  return status === 'delivered' || tracking === 'delivered'
+}
+
+export function getWeekOfMonthInfo(date) {
+  const d = new Date(date)
+  const day = d.getDate()
+  const year = d.getFullYear()
+  const month = d.getMonth()
+  const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`
+  const monthShort = d.toLocaleString('en-US', { month: 'short' })
+  const lastDay = new Date(year, month + 1, 0).getDate()
+
+  let weekNumber = 1
+  let startDay = 1
+  let endDay = 7
+
+  if (day <= 7) {
+    weekNumber = 1
+    startDay = 1
+    endDay = 7
+  } else if (day <= 14) {
+    weekNumber = 2
+    startDay = 8
+    endDay = 14
+  } else if (day <= 21) {
+    weekNumber = 3
+    startDay = 15
+    endDay = 21
+  } else if (day <= 28) {
+    weekNumber = 4
+    startDay = 22
+    endDay = 28
+  } else {
+    weekNumber = 5
+    startDay = 29
+    endDay = lastDay
+  }
+
+  // Saturday release cycle (the Saturday closing or following this weekly bracket)
+  const bracketEndDate = new Date(year, month, endDay)
+  const dayOfWeek = bracketEndDate.getDay() // 0 = Sun, 6 = Sat
+  const daysUntilSaturday = (6 - dayOfWeek + 7) % 7
+  const saturdayDate = new Date(year, month, endDay + daysUntilSaturday)
+  const saturdayRelease = saturdayDate.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+
+  const weekKey = `${monthKey}-W${weekNumber}`
+  const weekLabel = `Week ${weekNumber} (${monthShort} ${startDay} - ${endDay})`
+
+  return {
+    weekNumber,
+    weekKey,
+    weekLabel,
+    periodLabel: weekLabel,
+    monthKey,
+    startDay,
+    endDay,
+    saturdayRelease,
+    saturdayLabel: saturdayRelease,
+  }
+}
+
+export const getPendingWeeklyPayouts = async (_req, res) => {
+  try {
+    const suppliers = await User.find({ role: 'supplier' }).sort({ createdAt: -1 })
+    const supplierIds = suppliers.map((s) => s._id)
+
+    const profiles = await BusinessProfile.find({ user: { $in: supplierIds } })
+    const profileMap = Object.fromEntries(profiles.map((p) => [p.user.toString(), p]))
+
+    const allOrders = await Order.find({
+      supplier: { $in: supplierIds },
+      status: { $ne: 'cancelled' },
+    }).sort({ createdAt: -1 })
+
+    const supplierMap = Object.fromEntries(suppliers.map((s) => [s._id.toString(), s]))
+    const weekGroups = {}
+
+    allOrders.forEach((o) => {
+      const sId = o.supplier?.toString()
+      if (!sId || !supplierMap[sId]) return
+
+      const d = o.createdAt || new Date()
+      const wInfo = getWeekOfMonthInfo(d)
+      const groupKey = `${sId}_${wInfo.weekKey}`
+
+      if (!weekGroups[groupKey]) {
+        const sup = supplierMap[sId]
+        const prof = profileMap[sId]
+        const sDisplayId = sup.clientId || `SUP-${sId.slice(-6).toUpperCase()}`
+
+        weekGroups[groupKey] = {
+          id: groupKey,
+          supplierId: sId,
+          supplierDisplayId: sDisplayId,
+          supplierName: sup.fullName,
+          supplierEmail: sup.email,
+          businessName: prof?.businessName || sup.fullName,
+          bankDetails: {
+            provider: prof?.paymentProvider || 'Not Set',
+            accNumber: prof?.accNumber || 'Not Set',
+            cardDate: prof?.cardDate || '',
+            city: prof?.city || '',
+            country: prof?.country || '',
+          },
+          monthKey: wInfo.monthKey,
+          weekKey: wInfo.weekKey,
+          weekNumber: wInfo.weekNumber,
+          weekLabel: wInfo.weekLabel,
+          periodLabel: wInfo.periodLabel,
+          saturdayRelease: wInfo.saturdayRelease,
+          saturdayLabel: wInfo.saturdayLabel,
+          totalOrders: 0,
+          deliveredCount: 0,
+          pendingDeliveryCount: 0,
+          grossSales: 0,
+          commission: 0,
+          netEarnings: 0,
+          matureAmount: 0,
+          immatureAmount: 0,
+          paidAmount: 0,
+          payoutStatus: 'Pending',
+          matureOrderIds: [],
+          allOrderIds: [],
+        }
+      }
+
+      const wg = weekGroups[groupKey]
+      wg.totalOrders += 1
+      wg.allOrderIds.push(o._id.toString())
+
+      const isDeliv = isOrderMature(o)
+      const oTotal = Number(o.total || 0)
+      const oComm = Number(o.commission || 0)
+      const net = oTotal - oComm
+
+      wg.grossSales += oTotal
+      wg.commission += oComm
+      wg.netEarnings += net
+
+      if (o.payoutStatus === 'processed') {
+        wg.paidAmount += net
+      } else if (isDeliv) {
+        wg.deliveredCount += 1
+        wg.matureAmount += net
+        wg.matureOrderIds.push(o._id.toString())
+      } else {
+        wg.pendingDeliveryCount += 1
+        wg.immatureAmount += net
+      }
+    })
+
+    const pendingWeeks = Object.values(weekGroups)
+      .map((wg) => {
+        const mAmount = Number(wg.matureAmount.toFixed(2))
+        const imAmount = Number(wg.immatureAmount.toFixed(2))
+        const pAmount = Number(wg.paidAmount.toFixed(2))
+
+        let status = 'Settled'
+        if (mAmount > 0 && pAmount > 0) {
+          status = 'Partially Paid (More Mature Ready)'
+        } else if (mAmount > 0) {
+          status = 'Ready for Saturday Release'
+        } else if (imAmount > 0 && pAmount > 0) {
+          status = 'Partially Paid (Awaiting Delivery)'
+        } else if (imAmount > 0) {
+          status = 'Pending Delivery'
+        } else if (pAmount > 0) {
+          status = 'Fully Paid'
+        }
+
+        return {
+          ...wg,
+          grossSales: Number(wg.grossSales.toFixed(2)),
+          commission: Number(wg.commission.toFixed(2)),
+          netEarnings: Number(wg.netEarnings.toFixed(2)),
+          matureAmount: mAmount,
+          immatureAmount: imAmount,
+          paidAmount: pAmount,
+          payoutStatus: status,
+          isActionable: mAmount > 0,
+        }
+      })
+      .filter((wg) => wg.isActionable || (wg.totalOrders > 0 && wg.immatureAmount > 0))
+      .sort((a, b) => {
+        if (a.isActionable && !b.isActionable) return -1
+        if (!a.isActionable && b.isActionable) return 1
+        return b.matureAmount - a.matureAmount
+      })
+
+    const summary = {
+      totalActionableAmount: Number(
+        pendingWeeks.reduce((sum, w) => sum + (w.isActionable ? w.matureAmount : 0), 0).toFixed(2),
+      ),
+      actionableWeeksCount: pendingWeeks.filter((w) => w.isActionable).length,
+      distinctSuppliersCount: new Set(
+        pendingWeeks.filter((w) => w.isActionable).map((w) => w.supplierId),
+      ).size,
+      totalMatureOrdersCount: pendingWeeks.reduce((sum, w) => sum + w.matureOrderIds.length, 0),
+    }
+
+    return res.json({ data: pendingWeeks, summary })
+  } catch (error) {
+    console.error('getPendingWeeklyPayouts error:', error)
+    return res.status(500).json({ message: error.message || 'Failed to load pending weekly payouts.' })
+  }
+}
 
 export const getSuppliersFinancialOverview = async (_req, res) => {
   try {
@@ -257,8 +486,6 @@ export const getSuppliersFinancialOverview = async (_req, res) => {
       status: 'processed',
     })
 
-    const now = Date.now()
-
     const data = suppliers.map((sup) => {
       const sId = sup._id.toString()
       const supOrders = allOrders.filter((o) => o.supplier && o.supplier.toString() === sId)
@@ -266,8 +493,8 @@ export const getSuppliersFinancialOverview = async (_req, res) => {
       const profile = profileMap[sId]
 
       const totalOrders = supOrders.length
-      const deliveredCount = supOrders.filter((o) => o.status === 'delivered' || o.trackingStatus === 'delivered').length
-      const pendingCount = supOrders.filter((o) => o.status === 'placed' || o.status === 'in_process').length
+      const deliveredCount = supOrders.filter((o) => isOrderMature(o)).length
+      const pendingCount = supOrders.filter((o) => !isOrderMature(o) && o.status !== 'cancelled').length
       const cancelledCount = supOrders.filter((o) => o.status === 'cancelled').length
 
       let grossSales = 0
@@ -285,8 +512,8 @@ export const getSuppliersFinancialOverview = async (_req, res) => {
         commissionTotal += orderComm
 
         if (o.payoutStatus !== 'processed') {
-          const ageMs = now - new Date(o.createdAt).getTime()
-          if (ageMs >= THIRTY_DAYS_MS) {
+          // Delivered orders are considered MATURE for Saturday weekly payouts
+          if (isOrderMature(o)) {
             matureAmount += netOrder
           } else {
             immatureAmount += netOrder
@@ -388,8 +615,7 @@ export const getSupplierMonthlyHistory = async (req, res) => {
       const g = monthGroups[key]
       g.orders.push(o)
       g.totalOrders += 1
-
-      const isDelivered = o.status === 'delivered' || o.trackingStatus === 'delivered'
+      const isDelivered = isOrderMature(o)
       const isCancelled = o.status === 'cancelled'
       const isPending = o.status === 'placed' || o.status === 'in_process'
 
@@ -407,18 +633,15 @@ export const getSupplierMonthlyHistory = async (req, res) => {
 
         if (o.payoutStatus === 'processed') {
           g.paidOrdersCount += 1
+        } else if (isDelivered) {
+          g.matureAmount += net
         } else {
-          const ageMs = now - new Date(o.createdAt).getTime()
-          if (ageMs >= THIRTY_DAYS_MS) {
-            g.matureAmount += net
-          } else {
-            g.immatureAmount += net
-          }
+          g.immatureAmount += net
         }
       }
     })
 
-    // Process payouts per month
+    // Process payouts per month and build weekly cycles
     const months = Object.values(monthGroups).map((g) => {
       const monthPayouts = payouts.filter(
         (p) => p.month === g.monthKey || formatMonthKey(p.processedAt || p.createdAt) === g.monthKey,
@@ -431,10 +654,105 @@ export const getSupplierMonthlyHistory = async (req, res) => {
       } else if (g.matureAmount === 0 && g.immatureAmount === 0) {
         payoutStatus = 'Paid'
       } else if (g.matureAmount > 0) {
-        payoutStatus = 'Mature (Ready for Payout)'
+        payoutStatus = 'Mature (Ready for Saturday Release)'
       } else if (g.immatureAmount > 0) {
-        payoutStatus = 'Immature (Pending 30 Days)'
+        payoutStatus = 'Awaiting Delivery'
       }
+
+      // Group orders of this month into Weekly cycles (ending Saturday)
+      const weekMap = {}
+      for (let w = 1; w <= 5; w++) {
+        const dummyDay = Math.min((w - 1) * 7 + 1, 28)
+        const sampleDate = new Date(`${g.monthKey}-${String(dummyDay).padStart(2, '0')}T12:00:00Z`)
+        const wInfo = getWeekOfMonthInfo(sampleDate)
+        weekMap[w] = {
+          weekNumber: w,
+          weekKey: `${g.monthKey}-W${w}`,
+          weekLabel: wInfo.weekLabel,
+          periodLabel: wInfo.periodLabel || wInfo.weekLabel,
+          saturdayRelease: wInfo.saturdayRelease,
+          saturdayLabel: wInfo.saturdayLabel || wInfo.saturdayRelease,
+          startDay: wInfo.startDay,
+          endDay: wInfo.endDay,
+          totalOrders: 0,
+          deliveredCount: 0,
+          pendingCount: 0,
+          grossSales: 0,
+          commission: 0,
+          netEarnings: 0,
+          matureAmount: 0,
+          immatureAmount: 0,
+          paidAmount: 0,
+          payoutStatus: 'Settled',
+          orderIds: [],
+          deliveredOrderIds: [],
+        }
+      }
+
+      g.orders.forEach((o) => {
+        const od = o.createdAt || new Date()
+        const wInfo = getWeekOfMonthInfo(od)
+        const w = weekMap[wInfo.weekNumber]
+        if (!w) return
+
+        w.totalOrders += 1
+        w.orderIds.push(o._id.toString())
+
+        const isDeliv = isOrderMature(o)
+        if (isDeliv) {
+          w.deliveredCount += 1
+          if (o.payoutStatus !== 'processed') {
+            w.deliveredOrderIds.push(o._id.toString())
+          }
+        } else {
+          w.pendingCount += 1
+        }
+
+        if (o.status !== 'cancelled') {
+          const oTot = Number(o.total || 0)
+          const oComm = Number(o.commission || 0)
+          const net = oTot - oComm
+          w.grossSales += oTot
+          w.commission += oComm
+          w.netEarnings += net
+
+          if (o.payoutStatus === 'processed') {
+            w.paidAmount += net
+          } else if (isDeliv) {
+            w.matureAmount += net
+          } else {
+            w.immatureAmount += net
+          }
+        }
+      })
+
+      const weeks = Object.values(weekMap)
+        .filter((w) => w.totalOrders > 0 || w.weekNumber <= 4)
+        .map((w) => {
+          const mAmount = Number(w.matureAmount.toFixed(2))
+          const imAmount = Number(w.immatureAmount.toFixed(2))
+          const pAmount = Number(w.paidAmount.toFixed(2))
+
+          let wStatus = 'Settled'
+          if (mAmount > 0) {
+            wStatus = 'Mature (Ready for Saturday Release)'
+          } else if (imAmount > 0) {
+            wStatus = 'Awaiting Delivery'
+          } else if (pAmount > 0) {
+            wStatus = 'Paid'
+          }
+
+          return {
+            ...w,
+            grossSales: Number(w.grossSales.toFixed(2)),
+            commission: Number(w.commission.toFixed(2)),
+            netEarnings: Number(w.netEarnings.toFixed(2)),
+            matureAmount: mAmount,
+            immatureAmount: imAmount,
+            paidAmount: pAmount,
+            payoutStatus: wStatus,
+          }
+        })
 
       return {
         monthKey: g.monthKey,
@@ -451,6 +769,7 @@ export const getSupplierMonthlyHistory = async (req, res) => {
         paidAmount: Number(paidAmount.toFixed(2)),
         payoutStatus,
         payouts: monthPayouts.map((p) => p.toSafeObject()),
+        weeks,
       }
     })
 
@@ -487,6 +806,8 @@ export const getSupplierMonthlyHistory = async (req, res) => {
 export const getSupplierMonthOrders = async (req, res) => {
   try {
     const { supplierId, monthKey } = req.params
+    const targetWeekKey = req.query.weekKey || req.query.week || ''
+
     if (!supplierId || !mongoose.Types.ObjectId.isValid(supplierId)) {
       return res.status(400).json({ message: 'Valid supplier id is required.' })
     }
@@ -503,12 +824,16 @@ export const getSupplierMonthOrders = async (req, res) => {
       .populate('product', 'name sku image')
       .sort({ createdAt: -1 })
 
-    const now = Date.now()
-
-    // Filter orders matching monthKey
+    // Filter orders matching monthKey (and optionally weekKey)
     const monthOrders = orders.filter((o) => {
       const d = o.createdAt || new Date()
-      return formatMonthKey(d) === monthKey
+      const mMatches = formatMonthKey(d) === monthKey
+      if (!mMatches) return false
+      if (targetWeekKey) {
+        const wInfo = getWeekOfMonthInfo(d)
+        return wInfo.weekKey === targetWeekKey || `W${wInfo.weekNumber}` === targetWeekKey
+      }
+      return true
     })
 
     let matureTotal = 0
@@ -526,10 +851,8 @@ export const getSupplierMonthOrders = async (req, res) => {
       commissionTotal += comm
       netTotal += net
 
-      const orderAgeMs = now - new Date(o.createdAt).getTime()
-      const ageDays = Math.floor(orderAgeMs / (24 * 60 * 60 * 1000))
-      const isMature = ageDays >= 30
-      const daysToMaturity = isMature ? 0 : 30 - ageDays
+      const isMature = isOrderMature(o)
+      const wInfo = getWeekOfMonthInfo(o.createdAt || new Date())
 
       if (o.payoutStatus !== 'processed' && o.status !== 'cancelled') {
         if (isMature) matureTotal += net
@@ -538,10 +861,11 @@ export const getSupplierMonthOrders = async (req, res) => {
 
       return {
         ...o.toSafeObject(),
-        ageDays,
         isMature,
-        daysToMaturity,
+        matureStatusLabel: isMature ? 'Delivered (Mature)' : 'In Transit / Holding',
+        weekInfo: wInfo,
         netAmount: net,
+        supplierNet: net,
       }
     })
 
@@ -550,6 +874,7 @@ export const getSupplierMonthOrders = async (req, res) => {
 
     return res.json({
       monthKey,
+      weekKey: targetWeekKey || null,
       monthLabel: monthOrders[0] ? formatMonthLabel(monthOrders[0].createdAt) : monthKey,
       supplier: {
         id: supplier._id.toString(),
@@ -584,7 +909,7 @@ export const getSupplierMonthOrders = async (req, res) => {
 export const executeSupplierPayout = async (req, res) => {
   try {
     const { supplierId } = req.params
-    const { monthKey, amount, tid, paymentMethod, receiptUrl, notes, orderIds } = req.body
+    const { monthKey, weekKey, amount, tid, paymentMethod, notes, orderIds } = req.body
 
     if (!supplierId || !mongoose.Types.ObjectId.isValid(supplierId)) {
       return res.status(400).json({ message: 'Valid supplier id is required.' })
@@ -607,11 +932,28 @@ export const executeSupplierPayout = async (req, res) => {
       ? `${profile.paymentProvider || 'Bank'} - Acc: ${profile.accNumber || 'N/A'} (${profile.cardDate || supplier.fullName})`
       : 'Not Set'
 
+    // Screenshot file upload handling or URL fallback
+    let receiptUrl = ''
+    if (req.file) {
+      receiptUrl = `/uploads/${req.file.filename}`
+    } else if (req.body.receiptUrl) {
+      receiptUrl = String(req.body.receiptUrl).trim()
+    }
+
     // Determine orders to be paid
     let targetOrders = []
-    if (Array.isArray(orderIds) && orderIds.length > 0) {
+    let parsedOrderIds = []
+    if (orderIds) {
+      try {
+        parsedOrderIds = typeof orderIds === 'string' ? JSON.parse(orderIds) : orderIds
+      } catch {
+        parsedOrderIds = Array.isArray(orderIds) ? orderIds : [orderIds]
+      }
+    }
+
+    if (Array.isArray(parsedOrderIds) && parsedOrderIds.length > 0) {
       targetOrders = await Order.find({
-        _id: { $in: orderIds },
+        _id: { $in: parsedOrderIds },
         supplier: supplierId,
         payoutStatus: { $ne: 'processed' },
       })
@@ -621,13 +963,23 @@ export const executeSupplierPayout = async (req, res) => {
         payoutStatus: { $ne: 'processed' },
         status: { $ne: 'cancelled' },
       })
-      targetOrders = allSupOrders.filter((o) => formatMonthKey(o.createdAt) === monthKey)
+      targetOrders = allSupOrders.filter((o) => {
+        const matchesMonth = formatMonthKey(o.createdAt) === monthKey
+        if (!matchesMonth) return false
+        if (weekKey) {
+          const wInfo = getWeekOfMonthInfo(o.createdAt)
+          const matchesWeek = wInfo.weekKey === weekKey || `W${wInfo.weekNumber}` === weekKey
+          if (!matchesWeek) return false
+        }
+        return isOrderMature(o)
+      })
     } else {
-      targetOrders = await Order.find({
+      const allSupOrders = await Order.find({
         supplier: supplierId,
         payoutStatus: { $ne: 'processed' },
         status: { $ne: 'cancelled' },
       })
+      targetOrders = allSupOrders.filter((o) => isOrderMature(o))
     }
 
     const calculatedAmount = Number(
@@ -644,8 +996,9 @@ export const executeSupplierPayout = async (req, res) => {
       amount: payoutAmount,
       tid: String(tid).trim(),
       month: monthKey || formatMonthKey(new Date()),
+      week: weekKey || '',
       paymentMethod: paymentMethod || 'Bank Transfer (IBFT)',
-      receiptUrl: receiptUrl ? String(receiptUrl).trim() : '',
+      receiptUrl,
       notes: notes ? String(notes).trim() : '',
       bankDetails: bankDetailsStr,
       status: 'processed',
@@ -671,13 +1024,13 @@ export const executeSupplierPayout = async (req, res) => {
       recipient: supplier._id,
       targetRole: 'supplier',
       type: 'payout',
-      title: `Payout Processed ($${payoutAmount.toFixed(2)})`,
-      message: `Your payment for ${monthKey || 'recent orders'} of $${payoutAmount.toFixed(2)} has been transferred via ${paymentMethod || 'Bank'} with TID: ${tid}.`,
-      link: '/supplier/payouts',
+      title: `Payout Released ($${payoutAmount.toFixed(2)})`,
+      message: `Your weekly payout for ${weekKey || monthKey || 'mature orders'} of $${payoutAmount.toFixed(2)} has been released via ${paymentMethod || 'Bank Transfer'} with TID: ${tid}.`,
+      link: '/supplier/finance/index',
     })
 
     return res.status(201).json({
-      message: 'Supplier payout successfully processed and recorded.',
+      message: 'Supplier weekly payout successfully released and recorded.',
       payout: payout.toSafeObject(),
     })
   } catch (error) {
@@ -685,4 +1038,3 @@ export const executeSupplierPayout = async (req, res) => {
     return res.status(500).json({ message: error.message || 'Failed to process supplier payout.' })
   }
 }
-
