@@ -8,6 +8,8 @@ import {
   updateOrderStatus,
   updateOrderTracking,
   pushOrderToWmsManual,
+  trackWmsOrder,
+  listLiveWmsOrders,
   getWmsSupplierOrders,
   updateWmsOrderDispatch,
 } from '../controllers/orderController.js'
@@ -32,12 +34,15 @@ router.get('/lookup', protect, authorize('user', 'supplier', 'admin'), lookupOrd
 router.get('/dashboard/stats', protect, authorize('user'), requireApproved, getUserDashboardStats)
 router.get('/supplier', protect, authorize('supplier'), requireApproved, listSupplierOrders)
 router.get('/', protect, authorize('admin'), listAllOrders)
+
+// WMS Live Direct Integration Endpoints
+router.get('/wms/live-list', protect, authorize('supplier', 'admin'), listLiveWmsOrders)
+router.get('/wms/supplier/:clientId', getWmsSupplierOrders)
+router.post('/wms/update-dispatch', updateWmsOrderDispatch)
+
+router.get('/:id/track-wms', protect, authorize('user', 'supplier', 'admin'), trackWmsOrder)
 router.patch('/:id/status', protect, authorize('admin', 'supplier'), updateOrderStatus)
 router.patch('/:id/tracking', protect, authorize('admin', 'supplier'), updateOrderTracking)
 router.post('/:id/push-wms', protect, authorize('admin', 'supplier'), pushOrderToWmsManual)
-
-// WMS Direct Integration Endpoints
-router.get('/wms/supplier/:clientId', getWmsSupplierOrders)
-router.post('/wms/update-dispatch', updateWmsOrderDispatch)
 
 export default router

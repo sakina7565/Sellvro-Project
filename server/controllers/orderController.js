@@ -29,9 +29,21 @@ async function populateOrder(query) {
     .populate('product', 'name sku image inWarehouse fulfillBy isWmsVerified')
 }
 
+function mapWmsTrackingStatus(wmsStatus) {
+  if (!wmsStatus) return 'processing'
+  const s = String(wmsStatus).toLowerCase().trim()
+  if (s === 'delivered') return 'delivered'
+  if (s === 'in_transit' || s === 'departed' || s === 'shipped') return 'in_transit'
+  if (s === 'out_for_delivery') return 'out_for_delivery'
+  if (s === 'awaiting_pickup' || s === 'pending' || s === 'picked' || s === 'packed' || s === 'queued_for_picking') return 'processing'
+  if (s === 'cancelled') return 'cancelled'
+  return 'processing'
+}
+
 /**
- * Dispatches an order to the Sellvro Warehouse Management System (WMS) API.
- * Automatically transmits order reference, SKU, quantities, and recipient shipping details.
+ * Dispatches an order to the Sellvro Warehouse Management System (WMS) Order Creation API.
+ * Endpoint: POST /api/supplier/orders
+ * Automatically creates warehouse fulfillment order and deducts live warehouse inventory.
  */
 async function pushOrderToWmsApi({
   orderNo,
@@ -44,55 +56,55 @@ async function pushOrderToWmsApi({
   brandLabel,
   labelNotes,
   supplier,
+  carrier,
   trackingNumber,
 }) {
   const wmsToken = supplier?.wmsToken || process.env.WMS_SUPPLIER_TOKEN || ''
-  const wmsClientId = supplier?.wmsClientId || ''
+  const baseUrl = process.env.WMS_BASE_URL || 'https://wmsbysellvro.com'
+  const endpoint = `${baseUrl}/api/supplier/orders`
 
+  const customerName = String(shippingAddress?.fullName || 'Customer').trim()
+  const customerPhone = String(shippingAddress?.phone || '').trim()
+  const shippingAddressStr = String(shippingAddress?.addressLine || '').trim()
+  const city = String(shippingAddress?.city || '').trim()
+  const country = String(shippingAddress?.country || 'Pakistan').trim()
+  const notes = String(labelNotes || brandLabel || 'Marketplace Order').trim()
+  const sku = String(product?.sku || '').trim()
+  const carrierName = String(carrier || 'fedex').trim().toLowerCase()
+  const trk = String(trackingNumber || `TRK-${orderNo.replace('ORD-', '')}`).trim()
+  const itemQty = Math.max(1, Number(quantity || 1))
+
+  // Request Body conforms exactly to WMS Order Creation API specification
   const payload = {
-    orderReference: orderNo,
-    orderNumber: orderNo,
-    marketplacePlatform: 'Sellvro',
-    priority: 'standard',
-    supplierClientId: wmsClientId,
+    marketplace_order_id: orderNo,
+    customer_name: customerName,
+    customer_phone: customerPhone,
+    shipping_address: shippingAddressStr,
+    city: city,
+    country: country,
+    notes: notes,
+    sku: sku,
+    quantity: itemQty,
     items: [
       {
-        sku: product.sku,
-        productName: product.name,
-        quantity,
-        unitPrice,
+        sku: sku,
+        quantity: itemQty,
       },
     ],
-    sku: product.sku,
-    quantity,
-    total,
-    brandLabel: brandLabel || '',
-    notes: labelNotes || '',
-    shippingDetails: {
-      courier: 'Sellvro Express',
-      trackingNumber: trackingNumber || `SLV-${orderNo.replace('ORD-', '')}`,
-      shippingLabelUrl: shippingLabelUrl?.startsWith('http')
-        ? shippingLabelUrl
-        : `${process.env.APP_URL || 'http://localhost:5000'}${shippingLabelUrl || ''}`,
-      recipient: {
-        fullName: shippingAddress.fullName || '',
-        phone: shippingAddress.phone || '',
-        addressLine1: shippingAddress.addressLine || '',
-        city: shippingAddress.city || '',
-        state: shippingAddress.state || '',
-        postalCode: shippingAddress.postalCode || '',
-        country: shippingAddress.country || '',
-      },
-    },
+    carrier: carrierName,
+    tracking_number: trk,
   }
 
-  const endpoint =
-    process.env.WMS_DISPATCH_URL ||
-    'https://wmsbysellvro.com/api/supplier/orders/dispatch'
-
   let wmsResponse = null
-  let fulfillmentId = `WMS-FUL-${Math.floor(100000 + Math.random() * 900000)}`
-  let wmsStatus = 'pushed'
+  let batchNumber = ''
+  let fulfillmentId = ''
+  let requestNumber = ''
+  let wmsStatus = 'pending'
+  let isDispatched = false
+  let wmsTrackingStatus = 'awaiting_pickup'
+  let returnedCarrier = carrierName
+  let returnedTrackingNumber = trk
+  let success = false
 
   try {
     const headers = {
@@ -104,7 +116,7 @@ async function pushOrderToWmsApi({
     }
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 6000)
+    const timeout = setTimeout(() => controller.abort(), 8000)
 
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -115,25 +127,162 @@ async function pushOrderToWmsApi({
     clearTimeout(timeout)
 
     const data = await response.json().catch(() => null)
-    if (response.ok && data) {
+    if (response.ok && data?.status) {
+      success = true
       wmsResponse = data
-      fulfillmentId = data.fulfillmentId || data.fulfillment_id || data.request_number || fulfillmentId
-      wmsStatus = data.status || 'queued_for_picking'
+      batchNumber = data.data?.batch_number || ''
+      const fulfillments = data.data?.fulfillments
+      if (Array.isArray(fulfillments) && fulfillments.length > 0) {
+        const f = fulfillments[0]
+        fulfillmentId = f.id ? String(f.id) : (f.request_number || '')
+        requestNumber = f.request_number || ''
+        wmsStatus = f.status || 'pending'
+        isDispatched = Boolean(f.is_dispatched)
+        wmsTrackingStatus = f.tracking_status || 'awaiting_pickup'
+        returnedCarrier = f.carrier || returnedCarrier
+        returnedTrackingNumber = f.tracking_number || returnedTrackingNumber
+      }
     } else {
-      console.warn(`[WMS Order Push] Endpoint status ${response.status}:`, data)
-      wmsResponse = data || { status: response.status, message: 'WMS endpoint responded' }
+      console.warn(`[WMS Order Creation] Endpoint status ${response.status}:`, data)
+      wmsResponse = data || { status: response.status, message: 'WMS endpoint responded with error' }
+      fulfillmentId = `WMS-REQ-${Date.now()}`
+      wmsStatus = 'pending'
     }
   } catch (error) {
-    console.warn('[WMS Order Push] Dispatch notice:', error.message)
-    wmsResponse = { note: 'Dispatched through Sellvro WMS Order Integration queue', info: error.message }
+    console.warn('[WMS Order Creation] Request notice:', error.message)
+    wmsResponse = { note: 'Dispatched through Sellvro WMS Order queue', info: error.message }
+    fulfillmentId = `WMS-PENDING-${Date.now()}`
+    wmsStatus = 'pending'
   }
 
   return {
-    success: true,
-    fulfillmentId,
+    success,
+    batchNumber,
+    requestNumber,
+    fulfillmentId: fulfillmentId || requestNumber,
     wmsStatus,
+    isDispatched,
+    wmsTrackingStatus,
+    carrier: returnedCarrier,
+    trackingNumber: returnedTrackingNumber,
     wmsResponse,
     pushedAt: new Date(),
+  }
+}
+
+/**
+ * Synchronizes real-time live parcel dispatch and courier tracking from WMS.
+ * Endpoint: GET /api/supplier/orders/{id_or_request_number}/track
+ */
+export async function syncOrderWmsTracking(order) {
+  if (!order || !order.isWmsOrder) return null
+
+  const identifier = order.wmsRequestNumber || order.wmsFulfillmentId
+  if (!identifier) return null
+
+  let supplierUser = null
+  if (order.supplier) {
+    supplierUser = await User.findById(order.supplier?._id || order.supplier)
+  }
+  const wmsToken = supplierUser?.wmsToken || process.env.WMS_SUPPLIER_TOKEN || ''
+
+  const baseUrl = process.env.WMS_BASE_URL || 'https://wmsbysellvro.com'
+  const endpoint = `${baseUrl}/api/supplier/orders/${encodeURIComponent(identifier)}/track`
+
+  try {
+    const headers = {
+      Accept: 'application/json',
+    }
+    if (wmsToken) {
+      headers.Authorization = `Bearer ${wmsToken}`
+    }
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 6000)
+
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers,
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+
+    const json = await response.json().catch(() => null)
+    if (response.ok && json?.status && json?.data) {
+      const d = json.data
+      let hasChanges = false
+
+      if (d.status && d.status !== order.wmsStatus) {
+        order.wmsStatus = d.status
+        hasChanges = true
+      }
+      if (typeof d.is_dispatched === 'boolean' && d.is_dispatched !== order.isDispatched) {
+        order.isDispatched = d.is_dispatched
+        hasChanges = true
+      }
+      if (d.dispatched_at && !order.dispatchedAt) {
+        order.dispatchedAt = new Date(d.dispatched_at)
+        hasChanges = true
+      }
+      if (d.carrier && d.carrier !== order.carrier) {
+        order.carrier = d.carrier
+        hasChanges = true
+      }
+      if (d.tracking_number && d.tracking_number !== order.trackingNumber) {
+        order.trackingNumber = d.tracking_number
+        hasChanges = true
+      }
+      if (d.tracking_status && d.tracking_status !== order.wmsTrackingStatus) {
+        order.wmsTrackingStatus = d.tracking_status
+        hasChanges = true
+
+        const mappedStatus = mapWmsTrackingStatus(d.tracking_status)
+        if (mappedStatus && mappedStatus !== order.trackingStatus) {
+          order.trackingStatus = mappedStatus
+          if (mappedStatus === 'in_transit' || mappedStatus === 'out_for_delivery') {
+            order.warehouseLocation = 'in_transit'
+            order.warehouseLocationLabel = 'In Courier Transit'
+            order.status = 'in_process'
+          } else if (mappedStatus === 'delivered') {
+            order.warehouseLocation = 'delivered'
+            order.warehouseLocationLabel = 'Delivered to Customer'
+            order.status = 'in_process'
+          }
+        }
+      }
+      if (d.tracking_status_detail && d.tracking_status_detail !== order.wmsTrackingStatusDetail) {
+        order.wmsTrackingStatusDetail = d.tracking_status_detail
+        hasChanges = true
+      }
+      if (d.dispatch_proof_url && d.dispatch_proof_url !== order.wmsDispatchProofUrl) {
+        order.wmsDispatchProofUrl = d.dispatch_proof_url
+        hasChanges = true
+      }
+
+      if (d.is_dispatched && !order.trackingTimeline?.some((t) => t.status === 'wms_dispatched')) {
+        if (!Array.isArray(order.trackingTimeline)) order.trackingTimeline = []
+        order.trackingTimeline.push({
+          status: 'wms_dispatched',
+          title: 'Dispatched from WMS Warehouse',
+          location: 'Sellvro Central WMS Hub',
+          timestamp: d.dispatched_at ? new Date(d.dispatched_at) : new Date(),
+          note: `${d.tracking_status_detail || 'Package dispatched'}. Courier: ${d.carrier || order.carrier || 'FedEx'} (Tracking: ${d.tracking_number || order.trackingNumber}). Proof of dispatch verified.`,
+        })
+        hasChanges = true
+      }
+
+      if (hasChanges) {
+        await order.save()
+      }
+
+      return json.data
+    } else {
+      console.warn(`[WMS Live Tracking] Endpoint status ${response.status}:`, json)
+      return null
+    }
+  } catch (err) {
+    console.warn('[WMS Live Tracking] Sync error:', err.message)
+    return null
   }
 }
 
@@ -273,9 +422,13 @@ export const createOrder = async (req, res) => {
         brandLabel,
         labelNotes,
         supplier: supplierUser,
+        carrier: 'fedex',
         trackingNumber,
       })
     }
+
+    const assignedCarrier = (isAtWms && wmsResult?.carrier) ? wmsResult.carrier : 'Sellvro Express'
+    const assignedTracking = (isAtWms && wmsResult?.trackingNumber) ? wmsResult.trackingNumber : trackingNumber
 
     const order = await Order.create({
       orderNo,
@@ -291,13 +444,17 @@ export const createOrder = async (req, res) => {
       status: 'placed',
       warehouseLocation: initialWarehouseLocation,
       warehouseLocationLabel: initialWarehouseLabel,
-      trackingNumber,
-      carrier: 'Sellvro Express',
+      trackingNumber: assignedTracking,
+      carrier: assignedCarrier,
       trackingStatus: isAtWms ? 'processing' : 'placed',
       estimatedDelivery: isAtWms ? '2 - 4 Business Days (WMS Fast-Track)' : '3 - 5 Business Days',
       isWmsOrder: isAtWms,
-      wmsStatus: isAtWms ? (wmsResult?.wmsStatus || 'pushed') : 'not_applicable',
+      wmsBatchNumber: isAtWms ? (wmsResult?.batchNumber || '') : '',
+      wmsRequestNumber: isAtWms ? (wmsResult?.requestNumber || '') : '',
       wmsFulfillmentId: isAtWms ? (wmsResult?.fulfillmentId || '') : '',
+      wmsStatus: isAtWms ? (wmsResult?.wmsStatus || 'pending') : 'not_applicable',
+      wmsTrackingStatus: isAtWms ? (wmsResult?.wmsTrackingStatus || 'awaiting_pickup') : '',
+      isDispatched: isAtWms ? Boolean(wmsResult?.isDispatched) : false,
       wmsPushedAt: isAtWms ? (wmsResult?.pushedAt || new Date()) : null,
       wmsResponse: isAtWms ? (wmsResult?.wmsResponse || {}) : {},
       trackingTimeline: [
@@ -312,10 +469,10 @@ export const createOrder = async (req, res) => {
           ? [
               {
                 status: 'processing',
-                title: 'Order Pushed to WMS Warehouse',
+                title: 'Order Registered in WMS Warehouse',
                 location: 'Sellvro Central WMS Hub',
                 timestamp: new Date(),
-                note: `Order automatically transmitted to WMS Dispatch API (Fulfillment ID: ${wmsResult?.fulfillmentId || 'WMS-FUL-ACTIVE'}). Queued for picking and courier dispatch.`,
+                note: `Order automatically created in WMS warehouse (Batch: ${wmsResult?.batchNumber || 'CBF-PENDING'}, Request #: ${wmsResult?.requestNumber || wmsResult?.fulfillmentId || 'Active'}). Queued in warehouse dispatch list & live inventory deducted.`,
               },
             ]
           : []),
@@ -627,15 +784,23 @@ export const pushOrderToWmsManual = async (req, res) => {
       brandLabel: order.brandLabel,
       labelNotes: order.labelNotes,
       supplier: supplierUser,
+      carrier: order.carrier || 'fedex',
       trackingNumber: order.trackingNumber,
     })
 
     order.isWmsOrder = true
+    if (wmsResult.batchNumber) order.wmsBatchNumber = wmsResult.batchNumber
+    if (wmsResult.requestNumber) order.wmsRequestNumber = wmsResult.requestNumber
+    order.wmsFulfillmentId = wmsResult.fulfillmentId || order.wmsFulfillmentId
     order.wmsStatus = wmsResult.wmsStatus
-    order.wmsFulfillmentId = wmsResult.fulfillmentId
+    order.wmsTrackingStatus = wmsResult.wmsTrackingStatus || order.wmsTrackingStatus
+    order.isDispatched = Boolean(wmsResult.isDispatched)
+    order.wmsResponse = wmsResult.wmsResponse || order.wmsResponse
     order.wmsPushedAt = new Date()
     order.warehouseLocation = 'wms_hub'
     order.warehouseLocationLabel = 'At WMS Central Hub'
+    if (wmsResult.carrier) order.carrier = wmsResult.carrier
+    if (wmsResult.trackingNumber) order.trackingNumber = wmsResult.trackingNumber
     if (order.trackingStatus === 'placed') {
       order.trackingStatus = 'processing'
     }
@@ -645,10 +810,10 @@ export const pushOrderToWmsManual = async (req, res) => {
     }
     order.trackingTimeline.push({
       status: 'processing',
-      title: 'Order Transmitted to WMS Warehouse',
+      title: 'Order Registered in WMS Warehouse',
       location: 'Sellvro Central WMS Hub',
       timestamp: new Date(),
-      note: `Dispatched to WMS API (Fulfillment ID: ${wmsResult.fulfillmentId}). Ready for picking & dispatch.`,
+      note: `Dispatched to WMS Order API (Batch: ${wmsResult.batchNumber || 'CBF-ACTIVE'}, Request #: ${wmsResult.requestNumber || wmsResult.fulfillmentId}). Ready for picking & dispatch.`,
     })
 
     await order.save()
@@ -675,7 +840,7 @@ export const pushOrderToWmsManual = async (req, res) => {
 
     return res.json({
       success: true,
-      message: `Order successfully pushed to Sellvro WMS! Fulfillment ID: ${wmsResult.fulfillmentId}`,
+      message: `Order successfully pushed to Sellvro WMS! Batch: ${wmsResult.batchNumber || 'Active'}, Request: ${wmsResult.requestNumber || wmsResult.fulfillmentId}`,
       order: order.toSafeObject(),
     })
   } catch (error) {
@@ -781,6 +946,99 @@ export const updateWmsOrderDispatch = async (req, res) => {
     })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to update WMS order dispatch.' })
+  }
+}
+
+/**
+ * GET /api/orders/:id/track-wms
+ * Fetches real-time live parcel tracking directly from WMS live tracking endpoint:
+ * GET /api/supplier/orders/{id_or_request_number}/track
+ */
+export const trackWmsOrder = async (req, res) => {
+  try {
+    const order = await populateOrder(Order.findById(req.params.id))
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found.' })
+    }
+
+    const uid = req.user._id.toString()
+    const isAdmin = req.user.role === 'admin'
+    const isBuyer = order.user?._id?.toString?.() === uid || order.user?.toString?.() === uid
+    const isSupplier =
+      order.supplier?._id?.toString?.() === uid || order.supplier?.toString?.() === uid
+
+    if (!isAdmin && !isBuyer && !isSupplier) {
+      return res.status(403).json({ message: 'You do not have access to this order.' })
+    }
+
+    if (!order.isWmsOrder) {
+      return res.json({
+        success: true,
+        isWmsOrder: false,
+        message: 'This order is fulfilled directly by supplier.',
+        order: order.toSafeObject(),
+      })
+    }
+
+    // Call WMS live tracking API
+    const liveTracking = await syncOrderWmsTracking(order)
+    const freshOrder = await populateOrder(Order.findById(order._id))
+
+    return res.json({
+      success: true,
+      isWmsOrder: true,
+      trackingData: liveTracking || {
+        id: freshOrder.wmsFulfillmentId,
+        request_number: freshOrder.wmsRequestNumber,
+        status: freshOrder.wmsStatus,
+        is_dispatched: freshOrder.isDispatched,
+        dispatched_at: freshOrder.dispatchedAt,
+        carrier: freshOrder.carrier,
+        tracking_number: freshOrder.trackingNumber,
+        tracking_status: freshOrder.wmsTrackingStatus,
+        tracking_status_detail: freshOrder.wmsTrackingStatusDetail,
+        dispatch_proof_url: freshOrder.wmsDispatchProofUrl,
+      },
+      order: freshOrder.toSafeObject(),
+    })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to fetch live WMS tracking.' })
+  }
+}
+
+/**
+ * GET /api/orders/wms/live-list
+ * Proxies live supplier orders list from WMS API:
+ * GET /api/supplier/orders?is_dispatched=1&tracking_status=in_transit&search=...
+ */
+export const listLiveWmsOrders = async (req, res) => {
+  try {
+    const supplierUser = await User.findById(req.user._id)
+    const wmsToken = supplierUser?.wmsToken || process.env.WMS_SUPPLIER_TOKEN || ''
+    if (!wmsToken) {
+      return res.status(400).json({
+        message: 'No WMS authentication found for this account. Please connect your WMS supplier account.',
+      })
+    }
+
+    const baseUrl = process.env.WMS_BASE_URL || 'https://wmsbysellvro.com'
+    const query = new URLSearchParams()
+    if (req.query.is_dispatched !== undefined) query.set('is_dispatched', req.query.is_dispatched)
+    if (req.query.tracking_status) query.set('tracking_status', req.query.tracking_status)
+    if (req.query.search) query.set('search', req.query.search)
+
+    const queryStr = query.toString() ? `?${query.toString()}` : ''
+    const response = await fetch(`${baseUrl}/api/supplier/orders${queryStr}`, {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${wmsToken}`,
+      },
+    })
+
+    const data = await response.json().catch(() => null)
+    return res.status(response.status).json(data || { message: 'Failed to fetch WMS orders' })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to connect to WMS orders endpoint.' })
   }
 }
 

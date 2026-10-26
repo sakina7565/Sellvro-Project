@@ -215,6 +215,11 @@ export const orderApi = {
   updateTracking: (id, payload) =>
     apiRequest(`/orders/${id}/tracking`, { method: 'PATCH', body: payload }),
   pushWms: (id) => apiRequest(`/orders/${id}/push-wms`, { method: 'POST' }),
+  trackWms: (id) => apiRequest(`/orders/${id}/track-wms`),
+  liveWmsOrders: (params = {}) => {
+    const query = new URLSearchParams(params).toString()
+    return apiRequest(`/orders/wms/live-list${query ? `?${query}` : ''}`)
+  },
   dashboardStats: (period = 'all') =>
     apiRequest(`/orders/dashboard/stats?period=${encodeURIComponent(period)}`),
 }

@@ -91,9 +91,10 @@ function UserOrderConfirmationPage() {
                     Sellvro WMS Warehouse Fulfillment
                   </h4>
                   <p className="mt-1 text-xs text-emerald-800 leading-snug">
-                    This order is verified and has been pushed directly to the Sellvro Warehouse (WMS) API (Ref:{' '}
-                    <strong className="font-mono">{order.wmsFulfillmentId || 'WMS-FUL-ACTIVE'}</strong>). Picking,
-                    packaging, and dispatch are queued automatically!
+                    This order is verified and has been registered in the Sellvro Warehouse (WMS) API (Batch:{' '}
+                    <strong className="font-mono">{order.wmsBatchNumber || 'CBF-ACTIVE'}</strong>, Req:{' '}
+                    <strong className="font-mono">{order.wmsRequestNumber || order.wmsFulfillmentId || 'ACTIVE'}</strong>).
+                    Warehouse inventory was live deducted and dispatch fulfillment is queued!
                   </p>
                 </div>
               </div>

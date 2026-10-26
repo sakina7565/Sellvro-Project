@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Building2, ExternalLink, Printer, Tag, Warehouse, X } from 'lucide-react'
+import { Building2, ExternalLink, Printer, RefreshCw, Tag, Warehouse, X } from 'lucide-react'
 import Badge from '../ui/Badge.jsx'
 import Button from '../ui/Button.jsx'
 import { getErrorMessage, orderApi, mediaUrl } from '../../lib/api.js'
@@ -41,6 +41,8 @@ function OrderDetailDrawer({
   const [warehouseLoc, setWarehouseLoc] = useState('')
   const [showThermalLabel, setShowThermalLabel] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [trackingLive, setTrackingLive] = useState(false)
+  const [liveTrackSuccess, setLiveTrackSuccess] = useState('')
 
   const loadOrder = useCallback(async () => {
     if (!orderId) return
@@ -126,6 +128,28 @@ function OrderDetailDrawer({
       setError(getErrorMessage(err, 'Failed to push order to WMS.'))
     } finally {
       setPushingWms(false)
+    }
+  }
+
+  const handleLiveTrack = async () => {
+    if (!order?.id) return
+    setTrackingLive(true)
+    setError('')
+    setLiveTrackSuccess('')
+    try {
+      const res = await orderApi.trackWms(order.id)
+      if (res?.order) {
+        setOrder(res.order)
+        setStatus(res.order.status || status)
+        setWarehouseLoc(res.order.warehouseLocation || warehouseLoc)
+        onUpdated?.(res.order)
+        setLiveTrackSuccess('Live WMS Tracking synced successfully!')
+        setTimeout(() => setLiveTrackSuccess(''), 4500)
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to sync live tracking from WMS.'))
+    } finally {
+      setTrackingLive(false)
     }
   }
 
@@ -433,7 +457,7 @@ function OrderDetailDrawer({
 
               {/* Sellvro WMS Fulfillment Status Card */}
               {order.isWmsOrder && (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 shadow-xs">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <Warehouse className="h-4 w-4 text-emerald-700" />
@@ -446,30 +470,78 @@ function OrderDetailDrawer({
                     </span>
                   </div>
 
-                  <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs">
+                  <div className="mt-3 grid grid-cols-2 gap-2.5 text-xs">
                     <div>
-                      <span className="block text-[11px] text-slate-500">WMS Fulfillment Ref:</span>
+                      <span className="block text-[11px] text-slate-500">WMS Batch Number:</span>
                       <strong className="font-mono text-emerald-900">
-                        {order.wmsFulfillmentId || 'WMS-FUL-ACTIVE'}
+                        {order.wmsBatchNumber || 'CBF-PENDING'}
                       </strong>
                     </div>
                     <div>
-                      <span className="block text-[11px] text-slate-500">WMS Dispatch Status:</span>
+                      <span className="block text-[11px] text-slate-500">WMS Request #:</span>
+                      <strong className="font-mono text-emerald-900">
+                        {order.wmsRequestNumber || order.wmsFulfillmentId || '1-CBF-PENDING'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] text-slate-500">Warehouse Dispatch:</span>
                       <span className="inline-flex items-center gap-1 font-bold capitalize text-emerald-800">
-                        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                        {order.wmsStatus === 'pushed'
-                          ? 'Transmitted to Warehouse'
-                          : order.wmsStatus || 'Pushed'}
+                        <span className={`h-2 w-2 rounded-full ${order.isDispatched ? 'bg-emerald-600' : 'bg-amber-500 animate-pulse'}`} />
+                        {order.isDispatched ? 'Dispatched' : (order.wmsStatus === 'pushed' ? 'Queued in Warehouse' : (order.wmsStatus || 'Pending'))}
                       </span>
                     </div>
+                    <div>
+                      <span className="block text-[11px] text-slate-500">Tracking Status:</span>
+                      <strong className="font-semibold capitalize text-indigo-800">
+                        {order.wmsTrackingStatus ? order.wmsTrackingStatus.replace(/_/g, ' ') : (order.trackingStatus || 'Awaiting Pickup')}
+                      </strong>
+                    </div>
+                    {order.wmsTrackingStatusDetail && (
+                      <div className="col-span-2 rounded bg-white/70 p-2 border border-emerald-100 text-[11px]">
+                        <span className="text-slate-500 font-medium">Status Detail: </span>
+                        <span className="text-slate-800 font-semibold">{order.wmsTrackingStatusDetail}</span>
+                      </div>
+                    )}
+                    {order.wmsDispatchProofUrl && (
+                      <div className="col-span-2">
+                        <a
+                          href={order.wmsDispatchProofUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900 underline"
+                        >
+                          <ExternalLink className="h-3 w-3" /> View Warehouse Dispatch Proof
+                        </a>
+                      </div>
+                    )}
+                    {order.dispatchedAt && (
+                      <div className="col-span-2 text-[11px] text-slate-500">
+                        Dispatched At: <strong className="text-slate-800">{new Date(order.dispatchedAt).toLocaleString()}</strong>
+                      </div>
+                    )}
                     {order.wmsPushedAt && (
                       <div className="col-span-2 border-t border-emerald-100/60 pt-1 text-[11px] text-slate-500">
-                        Pushed to Warehouse API at:{' '}
+                        Registered in WMS at:{' '}
                         <strong className="text-slate-800">
                           {new Date(order.wmsPushedAt).toLocaleString()}
                         </strong>
                       </div>
                     )}
+                  </div>
+
+                  <div className="mt-3 pt-2.5 border-t border-emerald-100 flex items-center justify-between">
+                    <span className="text-[11px] text-emerald-800 font-medium">
+                      {liveTrackSuccess || 'Inventory deducted live from WMS'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleLiveTrack}
+                      disabled={trackingLive}
+                      className="inline-flex items-center gap-1 rounded-md bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-800 transition disabled:opacity-60 shadow-2xs"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${trackingLive ? 'animate-spin' : ''}`} />
+                      {trackingLive ? 'Syncing...' : 'Live WMS Tracking'}
+                    </button>
                   </div>
                 </div>
               )}

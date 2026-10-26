@@ -266,12 +266,8 @@ function UserOrdersPage() {
                           <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-200">
                             <Warehouse className="h-3 w-3 text-emerald-600" /> WMS Hub
                           </span>
-                          <span className="text-[10px] font-mono text-emerald-700">
-                            {order.wmsStatus === 'pushed'
-                              ? '⚡ Pushed to WMS'
-                              : order.wmsStatus === 'queued_for_picking'
-                              ? '📦 WMS Picking'
-                              : '🏢 WMS Fulfilled'}
+                          <span className="text-[10px] font-mono font-medium text-emerald-700" title={order.wmsBatchNumber || order.wmsRequestNumber || ''}>
+                            {order.wmsBatchNumber ? `Batch: ${order.wmsBatchNumber}` : order.wmsRequestNumber ? `Req: ${order.wmsRequestNumber}` : (order.isDispatched ? 'Dispatched' : 'Queued')}
                           </span>
                         </div>
                       ) : order.warehouseLocation === 'in_transit' ? (

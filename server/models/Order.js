@@ -117,23 +117,47 @@ const orderSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    wmsBatchNumber: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    wmsRequestNumber: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     wmsStatus: {
       type: String,
-      enum: [
-        'not_applicable',
-        'pending',
-        'pushed',
-        'queued_for_picking',
-        'picked_and_packed',
-        'dispatched',
-        'failed',
-      ],
       default: 'not_applicable',
     },
     wmsFulfillmentId: {
       type: String,
       trim: true,
       default: '',
+    },
+    wmsTrackingStatus: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    wmsTrackingStatusDetail: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    wmsDispatchProofUrl: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    isDispatched: {
+      type: Boolean,
+      default: false,
+    },
+    dispatchedAt: {
+      type: Date,
+      default: null,
     },
     wmsPushedAt: {
       type: Date,
@@ -238,8 +262,15 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
         ],
     // WMS fulfillment details
     isWmsOrder: Boolean(this.isWmsOrder || this.warehouseLocation === 'wms_hub'),
+    wmsBatchNumber: this.wmsBatchNumber || '',
+    wmsRequestNumber: this.wmsRequestNumber || '',
     wmsStatus: this.wmsStatus || (this.warehouseLocation === 'wms_hub' ? 'pushed' : 'not_applicable'),
-    wmsFulfillmentId: this.wmsFulfillmentId || '',
+    wmsFulfillmentId: this.wmsFulfillmentId || this.wmsRequestNumber || '',
+    wmsTrackingStatus: this.wmsTrackingStatus || '',
+    wmsTrackingStatusDetail: this.wmsTrackingStatusDetail || '',
+    wmsDispatchProofUrl: this.wmsDispatchProofUrl || '',
+    isDispatched: Boolean(this.isDispatched),
+    dispatchedAt: this.dispatchedAt || null,
     wmsPushedAt: this.wmsPushedAt || null,
     date: this.createdAt
       ? new Date(this.createdAt).toLocaleDateString('en-US', {
