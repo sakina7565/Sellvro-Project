@@ -6,21 +6,20 @@ import { Home, Box, FileText, Wallet, Info } from 'lucide-react'
  */
 export const USER_NAV_ITEMS = [
   { label: 'Dashboard', to: '/user/dashboard', icon: Home },
-  {
-    label: 'Store',
-    icon: Box,
-    children: [
-      { label: 'Sellvro Products', to: '/user/products' },
-      { label: 'SKU Reporting', to: '/user/inventory/sku-reporting' },
-      { label: 'Store Reporting', to: '/user/inventory/my-reporting' },
-    ],
-  },
+  { label: 'Orders', to: '/user/orders', icon: FileText },
   {
     label: 'Finance',
     icon: Wallet,
     children: [{ label: 'My Wallet', to: '/user/wallet' }],
   },
-  { label: 'Orders', to: '/user/orders', icon: FileText },
+  {
+    label: 'Reporting',
+    icon: Box,
+    children: [
+      { label: 'SKU Reporting', to: '/user/inventory/sku-reporting' },
+      { label: 'Sales Reporting', to: '/user/inventory/my-reporting' },
+    ],
+  },
   {
     label: 'Disputes & Support',
     icon: Info,

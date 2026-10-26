@@ -119,7 +119,7 @@ function App() {
       <Route path="/admin/products/:id/edit" element={<AdminRoute><EditProductPage /></AdminRoute>} />
       <Route path="/admin/product/edit/:id" element={<AdminRoute><EditProductPage /></AdminRoute>} />
       <Route path="/admin/product/edits/:id" element={<AdminRoute><EditProductPage /></AdminRoute>} />
-      <Route path="/admin/product/create" element={<AdminRoute><AddProductPage /></AdminRoute>} />
+      <Route path="/admin/product/create" element={<Navigate to="/admin/products" replace />} />
       <Route path="/admin/inventory/sku-reporting" element={<AdminRoute><AdminSkuReportingPage /></AdminRoute>} />
       <Route path="/admin/products/sku-report" element={<AdminRoute><AdminSkuReportingPage /></AdminRoute>} />
       <Route path="/admin/inventory/my-reporting" element={<AdminRoute><AdminBusinessReportingPage /></AdminRoute>} />
@@ -171,9 +171,13 @@ function App() {
         }
       />
       <Route path="/user/dashboard" element={<UserRoute><UserDashboardPage /></UserRoute>} />
-      <Route path="/user/products" element={<UserRoute><UserProductsPage /></UserRoute>} />
-      <Route path="/user/products/:id" element={<UserRoute><UserProductDetailPage /></UserRoute>} />
-      <Route path="/user/store/:supplierId" element={<UserRoute><UserStorePage /></UserRoute>} />
+      {/* Products only exist on landing page - redirect /user/products to root */}
+      <Route path="/user/products" element={<Navigate to="/" replace />} />
+      <Route path="/products/:id" element={<UserProductDetailPage />} />
+      <Route path="/user/products/:id" element={<UserProductDetailPage />} />
+      {/* Store removed from user panel - redirect to root */}
+      <Route path="/user/store/:supplierId" element={<Navigate to="/" replace />} />
+      <Route path="/user/store" element={<Navigate to="/" replace />} />
       <Route path="/user/checkout/:productId" element={<UserRoute><UserCheckoutPage /></UserRoute>} />
       <Route
         path="/user/orders/confirmation/:orderId"

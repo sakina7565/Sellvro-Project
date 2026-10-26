@@ -1,10 +1,13 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Heart, ChevronRight, Warehouse, Star, CheckCircle } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Heart, ChevronRight, Warehouse, Star, CheckCircle, Lock } from 'lucide-react'
 import { FEATURED_DEALS } from './marketplaceData.js'
 import { mediaUrl } from '../../lib/api.js'
+import { useAuth } from '../../context/AuthContext.jsx'
 
-function MarketplaceDeals({ products = [], activeCategory = 'All Categories', activeSubcategory = '' }) {
+function MarketplaceDeals({ products = [], activeCategory = 'All Categories', activeSubcategory = '', searchQuery = '' }) {
+  const { isAuthenticated } = useAuth()
+  const navigate = useNavigate()
   const [wishlist, setWishlist] = useState({})
 
   const toggleWishlist = (id, e) => {
@@ -13,11 +16,37 @@ function MarketplaceDeals({ products = [], activeCategory = 'All Categories', ac
     setWishlist((prev) => ({ ...prev, [id]: !prev[id] }))
   }
 
+  const handleOrderClick = (item, e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const itemId = item._id || item.id
+    const hasToken = Boolean(localStorage.getItem('token') || localStorage.getItem('auth_token'))
+    if (!isAuthenticated || !hasToken) {
+      navigate('/login', {
+        state: {
+          from: `/user/checkout/${itemId}`,
+          message: 'Please sign in to your client account before placing an order.',
+        },
+      })
+      return
+    }
+    navigate(`/user/checkout/${itemId}`, { state: { product: item } })
+  }
+
   // Combine real database products with fallback deals if DB is small/empty
   const allItems = products && products.length > 0 ? products : FEATURED_DEALS
 
-  // Filter by category or subcategory if selected
+  // Filter by search query, category, or subcategory
   const filtered = allItems.filter((item) => {
+    if (searchQuery?.trim()) {
+      const q = searchQuery.toLowerCase().trim()
+      const matchSearch =
+        (item.name && item.name.toLowerCase().includes(q)) ||
+        (item.description && item.description.toLowerCase().includes(q)) ||
+        (item.sku && item.sku.toLowerCase().includes(q)) ||
+        (item.category && item.category.toLowerCase().includes(q))
+      if (!matchSearch) return false
+    }
     if (activeCategory && activeCategory !== 'All Categories') {
       const matchCat =
         item.category && item.category.toLowerCase().includes(activeCategory.toLowerCase())
@@ -33,10 +62,10 @@ function MarketplaceDeals({ products = [], activeCategory = 'All Categories', ac
     return true
   })
 
-  const displayItems = filtered.length > 0 ? filtered.slice(0, 12) : allItems.slice(0, 6)
+  const displayItems = filtered.length > 0 ? filtered : allItems
 
   return (
-    <section className="mx-auto mt-12 max-w-7xl px-4 sm:px-6">
+    <section id="deals" className="mx-auto mt-12 max-w-7xl px-4 sm:px-6 scroll-mt-20">
       <div className="flex items-center justify-between border-b border-slate-200 pb-3">
         <div>
           <div className="flex items-center gap-2">
@@ -48,23 +77,25 @@ function MarketplaceDeals({ products = [], activeCategory = 'All Categories', ac
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            All with 3PL Fast Dispatch & Escrow Buyer Protection
+            {searchQuery || (activeCategory && activeCategory !== 'All Categories')
+              ? `Showing ${displayItems.length} products matching filter`
+              : 'All with 3PL Fast Dispatch & Escrow Buyer Protection'}
           </p>
         </div>
 
-        <Link
-          to="/user/products"
+        <a
+          href="#deals"
           className="group flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
         >
-          <span>See all deals</span>
+          <span>All deals ({allItems.length})</span>
           <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-        </Link>
+        </a>
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-6">
         {displayItems.map((item) => {
           const itemId = item._id || item.id
-          const productLink = itemId ? `/user/products/${itemId}` : '/user/products'
+          const productLink = itemId ? `/user/products/${itemId}` : '/'
           const isWishlisted = Boolean(wishlist[itemId])
           const price = typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0
           const originalPrice = item.originalPrice || (price > 0 ? (price * 1.25).toFixed(2) : null)
@@ -167,12 +198,35 @@ function MarketplaceDeals({ products = [], activeCategory = 'All Categories', ac
                     )}
                   </div>
 
-                  <Link
-                    to={productLink}
-                    className="mt-2.5 block w-full rounded-lg bg-slate-900 py-1.5 text-center text-[11px] font-semibold text-white hover:bg-blue-600 transition"
-                  >
-                    View Details
-                  </Link>
+                  {/* Action Buttons: Details + Order Now */}
+                  <div className="mt-2.5 flex items-center gap-1.5">
+                    <Link
+                      to={productLink}
+                      className="flex-1 rounded-lg border border-slate-300 bg-white py-1.5 text-center text-[11px] font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-400 transition shadow-2xs"
+                    >
+                      Details
+                    </Link>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleOrderClick(item, e)}
+                      className="flex-1 rounded-lg bg-blue-600 py-1.5 text-center text-[11px] font-bold text-white hover:bg-blue-700 active:scale-[0.98] transition shadow-2xs flex items-center justify-center gap-1"
+                      title={isAuthenticated ? 'Proceed to checkout' : 'Sign in required to place order'}
+                    >
+                      {!isAuthenticated && <Lock className="h-3 w-3 text-blue-200" />}
+                      <span>{isAuthenticated ? 'Order Now' : 'Order'}</span>
+                    </button>
+                  </div>
+
+                  {!isAuthenticated ? (
+                    <p className="mt-1 flex items-center justify-center gap-0.5 text-[9.5px] font-medium text-amber-700">
+                      <Lock className="h-2.5 w-2.5" /> Login required to order
+                    </p>
+                  ) : (
+                    <p className="mt-1 flex items-center justify-center gap-0.5 text-[9.5px] font-medium text-emerald-700">
+                      <CheckCircle className="h-2.5 w-2.5" /> 1-Click Order Ready
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

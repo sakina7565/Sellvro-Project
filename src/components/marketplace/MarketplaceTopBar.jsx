@@ -13,7 +13,7 @@ import {
   Globe,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { getRedirectForUser } from '../../lib/authRedirect.js'
+import { getDashboardPathForUser } from '../../lib/authRedirect.js'
 
 function MarketplaceTopBar() {
   const { user, isAuthenticated, logout } = useAuth()
@@ -24,7 +24,7 @@ function MarketplaceTopBar() {
   const mySellvroRef = useRef(null)
   const profileRef = useRef(null)
 
-  const dashboardPath = getRedirectForUser(user) || '/login'
+  const dashboardPath = getDashboardPathForUser(user)
   const displayName = user?.fullName || 'User'
 
   // Close menus on outside click
@@ -57,42 +57,54 @@ function MarketplaceTopBar() {
         {/* Left Side Links */}
         <div className="flex items-center gap-4">
           {isAuthenticated ? (
-            <div className="relative" ref={profileRef}>
-              <button
-                type="button"
-                onClick={() => setProfileOpen((o) => !o)}
-                className="flex items-center gap-1.5 font-medium text-slate-800 hover:text-blue-600 focus:outline-none"
-              >
-                <span>
-                  Hi, <strong className="font-semibold text-slate-900">{displayName}</strong>!
-                </span>
-                <ChevronDown className="h-3 w-3 text-slate-400" />
-              </button>
+            <div className="flex items-center gap-2">
+              <div className="relative" ref={profileRef}>
+                <button
+                  type="button"
+                  onClick={() => setProfileOpen((o) => !o)}
+                  className="flex items-center gap-1.5 font-medium text-slate-800 hover:text-blue-600 focus:outline-none"
+                >
+                  <span>
+                    Hi, <strong className="font-semibold text-slate-900">{displayName}</strong>!
+                  </span>
+                  <ChevronDown className="h-3 w-3 text-slate-400" />
+                </button>
 
-              {profileOpen && (
-                <div className="absolute left-0 top-full z-50 mt-1 w-52 rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg">
-                  <div className="border-b border-slate-100 px-3 py-2">
-                    <p className="font-semibold text-slate-900">{displayName}</p>
-                    <p className="text-[11px] text-slate-500 capitalize">{user?.role} Account</p>
+                {profileOpen && (
+                  <div className="absolute left-0 top-full z-50 mt-1 w-52 rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg">
+                    <div className="border-b border-slate-100 px-3 py-2">
+                      <p className="font-semibold text-slate-900">{displayName}</p>
+                      <p className="text-[11px] text-slate-500 capitalize">{user?.role} Account</p>
+                    </div>
+                    <Link
+                      to={dashboardPath}
+                      onClick={() => setProfileOpen(false)}
+                      className="flex items-center gap-2 rounded-md px-3 py-2 text-slate-700 hover:bg-slate-50"
+                    >
+                      <LayoutDashboard className="h-4 w-4 text-blue-600" />
+                      <span>My Dashboard</span>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-red-600 hover:bg-red-50 text-left"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      <span>Sign Out</span>
+                    </button>
                   </div>
-                  <Link
-                    to={dashboardPath}
-                    onClick={() => setProfileOpen(false)}
-                    className="flex items-center gap-2 rounded-md px-3 py-2 text-slate-700 hover:bg-slate-50"
-                  >
-                    <LayoutDashboard className="h-4 w-4 text-blue-600" />
-                    <span>My Dashboard</span>
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-red-600 hover:bg-red-50 text-left"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    <span>Sign Out</span>
-                  </button>
-                </div>
-              )}
+                )}
+              </div>
+
+              {/* Direct Dashboard Link */}
+              <Link
+                to={dashboardPath}
+                className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 transition shadow-2xs"
+                title="Open your control dashboard"
+              >
+                <LayoutDashboard className="h-3 w-3 text-blue-600" />
+                <span>Dashboard</span>
+              </Link>
             </div>
           ) : (
             <div className="flex items-center gap-1">
@@ -108,12 +120,12 @@ function MarketplaceTopBar() {
           )}
 
           <span className="hidden text-slate-300 md:inline">|</span>
-          <Link to="/user/products" className="hidden text-slate-600 hover:text-blue-600 md:inline">
+          <a href="/#deals" className="hidden text-slate-600 hover:text-blue-600 md:inline">
             Daily B2B Deals
-          </Link>
-          <Link to="/user/products" className="hidden text-slate-600 hover:text-blue-600 lg:inline">
+          </a>
+          <a href="/#deals" className="hidden text-slate-600 hover:text-blue-600 lg:inline">
             Brand Outlet
-          </Link>
+          </a>
           <Link to="/user/disputes" className="hidden text-slate-600 hover:text-blue-600 lg:inline">
             Help & Dispute Center
           </Link>

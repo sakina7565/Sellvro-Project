@@ -128,6 +128,18 @@ function UserCheckoutPage() {
     if (!product) return
     setError('')
 
+    // Verify token & authentication status before allowing order placement
+    const token = localStorage.getItem('token') || localStorage.getItem('auth_token')
+    if (!token || !user) {
+      navigate('/login', {
+        state: {
+          from: location.pathname,
+          message: 'Please sign in to your client account before placing an order.',
+        },
+      })
+      return
+    }
+
     // Validate Address fields
     if (!address.fullName?.trim()) {
       setError('Recipient full name is required.')
@@ -213,9 +225,9 @@ function UserCheckoutPage() {
         eyebrow="User Panel"
         title="Checkout"
         action={
-          <Button as={Link} to="/user/products" variant="outline" size="sm">
+          <Button as={Link} to="/" variant="outline" size="sm">
             <ArrowLeft className="h-4 w-4" />
-            Back to products
+            Back to Marketplace
           </Button>
         }
       />
@@ -231,7 +243,7 @@ function UserCheckoutPage() {
       ) : !product ? (
         <Card className="p-10 text-center text-sm text-slate-500 shadow-soft">
           Product unavailable.{' '}
-          <Link to="/user/products" className="font-semibold text-primary">
+          <Link to="/" className="font-semibold text-primary">
             Return to shop
           </Link>
         </Card>

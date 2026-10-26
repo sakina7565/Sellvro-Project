@@ -22,10 +22,17 @@ export function getRedirectForUser(user) {
   }
 
   if (user.role === 'user') {
-    return user.status === 'approved' ? '/user/dashboard' : '/user/business/detail'
+    return user.status === 'approved' ? '/' : '/user/business/detail'
   }
 
   return '/'
+}
+
+export function getDashboardPathForUser(user) {
+  if (!user) return '/login'
+  if (user.role === 'admin') return '/admin/dashboard'
+  if (user.role === 'supplier') return '/supplier/dashboard'
+  return '/user/dashboard'
 }
 
 export function canAccessPath(user, path) {

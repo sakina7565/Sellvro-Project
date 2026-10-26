@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Mail, Lock, ShieldAlert } from 'lucide-react'
 import AuthLayout from '../components/layout/AuthLayout.jsx'
 import Input from '../components/ui/Input.jsx'
@@ -11,6 +11,7 @@ import { getErrorMessage } from '../lib/api.js'
 
 function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -32,7 +33,20 @@ function LoginPage() {
 
     try {
       const data = await login({ email, password })
-      navigate(data.redirectTo, { replace: true })
+      const role = data.user?.role
+
+      if (role === 'supplier') {
+        navigate('/supplier/dashboard', { replace: true })
+      } else if (role === 'admin') {
+        navigate('/admin/dashboard', { replace: true })
+      } else {
+        // Client / User role goes to landing page '/' unless completing an order checkout
+        const destination =
+          location.state?.from && location.state.from.startsWith('/user/checkout')
+            ? location.state.from
+            : '/'
+        navigate(destination, { replace: true })
+      }
     } catch (err) {
       const msg = getErrorMessage(err, 'Login failed. Please try again.')
       // Detect the admin-blocked error and show a special UI
@@ -58,6 +72,14 @@ function LoginPage() {
       <p className="mt-1 text-center text-sm text-slate-500">Please sign in to your Ezone account</p>
 
       <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+        {/* Info message if redirected from an order/checkout action */}
+        {location.state?.message && !error && !isAdminError && (
+          <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs text-blue-900 font-medium">
+            <Lock className="h-4 w-4 text-blue-600 shrink-0" />
+            <span>{location.state.message}</span>
+          </div>
+        )}
+
         {/* Regular error */}
         {error && !isAdminError && (
           <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>

@@ -51,12 +51,12 @@ function MarketplacePromoBanner() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 shrink-0">
-            <Link
-              to="/user/products"
+            <a
+              href="#deals"
               className="rounded-full bg-white px-6 py-2.5 text-xs sm:text-sm font-bold text-orange-900 shadow-md hover:bg-orange-50 transition"
             >
               Explore Wholesale Deals
-            </Link>
+            </a>
             <Link
               to="/register?role=supplier"
               className="rounded-full border border-white/40 bg-white/10 px-5 py-2.5 text-xs sm:text-sm font-semibold text-white backdrop-blur-md hover:bg-white/20 transition"

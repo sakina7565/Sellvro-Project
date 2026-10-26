@@ -31,7 +31,7 @@ const getHomePath = (user) => {
     return user.status === 'approved' ? '/supplier/dashboard' : '/supplier/business/details'
   }
   if (user.role === 'user') {
-    return user.status === 'approved' ? '/user/dashboard' : '/user/business/detail'
+    return user.status === 'approved' ? '/' : '/user/business/detail'
   }
   return '/'
 }

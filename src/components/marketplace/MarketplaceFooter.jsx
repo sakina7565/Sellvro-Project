@@ -16,19 +16,19 @@ function MarketplaceFooter() {
                 </Link>
               </li>
               <li>
-                <Link to="/user/products" className="hover:text-blue-600 hover:underline">
+                <a href="/#deals" className="hover:text-blue-600 hover:underline">
                   B2B Bulk Sourcing
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/user/products" className="hover:text-blue-600 hover:underline">
+                <a href="/#deals" className="hover:text-blue-600 hover:underline">
                   Verified Stores
-                </Link>
+                </a>
               </li>
               <li>
-                <Link to="/user/products" className="hover:text-blue-600 hover:underline">
+                <a href="/#deals" className="hover:text-blue-600 hover:underline">
                   3PL In-Stock Inventory
-                </Link>
+                </a>
               </li>
               <li>
                 <Link to="/user/disputes" className="hover:text-blue-600 hover:underline">
@@ -36,9 +36,9 @@ function MarketplaceFooter() {
                 </Link>
               </li>
               <li>
-                <Link to="/user/products" className="hover:text-blue-600 hover:underline">
+                <a href="/#deals" className="hover:text-blue-600 hover:underline">
                   Wholesale Clearance Lots
-                </Link>
+                </a>
               </li>
             </ul>
           </div>

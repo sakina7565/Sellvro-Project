@@ -10,7 +10,6 @@ export const ADMIN_DASHBOARD_MODULES = [
     description: 'Monitor stock levels, manage product SKUs, and track warehouse Inventory.',
     links: [
       { label: 'All Inventory', to: '/admin/products' },
-      { label: 'Add Product', to: '/admin/product/create' },
       { label: 'SKU Reporting', to: '/admin/products/sku-report' },
       { label: 'Supplier Store & SKUs', to: '/admin/suppliers/sku-lookup' },
       { label: 'My Reporting', to: '/admin/inventory/my-reporting' },

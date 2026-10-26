@@ -17,13 +17,13 @@ function MarketplaceCategoryGrid({ onSelectCategory, categories = [] }) {
             Verified wholesale lots, warehouse stocks, and industrial essentials
           </p>
         </div>
-        <Link
-          to="/user/products"
+        <a
+          href="#deals"
           className="group flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
         >
           <span>See all categories</span>
           <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-        </Link>
+        </a>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-3.5 sm:grid-cols-4 md:grid-cols-8">
@@ -64,7 +64,7 @@ function MarketplaceCategoryGrid({ onSelectCategory, categories = [] }) {
           return (
             <Link
               key={cat.id || cat.name}
-              to={`/user/products?category=${encodeURIComponent(cat.name)}`}
+              to={`/?category=${encodeURIComponent(cat.name)}`}
               className="group flex flex-col items-center text-center focus:outline-none"
             >
               <div className="flex h-28 w-28 sm:h-32 sm:w-32 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-xs transition-all duration-200 group-hover:-translate-y-1 group-hover:border-blue-400 group-hover:shadow-md">

@@ -132,7 +132,7 @@ function UserOrdersPage() {
         eyebrow="User Panel"
         title="My Orders"
         action={
-          <Button as={Link} to="/user/products" size="sm">
+          <Button as={Link} to="/" size="sm">
             Shop now
           </Button>
         }

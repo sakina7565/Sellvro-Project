@@ -56,7 +56,7 @@ function MarketplaceSearchHeader({
       const params = new URLSearchParams()
       if (query) params.set('q', query)
       if (category && category !== 'All Categories') params.set('category', category)
-      navigate(`/user/products?${params.toString()}`)
+      navigate(`/?${params.toString()}`)
     }
   }
 

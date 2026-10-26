@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   LogIn,
   UserPlus,
@@ -20,19 +20,29 @@ import MarketplaceDarkBanner from '../components/marketplace/MarketplaceDarkBann
 import MarketplaceFooter from '../components/marketplace/MarketplaceFooter.jsx'
 import { productApi, categoryApi, mediaUrl } from '../lib/api.js'
 import { useAuth } from '../context/AuthContext.jsx'
-import { getRedirectForUser } from '../lib/authRedirect.js'
+import { getDashboardPathForUser } from '../lib/authRedirect.js'
 import { MARKETPLACE_CATEGORIES } from '../components/marketplace/marketplaceData.js'
 
 function LandingPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const searchQuery = searchParams.get('q') || ''
+  const categoryFromUrl = searchParams.get('category') || 'All Categories'
+  const subcategoryFromUrl = searchParams.get('sub') || ''
+
   const { user, isAuthenticated } = useAuth()
-  const [activeCategory, setActiveCategory] = useState('All Categories')
-  const [activeSubcategory, setActiveSubcategory] = useState('')
+  const [activeCategory, setActiveCategory] = useState(categoryFromUrl)
+  const [activeSubcategory, setActiveSubcategory] = useState(subcategoryFromUrl)
   const [categories, setCategories] = useState(MARKETPLACE_CATEGORIES)
   const [liveProducts, setLiveProducts] = useState([])
   const [loading, setLoading] = useState(true)
 
-  const dashboardPath = getRedirectForUser(user) || '/user/dashboard'
+  const dashboardPath = getDashboardPathForUser(user) || '/user/dashboard'
+
+  useEffect(() => {
+    if (categoryFromUrl) setActiveCategory(categoryFromUrl)
+    if (subcategoryFromUrl !== undefined) setActiveSubcategory(subcategoryFromUrl)
+  }, [categoryFromUrl, subcategoryFromUrl])
 
   // Fetch real categories & approved products from Sellvro backend APIs
   useEffect(() => {
@@ -93,7 +103,7 @@ function LandingPage() {
     }
   }, [])
 
-  // Handle Search Submission
+  // Handle Search Submission directly on Landing Page
   const handleSearch = ({ query, category, advSku, advMinPrice, advMaxPrice, advWarehouseOnly }) => {
     const params = new URLSearchParams()
     if (query?.trim()) params.set('q', query.trim())
@@ -102,13 +112,22 @@ function LandingPage() {
     if (advMinPrice) params.set('minPrice', advMinPrice)
     if (advMaxPrice) params.set('maxPrice', advMaxPrice)
     if (advWarehouseOnly) params.set('warehouse', 'true')
-    navigate(`/user/products?${params.toString()}`)
+    setSearchParams(params)
+    if (category) setActiveCategory(category)
+    const el = document.getElementById('deals')
+    if (el) el.scrollIntoView({ behavior: 'smooth' })
   }
 
   // Handle Category Quick Selection
   const handleSelectCategory = (catName, subName = '') => {
     setActiveCategory(catName)
     setActiveSubcategory(subName)
+    const params = new URLSearchParams()
+    if (catName && catName !== 'All Categories') params.set('category', catName)
+    if (subName) params.set('sub', subName)
+    setSearchParams(params)
+    const el = document.getElementById('deals')
+    if (el) el.scrollIntoView({ behavior: 'smooth' })
   }
 
   return (
@@ -245,6 +264,7 @@ function LandingPage() {
           products={liveProducts}
           activeCategory={activeCategory}
           activeSubcategory={activeSubcategory}
+          searchQuery={searchQuery}
         />
 
         {/* 9. "Trending on Sellvro" Round Category Spotlight */}

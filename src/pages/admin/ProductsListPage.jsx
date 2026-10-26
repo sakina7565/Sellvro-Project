@@ -127,14 +127,7 @@ function ProductsListPage() {
 
   return (
     <AdminLayout>
-      <PageHeader
-        title="Products Listing"
-        action={
-          <Button as={Link} to="/admin/product/create" size="sm">
-            Add Product
-          </Button>
-        }
-      />
+      <PageHeader title="Products Listing" />
 
       <FilterBar
         filters={FILTERS.map((filter) =>

@@ -26,13 +26,13 @@ function MarketplaceTrending({ onSelectCategory, categories = [] }) {
           </h2>
         </div>
 
-        <Link
-          to="/user/products"
+        <a
+          href="#deals"
           className="group flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
         >
           <span>Explore all trending</span>
           <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-        </Link>
+        </a>
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-6">
@@ -69,7 +69,7 @@ function MarketplaceTrending({ onSelectCategory, categories = [] }) {
           return (
             <Link
               key={item.id}
-              to={`/user/products?category=${encodeURIComponent(item.name)}`}
+              to={`/?category=${encodeURIComponent(item.name)}`}
               className="group flex flex-col items-center text-center focus:outline-none"
             >
               <div className="relative flex h-28 w-28 sm:h-32 sm:w-32 items-center justify-center overflow-hidden rounded-full border-2 border-slate-200 bg-slate-50 p-2 shadow-xs transition-all duration-300 group-hover:border-blue-500 group-hover:shadow-lg group-hover:scale-105">

@@ -17,6 +17,7 @@ import {
   Info,
   Maximize2,
   MessageSquare,
+  Lock,
   Minus,
   Package,
   Plus,
@@ -34,10 +35,13 @@ import {
   X,
   Zap,
 } from 'lucide-react'
-import UserLayout from '../../components/layout/UserLayout.jsx'
+import MarketplaceTopBar from '../../components/marketplace/MarketplaceTopBar.jsx'
+import MarketplaceSearchHeader from '../../components/marketplace/MarketplaceSearchHeader.jsx'
+import MarketplaceFooter from '../../components/marketplace/MarketplaceFooter.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Button from '../../components/ui/Button.jsx'
 import { productApi, mediaUrl, getErrorMessage } from '../../lib/api.js'
+import { useAuth } from '../../context/AuthContext.jsx'
 
 const PLACEHOLDER_IMAGE =
   'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=800&q=80'
@@ -88,6 +92,7 @@ function PaymentBadges() {
 function ProductDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { isAuthenticated } = useAuth()
 
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -237,6 +242,16 @@ function ProductDetailPage() {
 
   const handleBuyNow = () => {
     if (!product || !isAvailable || isOutOfStock) return
+    const token = localStorage.getItem('token') || localStorage.getItem('auth_token')
+    if (!token || !isAuthenticated) {
+      navigate('/login', {
+        state: {
+          from: `/user/checkout/${product.id}`,
+          message: 'Please sign in to your client account before placing an order.',
+        },
+      })
+      return
+    }
     navigate(`/user/checkout/${product.id}`, {
       state: {
         product,
@@ -246,6 +261,16 @@ function ProductDetailPage() {
   }
 
   const handleAddToCart = () => {
+    const token = localStorage.getItem('token') || localStorage.getItem('auth_token')
+    if (!token || !isAuthenticated) {
+      navigate('/login', {
+        state: {
+          from: window.location.pathname,
+          message: 'Please sign in to add products to your cart and place orders.',
+        },
+      })
+      return
+    }
     setCartToast(true)
     setTimeout(() => setCartToast(false), 3500)
   }
@@ -285,34 +310,44 @@ function ProductDetailPage() {
 
   if (loading) {
     return (
-      <UserLayout>
-        <div className="flex h-96 items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="h-9 w-9 animate-spin rounded-full border-3 border-blue-600 border-t-transparent" />
-            <p className="text-sm font-medium text-slate-500">Loading product listing...</p>
+      <div className="min-h-screen bg-[#f7f7f7] text-slate-800 flex flex-col justify-between">
+        <div>
+          <MarketplaceTopBar />
+          <MarketplaceSearchHeader onSearch={({ query }) => navigate(`/?q=${encodeURIComponent(query || '')}`)} />
+          <div className="flex h-96 items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <div className="h-9 w-9 animate-spin rounded-full border-3 border-blue-600 border-t-transparent" />
+              <p className="text-sm font-medium text-slate-500">Loading product listing...</p>
+            </div>
           </div>
         </div>
-      </UserLayout>
+        <MarketplaceFooter />
+      </div>
     )
   }
 
   if (error || !product) {
     return (
-      <UserLayout>
-        <div className="mx-auto max-w-lg py-16 text-center">
-          <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-rose-50 text-rose-500 ring-8 ring-rose-50/50">
-            <AlertCircle className="h-7 w-7" />
+      <div className="min-h-screen bg-[#f7f7f7] text-slate-800 flex flex-col justify-between">
+        <div>
+          <MarketplaceTopBar />
+          <MarketplaceSearchHeader onSearch={({ query }) => navigate(`/?q=${encodeURIComponent(query || '')}`)} />
+          <div className="mx-auto max-w-lg py-16 text-center px-4">
+            <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-rose-50 text-rose-500 ring-8 ring-rose-50/50">
+              <AlertCircle className="h-7 w-7" />
+            </div>
+            <h2 className="mb-2 text-xl font-bold text-slate-900">Product Not Found</h2>
+            <p className="mb-6 text-sm text-slate-500">
+              {error || 'This product does not exist, has been removed, or is currently inactive.'}
+            </p>
+            <Button as={Link} to="/" variant="primary" size="md">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Marketplace
+            </Button>
           </div>
-          <h2 className="mb-2 text-xl font-bold text-slate-900">Product Not Found</h2>
-          <p className="mb-6 text-sm text-slate-500">
-            {error || 'This product does not exist, has been removed, or is currently inactive.'}
-          </p>
-          <Button as={Link} to="/user/products" variant="primary" size="md">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Products Catalog
-          </Button>
         </div>
-      </UserLayout>
+        <MarketplaceFooter />
+      </div>
     )
   }
 
@@ -331,8 +366,27 @@ function ProductDetailPage() {
     (isWms ? 'WMS Verified Authentic (Inspected)' : 'Brand New')
 
   return (
-    <UserLayout>
-      {/* Toast Alert: Added to Cart */}
+    <div className="min-h-screen bg-[#f7f7f7] text-slate-800 antialiased font-sans selection:bg-blue-500 selection:text-white flex flex-col justify-between">
+      <div>
+        <MarketplaceTopBar />
+        <MarketplaceSearchHeader onSearch={({ query }) => navigate(`/?q=${encodeURIComponent(query || '')}`)} />
+
+        <main className="mx-auto max-w-7xl px-4 sm:px-6 py-5">
+          {/* Back to Marketplace Breadcrumb */}
+          <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 transition"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>Back to Marketplace</span>
+            </Link>
+            <span className="text-[11px] text-slate-400">
+              {product.category ? `Category: ${product.category}` : 'Sellvro B2B Verified Listing'}
+            </span>
+          </div>
+
+          {/* Toast Alert: Added to Cart */}
       {cartToast && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-emerald-200 bg-white p-4 shadow-xl animate-in slide-in-from-bottom-5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500 text-white font-bold">
@@ -363,21 +417,17 @@ function ProductDetailPage() {
               {product.brand ? product.brand.charAt(0) : 'S'}
             </span>
             <Link
-              to={product.supplierId ? `/user/store/${product.supplierId}` : '#'}
+              to={`/?q=${encodeURIComponent(product.brand || vendorName || '')}`}
               className="hover:text-blue-600 transition-colors"
             >
               {product.brand || vendorName || 'Sellvro Premier'}
             </Link>
           </div>
           <Link
-            to={
-              product.supplierId
-                ? `/user/store/${product.supplierId}`
-                : `/user/products?search=${encodeURIComponent(product.brand || product.category || '')}`
-            }
+            to={`/?category=${encodeURIComponent(product.category || '')}`}
             className="rounded-full border border-blue-600 px-3 py-0.5 text-[11px] font-bold text-blue-600 hover:bg-blue-50 transition-colors"
           >
-            Shop store
+            Explore Category
           </Link>
         </div>
         <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
@@ -561,7 +611,7 @@ function ProductDetailPage() {
           <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-2xs">
             <div className="flex items-center gap-2.5">
               <Link
-                to={product.supplierId ? `/user/store/${product.supplierId}` : '#'}
+                to={`/?q=${encodeURIComponent(vendorName)}`}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white font-extrabold text-xs shadow-2xs hover:opacity-90 transition-opacity"
               >
                 {vendorName.charAt(0).toUpperCase()}
@@ -569,7 +619,7 @@ function ProductDetailPage() {
               <div>
                 <div className="flex items-center gap-1.5">
                   <Link
-                    to={product.supplierId ? `/user/store/${product.supplierId}` : '#'}
+                    to={`/?q=${encodeURIComponent(vendorName)}`}
                     className="font-bold text-sm text-slate-900 hover:text-blue-600 cursor-pointer transition-colors"
                   >
                     {vendorName}
@@ -586,11 +636,7 @@ function ProductDetailPage() {
                   </span>
                   <span>•</span>
                   <Link
-                    to={
-                      product.supplierId
-                        ? `/user/store/${product.supplierId}`
-                        : `/user/products?search=${encodeURIComponent(vendorName)}`
-                    }
+                    to={`/?q=${encodeURIComponent(vendorName)}`}
                     className="hover:underline text-blue-600 font-medium"
                   >
                     Seller&apos;s other items
@@ -656,14 +702,30 @@ function ProductDetailPage() {
 
           {/* 5. The 3 Primary eBay Action Buttons */}
           <div className="space-y-2.5 pt-2">
+            {!isAuthenticated && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 text-xs text-amber-900 flex items-center gap-2.5">
+                <Lock className="h-4 w-4 text-amber-700 shrink-0" />
+                <span>
+                  <strong>Client Login Required:</strong> Please sign in to place wholesale orders or dispatch via 3PL.
+                </span>
+              </div>
+            )}
+
             {/* Buy It Now (Solid Vibrant Blue) */}
             <button
               type="button"
               disabled={!isAvailable || isOutOfStock}
               onClick={handleBuyNow}
-              className="w-full rounded-full bg-[#3665f3] py-3 text-sm font-bold text-white shadow-sm hover:bg-[#2b54d6] active:scale-[0.99] transition-all disabled:opacity-50"
+              className="w-full rounded-full bg-[#3665f3] py-3 text-sm font-bold text-white shadow-sm hover:bg-[#2b54d6] active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {isOutOfStock ? 'Out of Stock' : 'Buy It Now'}
+              {!isAuthenticated && !isOutOfStock && <Lock className="h-4 w-4 text-blue-200" />}
+              <span>
+                {isOutOfStock
+                  ? 'Out of Stock'
+                  : !isAuthenticated
+                  ? 'Sign In to Buy Now'
+                  : 'Buy It Now'}
+              </span>
             </button>
 
             {/* Add to Cart (White with Blue border) */}
@@ -829,7 +891,7 @@ function ProductDetailPage() {
             <p className="text-xs text-slate-500">Sponsored recommendations based on this listing</p>
           </div>
           <Link
-            to="/user/products"
+            to={product?.category ? `/?category=${encodeURIComponent(product.category)}` : '/'}
             className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
           >
             See all <ChevronNext className="h-3.5 w-3.5" />
@@ -1042,7 +1104,10 @@ function ProductDetailPage() {
           />
         </div>
       )}
-    </UserLayout>
+        </main>
+      </div>
+      <MarketplaceFooter />
+    </div>
   )
 }
 

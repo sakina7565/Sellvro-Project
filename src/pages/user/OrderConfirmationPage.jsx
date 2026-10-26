@@ -137,7 +137,7 @@ function UserOrderConfirmationPage() {
             <Button as={Link} to="/user/orders" size="sm">
               View my orders
             </Button>
-            <Button as={Link} to="/user/products" variant="outline" size="sm">
+            <Button as={Link} to="/" variant="outline" size="sm">
               Continue shopping
             </Button>
           </div>

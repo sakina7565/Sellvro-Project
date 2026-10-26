@@ -164,7 +164,7 @@ function MarketplaceCategoryNav({ activeCategory, onSelectCategory, categories: 
       onSelectCategory(catName, subName)
     } else {
       navigate(
-        `/user/products?category=${encodeURIComponent(catName)}&q=${encodeURIComponent(subName)}`
+        `/?category=${encodeURIComponent(catName)}&q=${encodeURIComponent(subName)}`
       )
     }
   }
@@ -249,8 +249,11 @@ function MarketplaceCategoryNav({ activeCategory, onSelectCategory, categories: 
 
                     <div className="mt-2 border-t border-slate-100 pt-2">
                       <Link
-                        to={`/user/products?category=${encodeURIComponent(cat.name)}`}
-                        onClick={() => setOpenDropdownId(null)}
+                        to={`/?category=${encodeURIComponent(cat.name)}`}
+                        onClick={() => {
+                          setOpenDropdownId(null)
+                          if (onSelectCategory) onSelectCategory(cat.name)
+                        }}
                         className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 hover:text-blue-700 px-2.5 py-1"
                       >
                         <Layers className="h-3 w-3" />
