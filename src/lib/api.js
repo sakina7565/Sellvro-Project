@@ -304,13 +304,33 @@ export const adminApi = {
   payouts: () => apiRequest('/admin/payouts'),
   processPayout: (supplierId) =>
     apiRequest(`/admin/payouts/${supplierId}/process`, { method: 'PATCH' }),
+  pendingWeeklyPayouts: () => apiRequest('/admin/finances/pending-weeks'),
   supplierFinances: () => apiRequest('/admin/finances/suppliers'),
   supplierMonthlyHistory: (supplierId) =>
     apiRequest(`/admin/finances/suppliers/${supplierId}/monthly`),
-  supplierMonthOrders: (supplierId, monthKey) =>
-    apiRequest(`/admin/finances/suppliers/${supplierId}/monthly/${monthKey}/orders`),
-  executeSupplierPayout: (supplierId, payload) =>
-    apiRequest(`/admin/finances/suppliers/${supplierId}/payout`, { method: 'POST', body: payload }),
+  supplierMonthOrders: (supplierId, monthKey, weekKey) => {
+    const q = weekKey ? `?weekKey=${encodeURIComponent(weekKey)}` : ''
+    return apiRequest(`/admin/finances/suppliers/${supplierId}/monthly/${monthKey}/orders${q}`)
+  },
+  executeSupplierPayout: (supplierId, payload, receiptFile) => {
+    if (receiptFile) {
+      const fd = new FormData()
+      Object.entries(payload || {}).forEach(([k, v]) => {
+        if (v !== undefined && v !== null) {
+          fd.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v))
+        }
+      })
+      fd.append('receipt', receiptFile)
+      return apiRequest(`/admin/finances/suppliers/${supplierId}/payout`, {
+        method: 'POST',
+        formData: fd,
+      })
+    }
+    return apiRequest(`/admin/finances/suppliers/${supplierId}/payout`, {
+      method: 'POST',
+      body: payload,
+    })
+  },
   supplierDisputes: () => apiRequest('/admin/disputes/supplier'),
   userComplaints: () => apiRequest('/admin/disputes/user'),
   disputeUnreadCount: () => apiRequest('/admin/disputes/unread-count'),

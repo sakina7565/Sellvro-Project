@@ -40,7 +40,7 @@ const TABLE_HEAD = [
   'SKU',
   'Category',
   'Stock',
-  'Price',
+  'Price & Cut',
   'Supplier',
   'Status',
   'Action',
@@ -234,9 +234,12 @@ function ProductsListPage() {
                       {product.quantity ?? 0}
                     </td>
 
-                    {/* Price */}
-                    <td className="whitespace-nowrap px-5 py-4 text-slate-700 font-medium">
-                      ${Number(product.price || 0).toFixed(2)}
+                    {/* Price & Cut */}
+                    <td className="whitespace-nowrap px-5 py-4">
+                      <p className="font-bold text-slate-800">${Number(product.price || 0).toFixed(2)}</p>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 bg-rose-50 border border-rose-100 rounded px-1.5 py-0.5 mt-0.5" title="Sellvro Marketplace Commission Cut">
+                        Cut: {product.commission || 0}%
+                      </span>
                     </td>
 
                     {/* Supplier with ID on top and name below */}

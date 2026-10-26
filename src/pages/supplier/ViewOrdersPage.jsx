@@ -14,7 +14,7 @@ const TABLE_HEAD = [
   'Supplier ID',
   'Product & SKU',
   'Warehouse Custody',
-  'Total',
+  'Earnings (Net / Gross)',
   'Tracking Status',
   'Date',
   'Actions',
@@ -277,8 +277,15 @@ function SupplierViewOrdersPage() {
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3.5">
-                      <p className="font-semibold text-slate-800">${Number(order.total || 0).toFixed(2)}</p>
-                      <p className="text-xs text-slate-400">{order.quantity || order.items || 1} unit(s)</p>
+                      <div className="flex flex-col">
+                        <span className="font-bold text-emerald-700">
+                          +${Number((Number(order.total || 0) - Number(order.commission || 0)).toFixed(2))}
+                          <span className="text-[10px] font-semibold text-emerald-600 ml-1">Net</span>
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          Total: ${Number(order.total || 0).toFixed(2)} (Fee: -${Number(order.commission || 0).toFixed(2)})
+                        </span>
+                      </div>
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3.5">
@@ -323,7 +330,12 @@ function SupplierViewOrdersPage() {
                   {order.product} · SKU: {order.productSku || '—'}
                 </p>
                 <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                  <span>${Number(order.total).toFixed(2)}</span>
+                  <div>
+                    <span className="font-bold text-emerald-700">
+                      +${Number((Number(order.total || 0) - Number(order.commission || 0)).toFixed(2))} Net
+                    </span>
+                    <span className="text-[11px] text-slate-400 ml-1.5">(Total: ${Number(order.total).toFixed(2)})</span>
+                  </div>
                   <span>
                     {order.warehouseLocation === 'wms_hub' ? '🏢 WMS Hub' : '🏭 Supplier Whse'}
                   </span>

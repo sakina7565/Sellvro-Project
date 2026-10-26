@@ -42,6 +42,11 @@ const payoutSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    week: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     paymentMethod: {
       type: String,
       trim: true,
@@ -113,6 +118,7 @@ payoutSchema.methods.toSafeObject = function toSafeObject() {
     statusRaw: this.status,
     tid: this.tid || '',
     month: this.month || '',
+    week: this.week || '',
     paymentMethod: this.paymentMethod || 'Bank Transfer (IBFT)',
     receiptUrl: this.receiptUrl || '',
     matureAmount: this.matureAmount || 0,

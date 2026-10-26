@@ -243,15 +243,27 @@ function OrderDetailDrawer({
                     <p className="font-medium text-slate-700">${Number(order.total || 0).toFixed(2)}</p>
                   </div>
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                <div className="mt-3 grid grid-cols-3 gap-3 text-sm pt-2 border-t border-slate-200/60">
                   <div>
-                    <p className="text-xs text-slate-400">Commission</p>
-                    <p className="font-medium text-slate-700">${Number(order.commission || 0).toFixed(2)}</p>
+                    <p className="text-[11px] font-semibold text-slate-400">Gross Total</p>
+                    <p className="font-bold text-slate-900">${Number(order.total || 0).toFixed(2)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400">Payout</p>
-                    <p className="font-medium capitalize text-slate-700">{order.payoutStatus || '—'}</p>
+                    <p className="text-[11px] font-semibold text-rose-500">
+                      Sellvro Cut ({order.commissionPercent || Math.round((Number(order.commission || 0) / (Number(order.total) || 1)) * 100)}%)
+                    </p>
+                    <p className="font-bold text-rose-600">-${Number(order.commission || 0).toFixed(2)}</p>
                   </div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-emerald-600">Supplier Net</p>
+                    <p className="font-bold text-emerald-700">
+                      ${Number((Number(order.total || 0) - Number(order.commission || 0)).toFixed(2))}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-2.5 flex items-center justify-between text-xs text-slate-500 pt-1.5 border-t border-slate-100">
+                  <span>Payout Settlement Status:</span>
+                  <span className="font-bold uppercase tracking-wider text-indigo-700">{order.payoutStatus || 'pending'}</span>
                 </div>
               </div>
 

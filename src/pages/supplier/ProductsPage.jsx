@@ -24,7 +24,7 @@ const FILTERS = [
   { label: 'Product Status', options: PRODUCT_STATUS_FILTER_OPTIONS },
 ]
 
-const TABLE_HEAD = ['Product', 'SKU', 'Category', 'Price', 'Stock', 'Status', 'Notes']
+const TABLE_HEAD = ['Product', 'SKU', 'Category', 'Price & You Earn', 'Stock', 'Status', 'Notes']
 
 function SupplierProductsPage() {
   const [products, setProducts] = useState([])
@@ -145,7 +145,15 @@ function SupplierProductsPage() {
                   <td className="whitespace-nowrap px-5 py-4 font-medium text-slate-800">{product.name}</td>
                   <td className="whitespace-nowrap px-5 py-4 text-slate-500">{product.sku}</td>
                   <td className="whitespace-nowrap px-5 py-4 text-slate-500">{product.category}</td>
-                  <td className="whitespace-nowrap px-5 py-4 text-slate-500">${Number(product.price).toFixed(2)}</td>
+                  <td className="whitespace-nowrap px-5 py-4">
+                    <p className="font-semibold text-slate-800">${Number(product.price).toFixed(2)}</p>
+                    {product.commission ? (
+                      <p className="text-[11px] font-semibold text-emerald-600">
+                        Net: +${((Number(product.price || 0) * (100 - Number(product.commission || 0))) / 100).toFixed(2)}
+                        <span className="text-[10px] text-slate-400 font-normal ml-1">({product.commission}% fee)</span>
+                      </p>
+                    ) : null}
+                  </td>
                   <td className="whitespace-nowrap px-5 py-4 text-slate-500">{product.quantity}</td>
                   <td className="whitespace-nowrap px-5 py-4">
                     <Badge tone={PRODUCT_STATUS_TONE[product.status] || 'neutral'}>
