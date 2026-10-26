@@ -99,9 +99,18 @@ const EMPTY_FORM = {
   country: '',
 }
 
-function AddProductForm({ eyebrow, panel = 'supplier', defaultFulfillBy, onSwitchToWms }) {
+function AddProductForm({
+  eyebrow,
+  panel = 'supplier',
+  defaultFulfillBy,
+  onSwitchToWms,
+  allowWms = false,
+}) {
   const navigate = useNavigate()
-  const initialFulfillBy = defaultFulfillBy || (panel === 'supplier' ? 'self' : '')
+  const initialFulfillBy =
+    panel === 'supplier' && !allowWms
+      ? 'self'
+      : defaultFulfillBy || (panel === 'supplier' ? 'self' : '')
   const [form, setForm] = useState(() => ({
     ...EMPTY_FORM,
     fulfillBy: initialFulfillBy,
@@ -115,23 +124,34 @@ function AddProductForm({ eyebrow, panel = 'supplier', defaultFulfillBy, onSwitc
   const [success, setSuccess] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [marketplaceFee, setMarketplaceFee] = useState(8)
+  const [wmsFee, setWmsFee] = useState(0)
 
-  // Load Admin-Configured Marketplace Platform Fee
+  // Load Admin-Configured Marketplace Platform Fee & WMS Policy Fee
   useEffect(() => {
     let active = true
     walletApi
       .marketplaceFee()
       .then((res) => {
-        if (active && res?.marketplaceFeePercent !== undefined) {
-          setMarketplaceFee(Number(res.marketplaceFeePercent))
+        if (active) {
+          if (res?.marketplaceFeePercent !== undefined) {
+            setMarketplaceFee(Number(res.marketplaceFeePercent))
+          }
+          if (res?.wmsFeePercent !== undefined) {
+            setWmsFee(Number(res.wmsFeePercent))
+          }
         }
       })
       .catch(() => {
         walletApi
           .settings()
           .then((res) => {
-            if (active && res?.data?.marketplaceFeePercent !== undefined) {
-              setMarketplaceFee(Number(res.data.marketplaceFeePercent))
+            if (active && res?.data) {
+              if (res.data.marketplaceFeePercent !== undefined) {
+                setMarketplaceFee(Number(res.data.marketplaceFeePercent))
+              }
+              if (res.data.wmsFeePercent !== undefined) {
+                setWmsFee(Number(res.data.wmsFeePercent))
+              }
             }
           })
           .catch(() => {})
@@ -147,12 +167,15 @@ function AddProductForm({ eyebrow, panel = 'supplier', defaultFulfillBy, onSwitc
   const [selectedWmsProductId, setSelectedWmsProductId] = useState('')
   const [additionalQty, setAdditionalQty] = useState('')
   // 'existing' = restock/add media to existing WMS SKU; 'new' = submit new product for WMS entry
-  const [wmsSubMode, setWmsSubMode] = useState(initialFulfillBy === 'warehouse' ? 'existing' : 'new')
+  const [wmsSubMode, setWmsSubMode] = useState(
+    allowWms && initialFulfillBy === 'warehouse' ? 'existing' : 'new',
+  )
 
   // Is form locked (read-only) for base details?
-  const isWmsMode = panel === 'supplier' && form.fulfillBy === 'warehouse'
+  const isWmsMode = panel === 'supplier' && allowWms && form.fulfillBy === 'warehouse'
   const isWmsExisting = isWmsMode && wmsSubMode === 'existing'
   const isFormLocked = isWmsExisting
+  const effectiveFee = isWmsMode ? wmsFee : marketplaceFee
 
   // Load Categories
   useEffect(() => {
@@ -189,7 +212,7 @@ function AddProductForm({ eyebrow, panel = 'supplier', defaultFulfillBy, onSwitc
 
   // Load Supplier's WMS Products (Supplier panel only)
   const loadSupplierWmsProducts = useCallback(() => {
-    if (panel !== 'supplier') return
+    if (panel !== 'supplier' || !allowWms) return
     setLoadingWmsProducts(true)
     productApi
       .mine()
@@ -336,7 +359,7 @@ function AddProductForm({ eyebrow, panel = 'supplier', defaultFulfillBy, onSwitc
     dimensionUnit: form.dimensionUnit,
     location: form.location,
     barcode: form.barcode,
-    commission: panel === 'supplier' ? marketplaceFee : form.commission,
+    commission: panel === 'supplier' ? effectiveFee : form.commission,
     country: form.country,
     status,
     supplier: form.supplierAssign,
@@ -502,7 +525,7 @@ function AddProductForm({ eyebrow, panel = 'supplier', defaultFulfillBy, onSwitc
         )}
 
         {/* ── TOP PRIMARY SELECTOR: Storage & Fulfillment Option ───────────── */}
-        {panel === 'supplier' && (
+        {panel === 'supplier' && allowWms && (
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs transition-all">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -978,64 +1001,121 @@ function AddProductForm({ eyebrow, panel = 'supplier', defaultFulfillBy, onSwitc
                       />
                       <Input
                         id="quantity"
-                        label="Initial Stock Quantity *"
+                        label={
+                          isWmsMode
+                            ? 'WMS Stock Quantity (Physical Warehouse Intake) *'
+                            : 'Initial Stock Quantity *'
+                        }
                         type="number"
                         placeholder="Enter quantity"
                         value={form.quantity}
                         onChange={updateField('quantity')}
                       />
                     </div>
+                  </div>
+                )}
 
-                    {panel === 'supplier' && (
-                      <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50/80 via-white to-amber-50/30 p-4 shadow-xs">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-start gap-2.5">
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white font-bold text-xs shadow-2xs mt-0.5">
-                              %
+                {/* Platform Fee Card for Supplier - dynamically switches between WMS Policy and Self-Fulfillment */}
+                {panel === 'supplier' && (
+                  <div
+                    className={`rounded-xl border p-4 shadow-xs transition-all ${
+                      isWmsMode
+                        ? 'border-emerald-200 bg-gradient-to-br from-emerald-50/80 via-white to-emerald-50/30'
+                        : 'border-amber-200 bg-gradient-to-br from-amber-50/80 via-white to-amber-50/30'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-2.5">
+                        <span
+                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white font-bold text-xs shadow-2xs mt-0.5 ${
+                            isWmsMode ? 'bg-emerald-600' : 'bg-amber-500'
+                          }`}
+                        >
+                          {isWmsMode ? <Warehouse className="h-3.5 w-3.5" /> : '%'}
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span
+                              className={`text-xs font-bold uppercase tracking-wider ${
+                                isWmsMode ? 'text-emerald-950' : 'text-amber-950'
+                              }`}
+                            >
+                              {isWmsMode
+                                ? 'WMS Fulfillment Policy Rate'
+                                : 'Sellvro Marketplace Platform Fee'}
                             </span>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold uppercase tracking-wider text-amber-950">
-                                  Sellvro Marketplace Platform Fee
-                                </span>
-                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
-                                  Set by Admin • Applied Per Sale
-                                </span>
-                              </div>
-                              <p className="mt-1 text-xs text-slate-500 leading-snug">
-                                Because you are selling directly from your own shop/facility (Self-Fulfillment), Sellvro charges a platform marketplace fee on each completed sale.
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <span className="inline-block rounded-lg bg-amber-100 border border-amber-300 px-3 py-1 text-base font-extrabold text-amber-900 shadow-2xs">
-                              {marketplaceFee}%
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                isWmsMode
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {isWmsMode
+                                ? effectiveFee === 0
+                                  ? 'Warehouse Fulfilled • 0% Fee Waived'
+                                  : `Warehouse Fulfilled • ${effectiveFee}% Policy Fee`
+                                : `Direct Self-Fulfillment • ${effectiveFee}% Fee`}
                             </span>
                           </div>
+                          <p className="mt-1 text-xs text-slate-500 leading-snug">
+                            {isWmsMode
+                              ? 'Because this product is verified and fulfilled directly via Sellvro Warehouse (WMS), marketplace commission is automatically adjusted under the WMS fulfillment policy.'
+                              : 'Because you are selling directly from your own shop/facility (Self-Fulfillment), Sellvro charges a platform marketplace fee on each completed sale.'}
+                          </p>
                         </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span
+                          className={`inline-block rounded-lg border px-3 py-1 text-base font-extrabold shadow-2xs ${
+                            isWmsMode
+                              ? 'bg-emerald-100 border-emerald-300 text-emerald-900'
+                              : 'bg-amber-100 border-amber-300 text-amber-900'
+                          }`}
+                        >
+                          {effectiveFee}%
+                        </span>
+                      </div>
+                    </div>
 
-                        {Number(form.price) > 0 && (
-                          <div className="mt-3.5 pt-3 border-t border-amber-100 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                            <div className="rounded-lg bg-white/95 border border-slate-200 p-2.5 shadow-2xs">
-                              <span className="text-[11px] text-slate-500 block font-medium">Customer Selling Price</span>
-                              <span className="text-sm font-bold text-slate-900 block mt-0.5">
-                                ${Number(form.price).toFixed(2)}
-                              </span>
-                            </div>
-                            <div className="rounded-lg bg-white/95 border border-amber-200 p-2.5 shadow-2xs">
-                              <span className="text-[11px] text-amber-700 block font-medium">Marketplace Fee ({marketplaceFee}%)</span>
-                              <span className="text-sm font-bold text-amber-700 block mt-0.5">
-                                -${((Number(form.price) * marketplaceFee) / 100).toFixed(2)}
-                              </span>
-                            </div>
-                            <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-2.5 shadow-2xs">
-                              <span className="text-[11px] text-emerald-700 block font-bold">Your Estimated Payout</span>
-                              <span className="text-sm font-extrabold text-emerald-800 block mt-0.5">
-                                ${(Number(form.price) - (Number(form.price) * marketplaceFee) / 100).toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
-                        )}
+                    {Number(form.price) > 0 && (
+                      <div
+                        className={`mt-3.5 pt-3 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs ${
+                          isWmsMode ? 'border-emerald-100' : 'border-amber-100'
+                        }`}
+                      >
+                        <div className="rounded-lg bg-white/95 border border-slate-200 p-2.5 shadow-2xs">
+                          <span className="text-[11px] text-slate-500 block font-medium">Customer Selling Price</span>
+                          <span className="text-sm font-bold text-slate-900 block mt-0.5">
+                            ${Number(form.price).toFixed(2)}
+                          </span>
+                        </div>
+                        <div
+                          className={`rounded-lg bg-white/95 border p-2.5 shadow-2xs ${
+                            isWmsMode ? 'border-emerald-200' : 'border-amber-200'
+                          }`}
+                        >
+                          <span
+                            className={`text-[11px] block font-medium ${
+                              isWmsMode ? 'text-emerald-700' : 'text-amber-700'
+                            }`}
+                          >
+                            {isWmsMode ? 'WMS Policy Fee' : 'Marketplace Fee'} ({effectiveFee}%)
+                          </span>
+                          <span
+                            className={`text-sm font-bold block mt-0.5 ${
+                              isWmsMode ? 'text-emerald-700' : 'text-amber-700'
+                            }`}
+                          >
+                            -${((Number(form.price) * effectiveFee) / 100).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-2.5 shadow-2xs">
+                          <span className="text-[11px] text-emerald-700 block font-bold">Your Estimated Payout</span>
+                          <span className="text-sm font-extrabold text-emerald-800 block mt-0.5">
+                            ${(Number(form.price) - (Number(form.price) * effectiveFee) / 100).toFixed(2)}
+                          </span>
+                        </div>
                       </div>
                     )}
                   </div>

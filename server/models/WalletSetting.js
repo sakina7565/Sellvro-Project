@@ -29,6 +29,13 @@ const walletSettingSchema = new mongoose.Schema(
       min: 0,
       max: 100,
     },
+    wmsFeePercent: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
     pkrAccounts: {
       type: [accountDetailSchema],
       default: [

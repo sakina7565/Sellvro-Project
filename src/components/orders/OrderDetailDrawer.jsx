@@ -110,6 +110,25 @@ function OrderDetailDrawer({
     }
   }
 
+  const [pushingWms, setPushingWms] = useState(false)
+
+  const handlePushWms = async () => {
+    if (!order?.id) return
+    setPushingWms(true)
+    setError('')
+    try {
+      const res = await orderApi.pushWms(order.id)
+      if (res?.order) {
+        setOrder(res.order)
+        onUpdated?.(res.order)
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to push order to WMS.'))
+    } finally {
+      setPushingWms(false)
+    }
+  }
+
   if (!open) return null
 
   const shipping = order?.shippingAddress
@@ -400,6 +419,49 @@ function OrderDetailDrawer({
                 </div>
               </div>
 
+              {/* Sellvro WMS Fulfillment Status Card */}
+              {order.isWmsOrder && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Warehouse className="h-4 w-4 text-emerald-700" />
+                      <p className="text-xs font-bold uppercase tracking-wide text-emerald-950">
+                        Sellvro WMS Warehouse Fulfillment
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-800">
+                      ⚡ WMS Order
+                    </span>
+                  </div>
+
+                  <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="block text-[11px] text-slate-500">WMS Fulfillment Ref:</span>
+                      <strong className="font-mono text-emerald-900">
+                        {order.wmsFulfillmentId || 'WMS-FUL-ACTIVE'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] text-slate-500">WMS Dispatch Status:</span>
+                      <span className="inline-flex items-center gap-1 font-bold capitalize text-emerald-800">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                        {order.wmsStatus === 'pushed'
+                          ? 'Transmitted to Warehouse'
+                          : order.wmsStatus || 'Pushed'}
+                      </span>
+                    </div>
+                    {order.wmsPushedAt && (
+                      <div className="col-span-2 border-t border-emerald-100/60 pt-1 text-[11px] text-slate-500">
+                        Pushed to Warehouse API at:{' '}
+                        <strong className="text-slate-800">
+                          {new Date(order.wmsPushedAt).toLocaleString()}
+                        </strong>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Live Parcel Tracking */}
               <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-4">
                 <div className="mb-2 flex items-center justify-between">
@@ -471,15 +533,33 @@ function OrderDetailDrawer({
                       </select>
                     </div>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    fullWidth
-                    disabled={saving || (status === order.status && warehouseLoc === order.warehouseLocation)}
-                    onClick={handleStatusUpdate}
-                  >
-                    {saving ? 'Updating…' : 'Save Status & Custody Location'}
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      fullWidth
+                      disabled={saving || (status === order.status && warehouseLoc === order.warehouseLocation)}
+                      onClick={handleStatusUpdate}
+                    >
+                      {saving ? 'Updating…' : 'Save Status & Custody Location'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      fullWidth
+                      disabled={pushingWms}
+                      onClick={handlePushWms}
+                      className="border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+                    >
+                      <Warehouse className="h-3.5 w-3.5 mr-1 text-emerald-600" />
+                      {pushingWms
+                        ? 'Pushing to WMS…'
+                        : order.isWmsOrder
+                        ? 'Re-Sync with WMS Warehouse'
+                        : 'Push Order to WMS Warehouse'}
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>

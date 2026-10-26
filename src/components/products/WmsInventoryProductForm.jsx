@@ -91,8 +91,8 @@ function WmsInventoryProductForm({ onSwitchToSelf }) {
   const [manualSkuInput, setManualSkuInput] = useState('')
   const [lookingUpSku, setLookingUpSku] = useState(false)
 
-  // When a SKU is selected, auto-load its photos
-  const handleSelectSku = (sku, explicitProduct = null) => {
+  // When a SKU is selected, fetch single product details from live WMS API
+  const handleSelectSku = async (sku, explicitProduct = null) => {
     setSelectedSku(sku)
     setError('')
     setSuccess('')
@@ -105,7 +105,27 @@ function WmsInventoryProductForm({ onSwitchToSelf }) {
       return
     }
 
-    const found = explicitProduct || wmsProducts.find((p) => p.sku === sku)
+    let found = explicitProduct || wmsProducts.find((p) => p.sku === sku)
+
+    // Call live lookup API to ensure latest full specs from WMS endpoint
+    try {
+      const res = await productApi.wmsLookup(sku)
+      if (res?.data) {
+        found = res.data
+        setWmsProducts((prev) => {
+          const idx = prev.findIndex((p) => p.sku === found.sku)
+          if (idx >= 0) {
+            const next = [...prev]
+            next[idx] = found
+            return next
+          }
+          return [found, ...prev]
+        })
+      }
+    } catch {
+      // Fallback to already loaded 'found' item
+    }
+
     if (!found) return
 
     setRetailPrice(
@@ -204,13 +224,29 @@ function WmsInventoryProductForm({ onSwitchToSelf }) {
     setSubmitting(true)
     try {
       const payload = {
+        sku: selectedProduct.sku,
+        name: selectedProduct.name,
+        category:
+          typeof selectedProduct.category === 'object'
+            ? selectedProduct.category?.name || 'General'
+            : selectedProduct.category || 'General',
+        brand: selectedProduct.brand || '',
+        quantity: selectedProduct.quantity ?? 0,
+        location: selectedProduct.location || 'Sellvro Central WMS Hub',
+        weight: selectedProduct.weight || '',
+        weightUnit: selectedProduct.weightUnit || 'kg',
+        barcode: selectedProduct.barcode || '',
         price: priceNum,
         description: retailDescription.trim(),
         existingImages: JSON.stringify(existingImgs),
         additionalQuantity: Number(additionalQty || 0),
       }
 
-      const res = await productApi.attachWmsMedia(selectedProduct.id, payload, files)
+      const res = await productApi.attachWmsMedia(
+        selectedProduct.id || selectedProduct.sku,
+        payload,
+        files,
+      )
       setSuccess(
         res.message ||
           `Photos attached successfully! "${selectedProduct.name}" (${selectedProduct.sku}) is now active on the marketplace.`,
@@ -300,9 +336,9 @@ function WmsInventoryProductForm({ onSwitchToSelf }) {
             <div className="rounded-xl border border-primary-200/80 bg-primary-50/70 p-3 text-xs text-primary-950 flex items-start gap-2.5">
               <ShieldCheck className="h-4 w-4 text-primary-600 shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold">Sellvro Warehouse Database (Internal Intake Records): </span>
+                <span className="font-bold">Live Sellvro WMS Warehouse Integration: </span>
                 <span>
-                  External third-party WMS software API is not yet linked. Inventory SKUs and quantities are loaded directly from physical consignment stock logged at Sellvro Central Fulfillment Hub.
+                  Your products, verified physical stock, and intake details are synced directly in real-time from the WMS warehouse API (https://wmsbysellvro.com/api/supplier/products).
                 </span>
               </div>
             </div>
@@ -408,9 +444,9 @@ function WmsInventoryProductForm({ onSwitchToSelf }) {
             {/* Hint if no WMS items */}
             {!loading && wmsProducts.length === 0 && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
-                <p className="font-semibold">No WMS products found in your inventory yet.</p>
+                <p className="font-semibold">No products currently found in your WMS inventory account.</p>
                 <p className="mt-1 text-amber-800">
-                  Because external 3rd-party WMS software API is not yet linked, items must be physically received and registered at the warehouse by the admin team. If you want to sell products stored at your own shop/facility instead, switch to direct selling below:
+                  Your supplier account is connected to Sellvro WMS, but no products or SKUs are assigned to your vendor profile on the warehouse portal yet. If you want to sell products stored at your own shop/facility instead, switch to direct selling below:
                 </p>
                 <Button
                   type="button"

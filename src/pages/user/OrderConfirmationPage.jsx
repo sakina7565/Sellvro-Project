@@ -68,10 +68,37 @@ function UserOrderConfirmationPage() {
             <h2 className="mt-3 text-xl font-bold text-slate-900">Thank you!</h2>
             <p className="mt-1 text-sm text-slate-500">{message}</p>
             <p className="mt-3 text-sm font-semibold text-slate-800">Order {order.orderNo}</p>
-            <Badge className="mt-2" tone="success">
-              {order.statusLabel || order.status}
-            </Badge>
+            <div className="mt-2 flex items-center justify-center gap-2 flex-wrap">
+              <Badge tone="success">
+                {order.statusLabel || order.status}
+              </Badge>
+              {order.isWmsOrder && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
+                  ⚡ Pushed to WMS Warehouse
+                </span>
+              )}
+            </div>
           </Card>
+
+          {order.isWmsOrder && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-left shadow-xs">
+              <div className="flex items-start gap-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white font-bold text-xs shadow-2xs">
+                  ⚡
+                </span>
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-950">
+                    Sellvro WMS Warehouse Fulfillment
+                  </h4>
+                  <p className="mt-1 text-xs text-emerald-800 leading-snug">
+                    This order is verified and has been pushed directly to the Sellvro Warehouse (WMS) API (Ref:{' '}
+                    <strong className="font-mono">{order.wmsFulfillmentId || 'WMS-FUL-ACTIVE'}</strong>). Picking,
+                    packaging, and dispatch are queued automatically!
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <Card className="space-y-4 p-5 shadow-soft">
             <div className="flex flex-wrap items-start justify-between gap-3">

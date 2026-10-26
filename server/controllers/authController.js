@@ -135,9 +135,71 @@ export const login = async (req, res) => {
       return res.status(400).json({ message: 'Email and password are required.' })
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password')
-    if (!user || !(await user.matchPassword(password))) {
+    const cleanEmail = email.toLowerCase().trim()
+    let user = await User.findOne({ email: cleanEmail }).select('+password')
+
+    // ── Check WMS Supplier Status via Live WMS API ──
+    let wmsAuthResult = null
+    try {
+      const wmsRes = await fetch('https://wmsbysellvro.com/api/supplier/login', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: cleanEmail, password }),
+      })
+      const wmsData = await wmsRes.json().catch(() => null)
+      if (wmsRes.ok && wmsData?.status && wmsData?.token && wmsData?.supplier) {
+        wmsAuthResult = wmsData
+      }
+    } catch (wmsErr) {
+      console.warn('WMS login check skipped/failed:', wmsErr.message)
+    }
+
+    // If user does not exist locally on marketplace, but authenticated on WMS as a supplier:
+    if (!user && wmsAuthResult) {
+      user = await User.create({
+        fullName: wmsAuthResult.supplier.name || 'WMS Supplier',
+        email: cleanEmail,
+        password,
+        role: 'supplier',
+        status: 'approved',
+        isWmsRegistered: true,
+        wmsToken: wmsAuthResult.token,
+        wmsClientId: wmsAuthResult.supplier.user_unique_name || '',
+        wmsSupplierId: wmsAuthResult.supplier.id,
+        wmsStatus: wmsAuthResult.supplier.status || 'approved',
+      })
+
+      await BusinessProfile.findOneAndUpdate(
+        { user: user._id },
+        {
+          user: user._id,
+          profileType: 'supplier',
+          businessName:
+            wmsAuthResult.supplier.company_name ||
+            wmsAuthResult.supplier.name ||
+            'Supplier Store',
+          status: 'approved',
+        },
+        { upsert: true, new: true },
+      )
+    }
+
+    if (!user) {
       return res.status(401).json({ message: 'Invalid email or password.' })
+    }
+
+    // Verify local password or WMS synced password
+    const isPasswordMatch = await user.matchPassword(password)
+    if (!isPasswordMatch) {
+      if (wmsAuthResult) {
+        user.password = password
+        await user.save()
+      } else {
+        return res.status(401).json({ message: 'Invalid email or password.' })
+      }
     }
 
     // Admin accounts must use the dedicated admin portal — block them here
@@ -154,6 +216,32 @@ export const login = async (req, res) => {
 
     if (user.status === 'rejected') {
       return res.status(403).json({ message: 'Your account application was rejected.' })
+    }
+
+    // Sync WMS registration status and credentials
+    if (wmsAuthResult) {
+      user.isWmsRegistered = true
+      user.wmsToken = wmsAuthResult.token
+      user.wmsClientId = wmsAuthResult.supplier.user_unique_name || user.wmsClientId || ''
+      user.wmsSupplierId = wmsAuthResult.supplier.id || user.wmsSupplierId
+      user.wmsStatus = wmsAuthResult.supplier.status || 'approved'
+      await user.save()
+
+      if (wmsAuthResult.supplier.company_name) {
+        await BusinessProfile.findOneAndUpdate(
+          { user: user._id },
+          {
+            $set: {
+              businessName: wmsAuthResult.supplier.company_name,
+            },
+          },
+        )
+      }
+    } else if (user.role === 'supplier') {
+      // User is supplier on marketplace, but WMS login did not succeed (not registered on WMS)
+      user.isWmsRegistered = false
+      user.wmsToken = ''
+      await user.save()
     }
 
     const token = signToken(user._id)

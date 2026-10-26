@@ -63,20 +63,32 @@ function MarketplaceDeals({ products = [], activeCategory = 'All Categories', ac
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-6">
         {displayItems.map((item) => {
-          const isWishlisted = Boolean(wishlist[item.id])
+          const itemId = item._id || item.id
+          const productLink = itemId ? `/user/products/${itemId}` : '/user/products'
+          const isWishlisted = Boolean(wishlist[itemId])
           const price = typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0
-          const originalPrice = item.originalPrice || (price * 1.25).toFixed(2)
+          const originalPrice = item.originalPrice || (price > 0 ? (price * 1.25).toFixed(2) : null)
           const inWarehouse = Boolean(item.inWarehouse || item.fulfillBy === 'warehouse')
+          const stockCount = item.quantity !== undefined ? item.quantity : item.stock
+
+          const rawImg =
+            (Array.isArray(item.images) && item.images[0]) ||
+            item.image ||
+            item.imageUrl ||
+            ''
+          const displayImg = rawImg
+            ? mediaUrl(rawImg)
+            : 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=80'
 
           return (
             <div
-              key={item.id}
+              key={itemId || Math.random()}
               className="group relative flex flex-col justify-between overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-2xs transition-all duration-200 hover:border-slate-300 hover:shadow-md"
             >
               {/* Wishlist Button */}
               <button
                 type="button"
-                onClick={(e) => toggleWishlist(item.id, e)}
+                onClick={(e) => toggleWishlist(itemId, e)}
                 aria-label="Add to watchlist"
                 className={`absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 shadow-xs transition hover:bg-white ${
                   isWishlisted ? 'text-red-500' : 'text-slate-400 hover:text-slate-700'
@@ -86,16 +98,17 @@ function MarketplaceDeals({ products = [], activeCategory = 'All Categories', ac
               </button>
 
               {/* Product Thumbnail */}
-              <Link to="/user/products" className="block overflow-hidden rounded-lg bg-slate-50">
+              <Link to={productLink} className="block overflow-hidden rounded-lg bg-slate-50">
                 <div className="aspect-square w-full overflow-hidden">
                   <img
-                    src={
-                      mediaUrl(item.image || (item.images && item.images[0])) ||
-                      'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=80'
-                    }
+                    src={displayImg}
                     alt={item.name}
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                     loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.src =
+                        'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=400&q=80'
+                    }}
                   />
                 </div>
               </Link>
@@ -124,7 +137,7 @@ function MarketplaceDeals({ products = [], activeCategory = 'All Categories', ac
                   </div>
 
                   <Link
-                    to="/user/products"
+                    to={productLink}
                     className="line-clamp-2 text-xs font-medium text-slate-800 hover:text-blue-600 leading-snug"
                     title={item.name}
                   >
@@ -149,13 +162,13 @@ function MarketplaceDeals({ products = [], activeCategory = 'All Categories', ac
                     <span className="text-emerald-600 font-semibold">
                       {item.freeShipping !== false ? 'Free 3PL Dispatch' : 'Standard Shipping'}
                     </span>
-                    {item.stock !== undefined && (
-                      <span className="text-[10px] text-slate-400">{item.stock} in stock</span>
+                    {stockCount !== undefined && (
+                      <span className="text-[10px] text-slate-400">{stockCount} in stock</span>
                     )}
                   </div>
 
                   <Link
-                    to="/user/products"
+                    to={productLink}
                     className="mt-2.5 block w-full rounded-lg bg-slate-900 py-1.5 text-center text-[11px] font-semibold text-white hover:bg-blue-600 transition"
                   >
                     View Details

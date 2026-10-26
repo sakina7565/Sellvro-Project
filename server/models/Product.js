@@ -15,6 +15,8 @@ const productSchema = new mongoose.Schema(
     country: { type: String, trim: true, default: '' },
     barcode: { type: String, trim: true, default: '' },
     commission: { type: Number, default: 0, min: 0 },
+    isWmsVerified: { type: Boolean, default: false },
+    wmsVerifiedAt: { type: Date, default: null },
     weight: { type: String, trim: true, default: '' },
     weightUnit: { type: String, default: 'gm' },
     length: { type: String, trim: true, default: '' },
@@ -36,6 +38,9 @@ const productSchema = new mongoose.Schema(
       enum: ['draft', 'pending_approval', 'approved', 'active', 'rejected'],
       default: 'pending_approval',
     },
+    condition: { type: String, trim: true, default: '' },
+    watchers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    viewsCount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true },
 )
@@ -63,6 +68,8 @@ productSchema.methods.toSafeObject = function toSafeObject() {
     quantity: this.quantity,
     fulfillBy: this.fulfillBy,
     inWarehouse: Boolean(this.inWarehouse || this.fulfillBy === 'warehouse'),
+    isWmsVerified: Boolean(this.isWmsVerified || this.inWarehouse || this.fulfillBy === 'warehouse'),
+    wmsVerifiedAt: this.wmsVerifiedAt || (this.inWarehouse ? this.createdAt : null),
     location: this.location || '—',
     country: this.country,
     barcode: this.barcode,
@@ -83,6 +90,14 @@ productSchema.methods.toSafeObject = function toSafeObject() {
     supplierPhone: supplierPhone || '',
     supplierBusinessName: supplierBusinessName || '',
     status: this.status,
+    condition:
+      this.condition ||
+      (this.isWmsVerified || this.inWarehouse
+        ? 'WMS Verified Authentic (Inspected)'
+        : 'Brand New'),
+    watchersCount: Array.isArray(this.watchers) ? this.watchers.length : 0,
+    viewsCount: this.viewsCount || 0,
+    watchers: Array.isArray(this.watchers) ? this.watchers.map((w) => w.toString()) : [],
     createdAt: this.createdAt,
   }
 }

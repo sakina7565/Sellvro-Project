@@ -8,6 +8,7 @@ import {
   Search,
   XCircle,
   Check,
+  ShieldCheck,
 } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
@@ -26,6 +27,7 @@ import {
   PRODUCT_STATUS_LABEL,
   PRODUCT_STATUS_TONE,
   statusFilterToValue,
+  isProductWmsVerified,
 } from '../../lib/productStatus.js'
 
 const FILTERS = [
@@ -255,11 +257,23 @@ function ProductsListPage() {
                       </div>
                     </td>
 
-                    {/* Status */}
+                    {/* Status & WMS Verified Badge */}
                     <td className="whitespace-nowrap px-5 py-4">
-                      <Badge tone={PRODUCT_STATUS_TONE[product.status] || 'neutral'}>
-                        {PRODUCT_STATUS_LABEL[product.status] || product.status}
-                      </Badge>
+                      <div className="flex flex-col items-start gap-1">
+                        <Badge tone={PRODUCT_STATUS_TONE[product.status] || 'neutral'}>
+                          {PRODUCT_STATUS_LABEL[product.status] || product.status}
+                        </Badge>
+                        {isProductWmsVerified(product) ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 text-[10px] font-extrabold shadow-2xs">
+                            <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                            <span>WMS Verified</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 text-[10px] font-semibold">
+                            Self-Fulfillment
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Action with Edit, Barcode, Details, Disputes */}

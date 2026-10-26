@@ -2,7 +2,20 @@ import { Link } from 'react-router-dom'
 import { TrendingUp, ChevronRight } from 'lucide-react'
 import { TRENDING_VERTICALS } from './marketplaceData.js'
 
-function MarketplaceTrending({ onSelectCategory }) {
+function MarketplaceTrending({ onSelectCategory, categories = [] }) {
+  const activeItems =
+    Array.isArray(categories) && categories.length > 0
+      ? categories.slice(0, 6).map((cat, idx) => ({
+          id: cat.id || cat._id || `trending-${idx}`,
+          name: cat.name,
+          count: cat.count || (cat.products ? `${cat.products} items` : 'Hot Category'),
+          image:
+            cat.image ||
+            TRENDING_VERTICALS[idx % TRENDING_VERTICALS.length]?.image ||
+            'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=300&q=80',
+        }))
+      : TRENDING_VERTICALS
+
   return (
     <section className="mx-auto mt-12 max-w-7xl px-4 sm:px-6">
       <div className="flex items-center justify-between border-b border-slate-200 pb-3">
@@ -23,7 +36,7 @@ function MarketplaceTrending({ onSelectCategory }) {
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-6">
-        {TRENDING_VERTICALS.map((item) => {
+        {activeItems.map((item) => {
           if (onSelectCategory) {
             return (
               <button
@@ -38,6 +51,10 @@ function MarketplaceTrending({ onSelectCategory }) {
                     alt={item.name}
                     className="h-full w-full rounded-full object-cover"
                     loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.src =
+                        'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=300&q=80'
+                    }}
                   />
                   <div className="absolute inset-0 rounded-full bg-blue-600/0 transition-colors group-hover:bg-blue-600/10" />
                 </div>
@@ -61,6 +78,10 @@ function MarketplaceTrending({ onSelectCategory }) {
                   alt={item.name}
                   className="h-full w-full rounded-full object-cover"
                   loading="lazy"
+                  onError={(e) => {
+                    e.currentTarget.src =
+                      'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=300&q=80'
+                  }}
                 />
                 <div className="absolute inset-0 rounded-full bg-blue-600/0 transition-colors group-hover:bg-blue-600/10" />
               </div>

@@ -86,14 +86,36 @@ const DEFAULT_MAIN_CATEGORIES = [
   },
 ]
 
-function MarketplaceCategoryNav({ activeCategory, onSelectCategory }) {
+function MarketplaceCategoryNav({ activeCategory, onSelectCategory, categories: externalCategories }) {
   const navigate = useNavigate()
   const [categories, setCategories] = useState(DEFAULT_MAIN_CATEGORIES)
   const [openDropdownId, setOpenDropdownId] = useState(null)
   const navRef = useRef(null)
 
-  // Fetch real categories from Sellvro backend API
+  // Sync with parent-provided categories if available
   useEffect(() => {
+    if (Array.isArray(externalCategories) && externalCategories.length > 0) {
+      const formatted = externalCategories.map((cat) => ({
+        id: cat.id || cat._id,
+        name: cat.name,
+        subcategories:
+          Array.isArray(cat.subcategories) && cat.subcategories.length > 0
+            ? cat.subcategories
+            : DEFAULT_MAIN_CATEGORIES.find(
+                (d) => d.name?.toLowerCase() === cat.name?.toLowerCase()
+              )?.subcategories || [
+                `${cat.name} Bulk Lots`,
+                `${cat.name} 3PL Stock`,
+                `Wholesale ${cat.name}`,
+              ],
+      }))
+      setCategories(formatted)
+    }
+  }, [externalCategories])
+
+  // Fetch real categories from Sellvro backend API only if not supplied by parent
+  useEffect(() => {
+    if (Array.isArray(externalCategories) && externalCategories.length > 0) return
     let isMounted = true
     categoryApi
       .list()
@@ -123,7 +145,7 @@ function MarketplaceCategoryNav({ activeCategory, onSelectCategory }) {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [externalCategories])
 
   // Close dropdown on outside click
   useEffect(() => {

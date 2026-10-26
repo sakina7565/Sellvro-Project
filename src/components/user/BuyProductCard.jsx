@@ -14,7 +14,9 @@ function BuyProductCard({ product }) {
   const productId = product.id || product._id
   const isActive = product.status === 'active' || !product.status
   const isOutOfStock = typeof product.quantity === 'number' && product.quantity <= 0
-  const isWms = Boolean(product.inWarehouse || product.fulfillBy === 'warehouse')
+  const isWms = Boolean(
+    product.isWmsVerified || product.inWarehouse || product.fulfillBy === 'warehouse',
+  )
 
   const imageSrc =
     mediaUrl(product.image) ||
@@ -39,11 +41,11 @@ function BuyProductCard({ product }) {
       <div>
         {/* Image & Badges */}
         <div className="relative bg-slate-50/50 p-4 pt-5">
-          {/* Fulfillment Badge: WMS only if in inventory; if kept with supplier, show Supplier Direct (NO WMS) */}
+          {/* Fulfillment Badge: WMS Verified if in inventory; if kept with supplier, show Supplier Direct */}
           {isWms ? (
-            <div className="absolute left-3 top-3 z-10 flex items-center gap-1.5 rounded-md bg-slate-900/95 px-2.5 py-1 text-[11px] font-black tracking-wider text-amber-400 shadow-md backdrop-blur-xs border border-amber-400/20">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
-              WMS
+            <div className="absolute left-3 top-3 z-10 flex items-center gap-1.5 rounded-md bg-slate-900/95 px-2.5 py-1 text-[11px] font-black tracking-wider text-emerald-400 shadow-md backdrop-blur-xs border border-emerald-400/20">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              WMS Verified
             </div>
           ) : (
             <div className="absolute left-3 top-3 z-10 flex items-center gap-1.5 rounded-md bg-white/95 px-2 py-0.5 text-[10px] font-bold text-slate-700 shadow-xs border border-slate-200">

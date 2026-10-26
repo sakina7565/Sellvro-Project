@@ -284,10 +284,19 @@ function OrdersPage() {
 
                     {/* Warehouse Custody Location */}
                     <td className="whitespace-nowrap px-4 py-3.5">
-                      {order.warehouseLocation === 'wms_hub' ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 border border-amber-200">
-                          <Warehouse className="h-3 w-3" /> WMS Hub
-                        </span>
+                      {order.warehouseLocation === 'wms_hub' || order.isWmsOrder ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-200">
+                            <Warehouse className="h-3 w-3 text-emerald-600" /> WMS Hub
+                          </span>
+                          <span className="text-[10px] font-mono text-emerald-700">
+                            {order.wmsStatus === 'pushed'
+                              ? '⚡ Pushed to WMS'
+                              : order.wmsStatus === 'queued_for_picking'
+                              ? '📦 WMS Picking'
+                              : '🏢 WMS Fulfilled'}
+                          </span>
+                        </div>
                       ) : order.warehouseLocation === 'in_transit' ? (
                         <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-800 border border-blue-200">
                           <Truck className="h-3 w-3" /> In Transit

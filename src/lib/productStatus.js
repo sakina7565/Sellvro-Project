@@ -42,3 +42,9 @@ export function statusFilterToValue(label) {
   }
   return map[label] ?? ''
 }
+
+export function isProductWmsVerified(product) {
+  if (!product) return false
+  return Boolean(product.isWmsVerified || product.inWarehouse || product.fulfillBy === 'warehouse')
+}
+

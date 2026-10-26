@@ -60,6 +60,27 @@ const userSchema = new mongoose.Schema(
       type: String,
       sparse: true,
     },
+    // WMS Supplier Integration Fields
+    isWmsRegistered: {
+      type: Boolean,
+      default: false,
+    },
+    wmsToken: {
+      type: String,
+      default: '',
+    },
+    wmsClientId: {
+      type: String,
+      default: '',
+    },
+    wmsSupplierId: {
+      type: Number,
+      default: null,
+    },
+    wmsStatus: {
+      type: String,
+      default: '',
+    },
   },
   { timestamps: true },
 )
@@ -83,6 +104,9 @@ userSchema.methods.toSafeObject = function toSafeObject(options = {}) {
     status: this.status,
     walletBalance: this.walletBalance ?? 0,
     adminRoleId: this.adminRoleId?.toString?.() || this.adminRoleId || null,
+    isWmsRegistered: Boolean(this.isWmsRegistered),
+    wmsClientId: this.wmsClientId || '',
+    wmsStatus: this.wmsStatus || '',
     createdAt: this.createdAt,
   }
 

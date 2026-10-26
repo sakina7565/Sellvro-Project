@@ -7,6 +7,9 @@ import {
   lookupOrder,
   updateOrderStatus,
   updateOrderTracking,
+  pushOrderToWmsManual,
+  getWmsSupplierOrders,
+  updateWmsOrderDispatch,
 } from '../controllers/orderController.js'
 import { getUserDashboardStats } from '../controllers/dashboardController.js'
 import { protect, authorize, requireApproved } from '../middleware/auth.js'
@@ -31,5 +34,10 @@ router.get('/supplier', protect, authorize('supplier'), requireApproved, listSup
 router.get('/', protect, authorize('admin'), listAllOrders)
 router.patch('/:id/status', protect, authorize('admin', 'supplier'), updateOrderStatus)
 router.patch('/:id/tracking', protect, authorize('admin', 'supplier'), updateOrderTracking)
+router.post('/:id/push-wms', protect, authorize('admin', 'supplier'), pushOrderToWmsManual)
+
+// WMS Direct Integration Endpoints
+router.get('/wms/supplier/:clientId', getWmsSupplierOrders)
+router.post('/wms/update-dispatch', updateWmsOrderDispatch)
 
 export default router

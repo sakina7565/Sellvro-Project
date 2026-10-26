@@ -70,6 +70,14 @@ export const updateWalletSettings = async (req, res) => {
       setting.marketplaceFeePercent = fee
     }
 
+    if (req.body.wmsFeePercent !== undefined) {
+      const wmsFee = Number(req.body.wmsFeePercent)
+      if (!Number.isFinite(wmsFee) || wmsFee < 0 || wmsFee > 100) {
+        return res.status(400).json({ message: 'WMS fulfillment fee must be a valid percentage between 0 and 100.' })
+      }
+      setting.wmsFeePercent = wmsFee
+    }
+
     if (Array.isArray(pkrAccounts)) {
       setting.pkrAccounts = pkrAccounts
     }
@@ -94,9 +102,10 @@ export const getMarketplaceFee = async (_req, res) => {
     return res.json({
       success: true,
       marketplaceFeePercent: Number(setting.marketplaceFeePercent ?? 8),
+      wmsFeePercent: Number(setting.wmsFeePercent ?? 0),
     })
   } catch (error) {
-    return res.json({ success: true, marketplaceFeePercent: 8 })
+    return res.json({ success: true, marketplaceFeePercent: 8, wmsFeePercent: 0 })
   }
 }
 

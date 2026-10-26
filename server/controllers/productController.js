@@ -1,5 +1,7 @@
 import mongoose from 'mongoose'
 import Product from '../models/Product.js'
+import Order from '../models/Order.js'
+import User from '../models/User.js'
 import BusinessProfile from '../models/BusinessProfile.js'
 import WalletSetting from '../models/WalletSetting.js'
 import { resolveCategoryName } from './categoryController.js'
@@ -103,11 +105,18 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ message: 'Quantity cannot be negative.' })
     }
 
-    // Apply admin-configured marketplace platform fee for direct/self fulfillment
+    // Apply admin-configured marketplace platform fee for direct/self fulfillment or WMS fulfillment policy
     const walletSetting = await WalletSetting.getOrCreate()
     const adminMarketplaceFee = Number(walletSetting.marketplaceFeePercent ?? 8)
-    if (fields.fulfillBy === 'self' || req.user.role === 'supplier') {
+    const wmsFee = Number(walletSetting.wmsFeePercent ?? 0)
+
+    if (fields.fulfillBy === 'warehouse' || fields.inWarehouse) {
+      fields.commission = wmsFee
+      fields.isWmsVerified = true
+      fields.wmsVerifiedAt = new Date()
+    } else if (fields.fulfillBy === 'self' || req.user.role === 'supplier') {
       fields.commission = adminMarketplaceFee
+      fields.isWmsVerified = false
     } else if (fields.commission < 0) {
       return res.status(400).json({ message: 'Commission cannot be negative.' })
     }
@@ -200,15 +209,47 @@ export const updateMyProduct = async (req, res) => {
     if (fields.price !== undefined && (Number.isNaN(fields.price) || fields.price <= 0)) {
       return res.status(400).json({ message: 'A valid positive price greater than 0 is required.' })
     }
-    if (req.body.additionalQuantity !== undefined && !Number.isNaN(Number(req.body.additionalQuantity))) {
-      const addQty = Number(req.body.additionalQuantity)
-      if (addQty > 0) {
-        fields.quantity = (product.quantity || 0) + addQty
-      }
-    }
+    const isWmsProduct = Boolean(
+      product.isWmsVerified || product.inWarehouse || product.fulfillBy === 'warehouse',
+    )
 
-    if (fields.quantity !== undefined && fields.quantity < 0) {
-      return res.status(400).json({ message: 'Quantity cannot be negative.' })
+    if (isWmsProduct) {
+      // Stock quantity cannot be manually altered at supplier request for WMS-verified products
+      if (
+        req.body.quantity !== undefined &&
+        Number(req.body.quantity) !== Number(product.quantity)
+      ) {
+        return res.status(400).json({
+          message:
+            'Stock quantity cannot be manually altered for WMS-verified products. Stock is verified directly from Sellvro WMS warehouse intake records.',
+        })
+      }
+      if (req.body.additionalQuantity !== undefined && Number(req.body.additionalQuantity) > 0) {
+        return res.status(400).json({
+          message:
+            'Manual additional stock is disabled for WMS-verified products. Extra inventory must be received and logged through Sellvro WMS inbound intake.',
+        })
+      }
+      delete fields.quantity
+
+      const walletSetting = await WalletSetting.getOrCreate()
+      fields.commission = Number(walletSetting.wmsFeePercent ?? 0)
+    } else {
+      if (req.body.additionalQuantity !== undefined && !Number.isNaN(Number(req.body.additionalQuantity))) {
+        const addQty = Number(req.body.additionalQuantity)
+        if (addQty > 0) {
+          fields.quantity = (product.quantity || 0) + addQty
+        }
+      }
+
+      if (fields.quantity !== undefined && fields.quantity < 0) {
+        return res.status(400).json({ message: 'Quantity cannot be negative.' })
+      }
+
+      if (fields.fulfillBy === 'self') {
+        const walletSetting = await WalletSetting.getOrCreate()
+        fields.commission = Number(walletSetting.marketplaceFeePercent ?? 8)
+      }
     }
 
     let baseImages = product.images || []
@@ -287,6 +328,72 @@ async function enrichProductsWithSupplier(products) {
     }
   }
 
+  // 1. Calculate Real Sold Count for each product from Order database
+  const productObjectIds = products
+    .map((p) => {
+      const rawId = p._id || p.id
+      return rawId && mongoose.Types.ObjectId.isValid(rawId)
+        ? new mongoose.Types.ObjectId(rawId)
+        : null
+    })
+    .filter(Boolean)
+
+  let salesMap = new Map()
+  if (productObjectIds.length > 0) {
+    try {
+      const salesAgg = await Order.aggregate([
+        {
+          $match: {
+            product: { $in: productObjectIds },
+            status: { $ne: 'cancelled' },
+          },
+        },
+        {
+          $group: {
+            _id: '$product',
+            totalSold: { $sum: '$quantity' },
+          },
+        },
+      ])
+      salesAgg.forEach((item) => {
+        if (item?._id) {
+          salesMap.set(item._id.toString(), Number(item.totalSold) || 0)
+        }
+      })
+    } catch (err) {
+      console.warn('Failed to calculate sales for products:', err.message)
+    }
+  }
+
+  // 2. Calculate Real total orders completed per supplier
+  let supplierOrdersMap = new Map()
+  if (supplierIds.length > 0) {
+    try {
+      const supplierObjIds = supplierIds.map((id) => new mongoose.Types.ObjectId(id))
+      const supplierAgg = await Order.aggregate([
+        {
+          $match: {
+            supplier: { $in: supplierObjIds },
+            status: { $ne: 'cancelled' },
+          },
+        },
+        {
+          $group: {
+            _id: '$supplier',
+            count: { $sum: 1 },
+          },
+        },
+      ])
+      supplierAgg.forEach((s) => {
+        if (s?._id) {
+          supplierOrdersMap.set(s._id.toString(), Number(s.count) || 0)
+        }
+      })
+    } catch (err) {
+      console.warn('Failed to calculate supplier orders:', err.message)
+    }
+  }
+
   return products.map((product) => {
     const safeObj = typeof product.toSafeObject === 'function' ? product.toSafeObject() : { ...product }
     const sId = product.supplier?._id?.toString?.() || product.supplier?.toString?.() || safeObj.supplierId
@@ -311,6 +418,13 @@ async function enrichProductsWithSupplier(products) {
     if (!safeObj.supplier || safeObj.supplier === '—') {
       safeObj.supplier = bestVendorName
     }
+
+    const prodId = product._id?.toString?.() || safeObj.id
+    safeObj.soldCount = salesMap.get(prodId) || 0
+
+    const totalOrders = sId ? (supplierOrdersMap.get(sId) || 0) : 0
+    safeObj.supplierTotalOrders = totalOrders
+    safeObj.supplierRating = totalOrders > 0 ? '100%' : 'New'
 
     return safeObj
   })
@@ -366,6 +480,10 @@ export const getProductById = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(404).json({ message: 'Product not found.' })
     }
+
+    // Increment real views count
+    await Product.findByIdAndUpdate(req.params.id, { $inc: { viewsCount: 1 } })
+
     const product = await Product.findById(req.params.id).populate(
       'supplier',
       'fullName email phone clientId',
@@ -375,9 +493,135 @@ export const getProductById = async (req, res) => {
     }
 
     const [enriched] = await enrichProductsWithSupplier([product])
+
+    if (req.user?._id && Array.isArray(product.watchers)) {
+      enriched.isWatchlisted = product.watchers.some(
+        (w) => w.toString() === req.user._id.toString(),
+      )
+    } else {
+      enriched.isWatchlisted = false
+    }
+
     return res.json({ product: enriched })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to load product.' })
+  }
+}
+
+export const toggleWatchProduct = async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(404).json({ message: 'Product not found.' })
+    }
+    const product = await Product.findById(req.params.id)
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found.' })
+    }
+
+    const userId = req.user._id
+    if (!Array.isArray(product.watchers)) {
+      product.watchers = []
+    }
+
+    const idx = product.watchers.findIndex((w) => w.toString() === userId.toString())
+    let isWatchlisted = false
+    if (idx > -1) {
+      product.watchers.splice(idx, 1)
+      isWatchlisted = false
+    } else {
+      product.watchers.push(userId)
+      isWatchlisted = true
+    }
+
+    await product.save()
+
+    return res.json({
+      success: true,
+      isWatchlisted,
+      watchersCount: product.watchers.length,
+      message: isWatchlisted ? 'Added to watchlist' : 'Removed from watchlist',
+    })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to toggle watchlist.' })
+  }
+}
+
+export const getStoreDetails = async (req, res) => {
+  try {
+    const { supplierId } = req.params
+    if (!mongoose.Types.ObjectId.isValid(supplierId)) {
+      return res.status(404).json({ message: 'Store not found.' })
+    }
+
+    const supplierUser = await User.findById(supplierId).select('fullName email phone createdAt role')
+    if (!supplierUser || supplierUser.role !== 'supplier') {
+      return res.status(404).json({ message: 'Store or seller not found.' })
+    }
+
+    const profile = await BusinessProfile.findOne({ user: supplierId }).lean()
+
+    const storeName =
+      profile?.businessName ||
+      supplierUser.fullName ||
+      'Sellvro Verified Merchant'
+
+    const totalOrders = await Order.countDocuments({
+      supplier: supplierId,
+      status: { $ne: 'cancelled' },
+    })
+
+    const salesAgg = await Order.aggregate([
+      {
+        $match: {
+          supplier: new mongoose.Types.ObjectId(supplierId),
+          status: { $ne: 'cancelled' },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalSold: { $sum: '$quantity' },
+        },
+      },
+    ])
+    const totalItemsSold = salesAgg[0]?.totalSold || 0
+
+    const products = await Product.find({
+      supplier: supplierId,
+      status: 'active',
+    }).sort({ createdAt: -1 })
+
+    let followersCount = 0
+    products.forEach((p) => {
+      if (Array.isArray(p.watchers)) {
+        followersCount += p.watchers.length
+      }
+    })
+
+    const enriched = await enrichProductsWithSupplier(products)
+
+    return res.json({
+      store: {
+        id: supplierId,
+        name: storeName,
+        businessDescription: profile?.businessDescription || '',
+        businessCategory: profile?.businessCategory || 'General Merchandise',
+        city: profile?.city || '',
+        country: profile?.country || '',
+        email: profile?.businessEmail || supplierUser.email,
+        phone: profile?.businessPhone || supplierUser.phone || '',
+        joinedAt: supplierUser.createdAt,
+        totalOrders,
+        totalItemsSold,
+        followersCount,
+        positiveRating: totalOrders > 0 ? '99.4%' : 'New',
+        isVerified: true,
+        totalProducts: products.length,
+      },
+      products: enriched,
+    })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to load store details.' })
   }
 }
 
@@ -434,7 +678,10 @@ export const approveProduct = async (req, res) => {
       effectiveCommission = commission
     }
 
-    if (!effectiveCommission || Number(effectiveCommission) <= 0) {
+    const isWms = Boolean(
+      product.isWmsVerified || product.inWarehouse || product.fulfillBy === 'warehouse',
+    )
+    if (!isWms && (!effectiveCommission || Number(effectiveCommission) <= 0)) {
       return res.status(400).json({
         message: 'Commission is required. You must set a commission greater than 0 before approving or activating this product.',
       })
@@ -484,7 +731,10 @@ export const activateProduct = async (req, res) => {
       })
     }
 
-    if (!product.commission || Number(product.commission) <= 0) {
+    const isWms = Boolean(
+      product.isWmsVerified || product.inWarehouse || product.fulfillBy === 'warehouse',
+    )
+    if (!isWms && (!product.commission || Number(product.commission) <= 0)) {
       return res.status(400).json({
         message: 'Commission is required. You must set a commission greater than 0 before activating this product.',
       })
@@ -771,25 +1021,81 @@ export const updateAdminProduct = async (req, res) => {
  */
 export const getMyWmsSkus = async (req, res) => {
   try {
-    // Clean up any previously seeded mock products
-    await Product.deleteMany({
-      supplier: req.user._id,
-      sku: { $in: ['SVRO-WMS-M01', 'SVRO-WMS-T02'] },
-    })
+    // 1. Fetch live products from WMS if user has a valid wmsToken
+    let liveWmsProducts = []
+    if (req.user?.wmsToken) {
+      try {
+        const wmsRes = await fetch('https://wmsbysellvro.com/api/supplier/products', {
+          headers: {
+            Authorization: `Bearer ${req.user.wmsToken}`,
+            Accept: 'application/json',
+          },
+        })
+        const wmsData = await wmsRes.json().catch(() => null)
+        if (wmsRes.ok && wmsData?.status && Array.isArray(wmsData.data)) {
+          liveWmsProducts = wmsData.data.map((item) => ({
+            id: String(item.id),
+            wmsId: item.id,
+            sku: item.sku,
+            name: item.name,
+            category: item.category?.name || item.category || 'General',
+            brand: item.brand || '',
+            description: item.description || '',
+            price: Number(item.price || 0),
+            wholesalePrice: Number(item.price || 0),
+            quantity: Number(item.stock_quantity ?? item.quantity ?? 0),
+            inWarehouse: true,
+            fulfillBy: 'warehouse',
+            location: item.warehouse_location || 'Sellvro Central WMS Hub',
+            weight: item.weight || '',
+            weightUnit: item.weight_unit || 'kg',
+            images: Array.isArray(item.images) ? item.images : [],
+            image: Array.isArray(item.images) && item.images[0] ? item.images[0] : '',
+            supplierId: req.user._id.toString(),
+            supplierClientId: req.user.wmsClientId || '',
+            supplier: req.user.fullName,
+            vendorName: req.user.fullName,
+            isLiveWms: true,
+          }))
+        }
+      } catch (wmsErr) {
+        console.warn('WMS products fetch failed:', wmsErr.message)
+      }
+    }
 
-    const products = await Product.find({
+    // 2. Fetch locally stored warehouse products for this supplier
+    const localProducts = await Product.find({
       supplier: req.user._id,
       $or: [{ fulfillBy: 'warehouse' }, { inWarehouse: true }],
     })
       .populate('supplier', 'fullName email phone clientId')
       .sort({ createdAt: -1 })
 
-    const enriched = await enrichProductsWithSupplier(products)
+    const enrichedLocal = await enrichProductsWithSupplier(localProducts)
+
+    // 3. Merge: if an item is already in local DB, preserve local customized retail price/description
+    const mergedList = [...liveWmsProducts]
+    enrichedLocal.forEach((localProd) => {
+      const idx = mergedList.findIndex((item) => item.sku === localProd.sku)
+      if (idx >= 0) {
+        mergedList[idx] = {
+          ...mergedList[idx],
+          id: localProd.id,
+          localId: localProd.id,
+          price: localProd.price || mergedList[idx].price,
+          description: localProd.description || mergedList[idx].description,
+          images: localProd.images?.length > 0 ? localProd.images : mergedList[idx].images,
+          status: localProd.status || 'active',
+        }
+      } else {
+        mergedList.push(localProd)
+      }
+    })
 
     return res.json({
       success: true,
-      count: enriched.length,
-      data: enriched,
+      count: mergedList.length,
+      data: mergedList,
     })
   } catch (error) {
     console.error('getMyWmsSkus error:', error)
@@ -808,6 +1114,66 @@ export const getWmsProductBySku = async (req, res) => {
       return res.status(400).json({ message: 'SKU is required.' })
     }
 
+    // 1. Try to fetch from live WMS if user has wmsToken
+    if (req.user?.wmsToken) {
+      try {
+        const wmsRes = await fetch(
+          `https://wmsbysellvro.com/api/supplier/products/${encodeURIComponent(sku)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${req.user.wmsToken}`,
+              Accept: 'application/json',
+            },
+          },
+        )
+        const wmsData = await wmsRes.json().catch(() => null)
+        const item = wmsData?.data || (wmsData?.status && wmsData?.id ? wmsData : null)
+
+        if (wmsRes.ok && item && item.sku) {
+          const localMatch = await Product.findOne({ sku, supplier: req.user._id })
+          const formatted = {
+            id: localMatch?._id?.toString?.() || String(item.id),
+            wmsId: item.id,
+            sku: item.sku,
+            name: item.name,
+            category: item.category?.name || item.category || 'General',
+            brand: item.brand || '',
+            description: localMatch?.description || item.description || '',
+            price: localMatch?.price || Number(item.price || 0),
+            wholesalePrice: Number(item.price || 0),
+            quantity: Number(item.stock_quantity ?? item.quantity ?? 0),
+            inWarehouse: true,
+            fulfillBy: 'warehouse',
+            location: item.warehouse_location || 'Sellvro Central WMS Hub',
+            weight: item.weight || '',
+            weightUnit: item.weight_unit || 'kg',
+            images:
+              localMatch?.images?.length > 0
+                ? localMatch.images
+                : Array.isArray(item.images)
+                ? item.images
+                : [],
+            image:
+              localMatch?.image ||
+              (Array.isArray(item.images) && item.images[0] ? item.images[0] : ''),
+            supplierId: req.user._id.toString(),
+            supplierClientId: req.user.wmsClientId || '',
+            supplier: req.user.fullName,
+            vendorName: req.user.fullName,
+            isLiveWms: true,
+          }
+
+          return res.json({
+            success: true,
+            data: formatted,
+          })
+        }
+      } catch (wmsErr) {
+        console.warn('WMS single product fetch failed:', wmsErr.message)
+      }
+    }
+
+    // 2. Fallback to local DB
     const query = {
       sku,
       ...(req.user.role === 'admin' ? {} : { supplier: req.user._id }),
@@ -835,11 +1201,50 @@ export const getWmsProductBySku = async (req, res) => {
  */
 export const attachWmsProductMedia = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id)
-    if (!product) {
-      return res.status(404).json({ message: 'WMS Product not found.' })
+    let product = null
+    const paramId = req.params.id
+
+    if (paramId && mongoose.Types.ObjectId.isValid(paramId)) {
+      product = await Product.findById(paramId)
     }
-    if (!product.supplier.equals(req.user._id)) {
+
+    let sku = String(req.body.sku || '').trim().toUpperCase()
+    if (!sku && paramId && !mongoose.Types.ObjectId.isValid(paramId)) {
+      sku = String(paramId).trim().toUpperCase()
+    }
+
+    if (!product && sku) {
+      product = await Product.findOne({ sku })
+    }
+
+    // If still not in local DB, initialize a new Product record from WMS details
+    if (!product && sku) {
+      product = new Product({
+        name: req.body.name || 'WMS Consignment Item',
+        sku,
+        category:
+          typeof req.body.category === 'object'
+            ? req.body.category?.name || 'General'
+            : req.body.category || 'General',
+        brand: req.body.brand || '',
+        price: Number(req.body.price || 0),
+        quantity: Number(req.body.quantity || 0),
+        fulfillBy: 'warehouse',
+        inWarehouse: true,
+        location: req.body.location || 'Sellvro Central WMS Hub',
+        weight: req.body.weight || '',
+        weightUnit: req.body.weightUnit || 'kg',
+        barcode: req.body.barcode || '',
+        supplier: req.user._id,
+        status: 'active',
+      })
+    }
+
+    if (!product) {
+      return res.status(404).json({ message: 'WMS Product record could not be found or initialized.' })
+    }
+
+    if (product.supplier && !product.supplier.equals(req.user._id)) {
       return res.status(403).json({ message: 'You can only update your own WMS products.' })
     }
 
@@ -889,6 +1294,13 @@ export const attachWmsProductMedia = async (req, res) => {
 
     // Pre-inspected WMS products publish directly to the marketplace as active without requiring admin approval
     product.status = 'active'
+    product.fulfillBy = 'warehouse'
+    product.inWarehouse = true
+    product.isWmsVerified = true
+    product.wmsVerifiedAt = new Date()
+
+    const walletSetting = await WalletSetting.getOrCreate()
+    product.commission = Number(walletSetting.wmsFeePercent ?? 0)
 
     await product.save()
 
@@ -901,6 +1313,147 @@ export const attachWmsProductMedia = async (req, res) => {
     })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to attach media to WMS product.' })
+  }
+}
+
+/**
+ * POST /api/products/verify-wms/:id
+ * Connects an existing self-selling product with Sellvro WMS.
+ * Fetches verified warehouse stock from live WMS API, locks manual editing,
+ * sets WMS Verified badge, and adjusts marketplace fee to WMS fulfillment policy.
+ */
+export const verifyProductWithWms = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found.' })
+    }
+
+    if (req.user.role !== 'admin' && !product.supplier.equals(req.user._id)) {
+      return res.status(403).json({ message: 'You can only verify your own products.' })
+    }
+
+    const sku = String(product.sku || '').trim().toUpperCase()
+    if (!sku) {
+      return res.status(400).json({ message: 'Product has no valid SKU to verify against WMS.' })
+    }
+
+    let wmsItem = null
+
+    // Check live WMS API if supplier or admin has token
+    if (req.user.wmsToken) {
+      try {
+        const wmsRes = await fetch(
+          `https://wmsbysellvro.com/api/supplier/products/${encodeURIComponent(sku)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${req.user.wmsToken}`,
+              Accept: 'application/json',
+            },
+          },
+        )
+        const wmsData = await wmsRes.json().catch(() => null)
+        const item = wmsData?.data || (wmsData?.status && wmsData?.id ? wmsData : null)
+        if (wmsRes.ok && item && item.sku) {
+          wmsItem = item
+        }
+      } catch (err) {
+        console.warn('WMS live lookup failed during verification:', err.message)
+      }
+    }
+
+    const walletSetting = await WalletSetting.getOrCreate()
+    const wmsFee = Number(walletSetting.wmsFeePercent ?? 0)
+
+    if (wmsItem) {
+      // Stock quantity cannot be manually typed by supplier; updated strictly from WMS verified stock
+      product.quantity = Number(wmsItem.stock_quantity ?? wmsItem.quantity ?? 0)
+      if (wmsItem.warehouse_location) {
+        product.location = wmsItem.warehouse_location
+      }
+    }
+
+    // Set WMS Verified status and fulfillment attributes
+    product.isWmsVerified = true
+    product.wmsVerifiedAt = new Date()
+    product.fulfillBy = 'warehouse'
+    product.inWarehouse = true
+
+    // Adjust fee under WMS fulfillment policy (e.g. 0% or configured WMS rate)
+    product.commission = wmsFee
+
+    await product.save()
+
+    const [enriched] = await enrichProductsWithSupplier([product])
+
+    return res.json({
+      success: true,
+      message: `Product "${product.name}" (${product.sku}) is now WMS Verified! Live warehouse stock verified at ${product.quantity} units, and marketplace fee adjusted to WMS fulfillment policy (${wmsFee}%).`,
+      product: enriched,
+    })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to verify product with WMS.' })
+  }
+}
+
+/**
+ * POST /api/products/sync-wms/:id
+ * Re-syncs live stock for a WMS-verified product directly from WMS API.
+ */
+export const syncWmsStock = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found.' })
+    }
+
+    if (req.user.role !== 'admin' && !product.supplier.equals(req.user._id)) {
+      return res.status(403).json({ message: 'You can only sync your own products.' })
+    }
+
+    if (!req.user.wmsToken) {
+      return res.status(400).json({ message: 'Supplier account is not connected to Sellvro WMS.' })
+    }
+
+    const sku = String(product.sku || '').trim().toUpperCase()
+    const wmsRes = await fetch(
+      `https://wmsbysellvro.com/api/supplier/products/${encodeURIComponent(sku)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${req.user.wmsToken}`,
+          Accept: 'application/json',
+        },
+      },
+    )
+    const wmsData = await wmsRes.json().catch(() => null)
+    const item = wmsData?.data || (wmsData?.status && wmsData?.id ? wmsData : null)
+
+    if (!wmsRes.ok || !item) {
+      return res.status(404).json({ message: `No active consignment record found for SKU "${sku}" in WMS.` })
+    }
+
+    const newStock = Number(item.stock_quantity ?? item.quantity ?? 0)
+    product.quantity = newStock
+    if (item.warehouse_location) {
+      product.location = item.warehouse_location
+    }
+    product.isWmsVerified = true
+    product.wmsVerifiedAt = new Date()
+
+    const walletSetting = await WalletSetting.getOrCreate()
+    product.commission = Number(walletSetting.wmsFeePercent ?? 0)
+
+    await product.save()
+
+    const [enriched] = await enrichProductsWithSupplier([product])
+
+    return res.json({
+      success: true,
+      message: `Stock updated to ${newStock} units directly from Sellvro WMS.`,
+      product: enriched,
+    })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to sync stock with WMS.' })
   }
 }
 

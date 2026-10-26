@@ -9,7 +9,11 @@ import { productApi, getErrorMessage } from '../../lib/api.js'
 
 function UserProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const urlQ = searchParams.get('q') || ''
+  const urlQ =
+    searchParams.get('q') ||
+    searchParams.get('search') ||
+    searchParams.get('supplier') ||
+    ''
 
   const [query, setQuery] = useState(urlQ)
   const [category, setCategory] = useState('All Categories')
@@ -20,7 +24,11 @@ function UserProductsPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const q = searchParams.get('q') || ''
+    const q =
+      searchParams.get('q') ||
+      searchParams.get('search') ||
+      searchParams.get('supplier') ||
+      ''
     setQuery(q)
     setAppliedQuery(q)
   }, [searchParams])
@@ -50,11 +58,18 @@ function UserProductsPage() {
 
   const products = useMemo(() => {
     return catalog.filter((product) => {
-      const matchesCategory = appliedCategory === 'All Categories' || product.category === appliedCategory
+      const matchesCategory =
+        appliedCategory === 'All Categories' || product.category === appliedCategory
+      const q = appliedQuery.trim().toLowerCase()
       const matchesQuery =
-        !appliedQuery.trim() ||
-        product.name.toLowerCase().includes(appliedQuery.trim().toLowerCase()) ||
-        (product.sku && product.sku.toLowerCase().includes(appliedQuery.trim().toLowerCase()))
+        !q ||
+        product.name.toLowerCase().includes(q) ||
+        (product.sku && product.sku.toLowerCase().includes(q)) ||
+        (product.brand && product.brand.toLowerCase().includes(q)) ||
+        (product.vendorName && product.vendorName.toLowerCase().includes(q)) ||
+        (product.supplier && String(product.supplier).toLowerCase().includes(q)) ||
+        (product.supplierBusinessName &&
+          product.supplierBusinessName.toLowerCase().includes(q))
       return matchesCategory && matchesQuery
     })
   }, [appliedCategory, appliedQuery, catalog])

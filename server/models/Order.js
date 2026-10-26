@@ -112,6 +112,37 @@ const orderSchema = new mongoose.Schema(
         note: { type: String, trim: true, default: '' },
       },
     ],
+    // WMS Warehouse Fulfillment Integration Fields
+    isWmsOrder: {
+      type: Boolean,
+      default: false,
+    },
+    wmsStatus: {
+      type: String,
+      enum: [
+        'not_applicable',
+        'pending',
+        'pushed',
+        'queued_for_picking',
+        'picked_and_packed',
+        'dispatched',
+        'failed',
+      ],
+      default: 'not_applicable',
+    },
+    wmsFulfillmentId: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    wmsPushedAt: {
+      type: Date,
+      default: null,
+    },
+    wmsResponse: {
+      type: Object,
+      default: {},
+    },
   },
   { timestamps: true },
 )
@@ -205,6 +236,11 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
             note: 'Order successfully created & verified.',
           },
         ],
+    // WMS fulfillment details
+    isWmsOrder: Boolean(this.isWmsOrder || this.warehouseLocation === 'wms_hub'),
+    wmsStatus: this.wmsStatus || (this.warehouseLocation === 'wms_hub' ? 'pushed' : 'not_applicable'),
+    wmsFulfillmentId: this.wmsFulfillmentId || '',
+    wmsPushedAt: this.wmsPushedAt || null,
     date: this.createdAt
       ? new Date(this.createdAt).toLocaleDateString('en-US', {
           month: 'short',

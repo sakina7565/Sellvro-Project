@@ -176,6 +176,10 @@ export const productApi = {
     })
     return apiRequest(`/products/wms/attach-media/${id}`, { method: 'POST', formData })
   },
+  verifyWms: (id) => apiRequest(`/products/${id}/verify-wms`, { method: 'POST' }),
+  syncWmsStock: (id) => apiRequest(`/products/${id}/sync-wms-stock`, { method: 'POST' }),
+  watch: (id) => apiRequest(`/products/${id}/watch`, { method: 'POST' }),
+  store: (supplierId) => apiRequest(`/products/store/${supplierId}`),
 }
 
 export const categoryApi = {
@@ -210,6 +214,7 @@ export const orderApi = {
     apiRequest(`/orders/${id}/status`, { method: 'PATCH', body: { status } }),
   updateTracking: (id, payload) =>
     apiRequest(`/orders/${id}/tracking`, { method: 'PATCH', body: payload }),
+  pushWms: (id) => apiRequest(`/orders/${id}/push-wms`, { method: 'POST' }),
   dashboardStats: (period = 'all') =>
     apiRequest(`/orders/dashboard/stats?period=${encodeURIComponent(period)}`),
 }

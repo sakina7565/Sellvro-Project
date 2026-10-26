@@ -67,6 +67,7 @@ export default function WalletsRequestsPage() {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [usdRate, setUsdRate] = useState(280)
   const [marketplaceFee, setMarketplaceFee] = useState(8)
+  const [wmsFee, setWmsFee] = useState(0)
   const [pkrAccounts, setPkrAccounts] = useState([])
   const [usdAccounts, setUsdAccounts] = useState([])
   const [savingSettings, setSavingSettings] = useState(false)
@@ -91,6 +92,7 @@ export default function WalletsRequestsPage() {
       if (res?.data) {
         setUsdRate(res.data.usdRatePerPkr || 280)
         setMarketplaceFee(res.data.marketplaceFeePercent ?? 8)
+        setWmsFee(res.data.wmsFeePercent ?? 0)
         setPkrAccounts(res.data.pkrAccounts || [])
         setUsdAccounts(res.data.usdAccounts || [])
       }
@@ -188,6 +190,7 @@ export default function WalletsRequestsPage() {
       const payload = {
         usdRatePerPkr: Number(usdRate),
         marketplaceFeePercent: Number(marketplaceFee),
+        wmsFeePercent: Number(wmsFee),
         pkrAccounts,
         usdAccounts,
       }
@@ -743,34 +746,68 @@ export default function WalletsRequestsPage() {
               </div>
 
               {/* Marketplace Platform Fee Configuration */}
-              <div className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50/70 to-white p-4">
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-amber-950">
-                    Sellvro Marketplace Platform Fee (Commission %) *
-                  </label>
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
-                    Direct / Self-Fulfillment
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 mt-2">
-                  <span className="font-bold text-sm text-slate-700">Platform Commission =</span>
-                  <div className="relative w-32">
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      max="100"
-                      value={marketplaceFee}
-                      onChange={(e) => setMarketplaceFee(e.target.value)}
-                      required
-                      className="w-full rounded-lg border border-amber-300 bg-white py-2 px-3 text-base font-bold text-amber-700 shadow-xs focus:border-amber-600 focus:outline-none"
-                    />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 1. Direct / Self-Fulfillment Platform Fee */}
+                <div className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50/70 to-white p-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-amber-950">
+                      Direct Selling Fee (Self-Fulfillment) *
+                    </label>
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                      Marketplace Only
+                    </span>
                   </div>
-                  <span className="font-bold text-sm text-slate-700">% per completed sale</span>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="font-bold text-sm text-slate-700">Commission =</span>
+                    <div className="relative w-24">
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        max="100"
+                        value={marketplaceFee}
+                        onChange={(e) => setMarketplaceFee(e.target.value)}
+                        required
+                        className="w-full rounded-lg border border-amber-300 bg-white py-1.5 px-2.5 text-base font-bold text-amber-700 shadow-xs focus:border-amber-600 focus:outline-none"
+                      />
+                    </div>
+                    <span className="font-bold text-sm text-slate-700">%</span>
+                  </div>
+                  <p className="mt-2 text-[11px] text-slate-500 leading-snug">
+                    Standard commission charged on orders fulfilled directly by the supplier from their shop.
+                  </p>
                 </div>
-                <p className="mt-2 text-xs text-slate-500">
-                  This fee is automatically displayed to suppliers who choose to fulfill products directly from their own location (Marketplace Only). Suppliers cannot alter this fee.
-                </p>
+
+                {/* 2. WMS Fulfillment Policy Fee */}
+                <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/70 to-white p-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-emerald-950">
+                      WMS Fulfillment Policy Fee *
+                    </label>
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                      WMS Verified Central Hub
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="font-bold text-sm text-slate-700">Fee =</span>
+                    <div className="relative w-24">
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        max="100"
+                        value={wmsFee}
+                        onChange={(e) => setWmsFee(e.target.value)}
+                        required
+                        className="w-full rounded-lg border border-emerald-300 bg-white py-1.5 px-2.5 text-base font-bold text-emerald-700 shadow-xs focus:border-emerald-600 focus:outline-none"
+                      />
+                    </div>
+                    <span className="font-bold text-sm text-slate-700">%</span>
+                  </div>
+                  <p className="mt-2 text-[11px] text-slate-500 leading-snug">
+                    Adjusted fee policy applied to products verified and fulfilled through Sellvro WMS Central Warehouse.
+                  </p>
+                </div>
               </div>
 
               {/* 3 PKR Deposit Accounts */}
