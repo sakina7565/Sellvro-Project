@@ -359,11 +359,15 @@ export const createOrder = async (req, res) => {
       shippingLabelUrl = `/api/orders/label/${orderLabelRef}`
     }
 
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({ message: 'Invalid product ID.' })
+    }
+
     const product = await Product.findById(productId)
-    if (!product || product.status !== 'active') {
+    if (!product || (product.status !== 'active' && product.status !== 'approved')) {
       return res.status(404).json({ message: 'Product is not available for purchase.' })
     }
-    if (product.quantity < quantity) {
+    if (typeof product.quantity === 'number' && product.quantity < quantity) {
       return res.status(400).json({ message: 'Insufficient stock for this product.' })
     }
 

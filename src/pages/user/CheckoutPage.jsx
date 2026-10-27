@@ -45,15 +45,23 @@ function UserCheckoutPage() {
   const navigate = useNavigate()
   const { user, updateUser } = useAuth()
 
-  const [product, setProduct] = useState(location.state?.product || null)
+  const [product, setProduct] = useState(() => {
+    const raw = location.state?.product
+    if (!raw) return null
+    return {
+      ...raw,
+      id: raw.id || raw._id || productId,
+    }
+  })
   const [loadingProduct, setLoadingProduct] = useState(!location.state?.product)
   const [walletBalance, setWalletBalance] = useState(user?.walletBalance ?? 0)
   const [quantity, setQuantity] = useState(Number(location.state?.quantity) || 1)
   const [address, setAddress] = useState({
     ...EMPTY_ADDRESS,
     fullName: user?.fullName || '',
+    country: 'Pakistan',
   })
-  // Mandatory Shipping & Packaging Label Details
+  // Packaging Label Details
   const [orderLabelRef, setOrderLabelRef] = useState(
     () => `LBL-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
   )
@@ -80,23 +88,44 @@ function UserCheckoutPage() {
   }, [])
 
   useEffect(() => {
-    if (product?.id === productId) {
+    if (product && (product.id === productId || product._id === productId)) {
       setLoadingProduct(false)
       return undefined
     }
     let active = true
     setLoadingProduct(true)
+
+    // 1. First attempt direct lookup by single product endpoint
     productApi
-      .marketplace()
-      .then((data) => {
+      .get(productId)
+      .then((res) => {
         if (!active) return
-        const found = (data.data || []).find((item) => item.id === productId)
-        if (!found) {
-          setError('Product not found or unavailable.')
-          setProduct(null)
+        const prod = res.product || res.data || res
+        if (prod && (prod.id || prod._id)) {
+          setProduct({
+            ...prod,
+            id: prod.id || prod._id,
+          })
+          setError('')
         } else {
-          setProduct(found)
+          throw new Error('Not found')
         }
+      })
+      .catch(() => {
+        // 2. Fallback to marketplace list
+        return productApi.marketplace().then((data) => {
+          if (!active) return
+          const found = (data.data || []).find(
+            (item) => String(item.id) === String(productId) || String(item._id) === String(productId),
+          )
+          if (!found) {
+            setError('Product not found or unavailable.')
+            setProduct(null)
+          } else {
+            setProduct({ ...found, id: found.id || found._id })
+            setError('')
+          }
+        })
       })
       .catch((err) => {
         if (active) setError(getErrorMessage(err, 'Failed to load product.'))
@@ -104,10 +133,11 @@ function UserCheckoutPage() {
       .finally(() => {
         if (active) setLoadingProduct(false)
       })
+
     return () => {
       active = false
     }
-  }, [productId, product?.id])
+  }, [productId, product?.id, product?._id])
 
   const unitPrice = Number(product?.price || 0)
   const maxQty = Math.max(1, Number(product?.quantity || 1))
@@ -142,7 +172,7 @@ function UserCheckoutPage() {
       return
     }
 
-    // Validate Address fields
+    // Validate Essential Address fields
     if (!address.fullName?.trim()) {
       setError('Recipient full name is required.')
       window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -163,15 +193,19 @@ function UserCheckoutPage() {
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
+    if (!address.country?.trim()) {
+      setError('Recipient country is required.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
 
     const cleanAddress = {
-      ...address,
       fullName: address.fullName.trim(),
       phone: address.phone.trim(),
       addressLine: address.addressLine.trim(),
       city: address.city.trim(),
-      country: address.country?.trim() || 'Pakistan',
-      state: address.state?.trim() || address.city?.trim() || 'State',
+      country: address.country.trim(),
+      state: address.state?.trim() || address.city.trim(),
       postalCode: address.postalCode?.trim() || '00000',
     }
 
@@ -190,11 +224,13 @@ function UserCheckoutPage() {
       return
     }
 
+    const actualProductId = product?.id || product?._id || productId
+
     setSubmitting(true)
     try {
       const data = await orderApi.create(
         {
-          productId: product.id,
+          productId: actualProductId,
           quantity,
           shippingAddress: cleanAddress,
           orderLabelRef: finalOrderLabelRef,
@@ -206,7 +242,8 @@ function UserCheckoutPage() {
       if (typeof data.walletBalance === 'number') {
         updateUser({ ...user, walletBalance: data.walletBalance })
       }
-      navigate(`/user/orders/confirmation/${data.order.id}`, {
+      const confirmedId = data.order?.id || data.order?._id || data.orderNo || 'confirmed'
+      navigate(`/user/orders/confirmation/${confirmedId}`, {
         replace: true,
         state: { order: data.order, message: data.message },
       })
@@ -319,29 +356,23 @@ function UserCheckoutPage() {
                   />
                 </div>
                 <div>
-                  <FormLabel htmlFor="state" required>
-                    State / Province
-                  </FormLabel>
+                  <FormLabel htmlFor="state">State / Province (Optional)</FormLabel>
                   <input
                     id="state"
-                    required
                     value={address.state}
                     onChange={(e) => setField('state', e.target.value)}
                     className={FIELD}
-                    placeholder="State or province"
+                    placeholder="State or province (Optional)"
                   />
                 </div>
                 <div>
-                  <FormLabel htmlFor="postalCode" required>
-                    Postal code
-                  </FormLabel>
+                  <FormLabel htmlFor="postalCode">Postal code / ZIP (Optional)</FormLabel>
                   <input
                     id="postalCode"
-                    required
                     value={address.postalCode}
                     onChange={(e) => setField('postalCode', e.target.value)}
                     className={FIELD}
-                    placeholder="Postal code / ZIP"
+                    placeholder="Postal code / ZIP (Optional)"
                   />
                 </div>
                 <div>

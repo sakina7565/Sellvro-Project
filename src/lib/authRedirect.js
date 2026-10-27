@@ -22,7 +22,7 @@ export function getRedirectForUser(user) {
   }
 
   if (user.role === 'user') {
-    return user.status === 'approved' ? '/' : '/user/business/detail'
+    return '/'
   }
 
   return '/'
@@ -60,10 +60,7 @@ export function canAccessPath(user, path) {
 
   if (path.startsWith('/user')) {
     if (user.role !== 'user') return false
-    if (path.startsWith('/user/business')) {
-      return ['pending_details', 'pending_approval', 'approved'].includes(user.status)
-    }
-    return user.status === 'approved'
+    return true
   }
 
   return true

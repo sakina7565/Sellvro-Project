@@ -30,7 +30,7 @@ function MarketplaceDeals({ products = [], activeCategory = 'All Categories', ac
       })
       return
     }
-    navigate(`/user/checkout/${itemId}`, { state: { product: item } })
+    navigate(`/user/checkout/${itemId}`, { state: { product: { ...item, id: itemId } } })
   }
 
   // Combine real database products with fallback deals if DB is small/empty

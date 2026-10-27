@@ -244,6 +244,7 @@ function ProductDetailPage() {
 
   const handleBuyNow = () => {
     if (!product || !isAvailable || isOutOfStock) return
+    const prodId = product.id || product._id || id
     if (user?.role === 'admin') {
       alert('Admin Preview Mode: Order placement is only available for client accounts.')
       return
@@ -252,15 +253,15 @@ function ProductDetailPage() {
     if (!token || !isAuthenticated) {
       navigate('/login', {
         state: {
-          from: `/user/checkout/${product.id}`,
+          from: `/user/checkout/${prodId}`,
           message: 'Please sign in to your client account before placing an order.',
         },
       })
       return
     }
-    navigate(`/user/checkout/${product.id}`, {
+    navigate(`/user/checkout/${prodId}`, {
       state: {
-        product,
+        product: { ...product, id: prodId },
         quantity,
       },
     })
@@ -764,8 +765,8 @@ function ProductDetailPage() {
                 {isOutOfStock
                   ? 'Out of Stock'
                   : !isAuthenticated
-                  ? 'Sign In to Buy Now'
-                  : 'Buy It Now'}
+                  ? 'Sign In to Order Now'
+                  : 'Order Now'}
               </span>
             </button>
 
