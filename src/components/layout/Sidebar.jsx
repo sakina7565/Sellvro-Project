@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronUp, LogOut, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Globe, LogOut, X } from 'lucide-react'
 import Logo from '../ui/Logo.jsx'
 import { useDisputeNotifications } from '../../context/DisputeNotificationContext.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -187,6 +187,20 @@ function Sidebar({ navItems, homeTo, isOpen = false, onClose = () => {} }) {
               <p className="truncate text-sm font-semibold text-slate-800">{user.fullName}</p>
               <p className="truncate text-xs text-slate-400">{user.email}</p>
             </div>
+          )}
+          {user?.role === 'admin' && (
+            <button
+              type="button"
+              onClick={() => {
+                sessionStorage.setItem('sellvro_admin_preview', '1')
+                onClose()
+                navigate('/?preview=admin')
+              }}
+              className="mb-2 flex w-full items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 transition-colors"
+            >
+              <Globe className="h-4 w-4 text-blue-600" />
+              <span>Visit Marketplace</span>
+            </button>
           )}
           <button
             type="button"

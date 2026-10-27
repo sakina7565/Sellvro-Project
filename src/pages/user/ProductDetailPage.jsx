@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams, Navigate } from 'react-router-dom'
+import { Link, useNavigate, useParams, Navigate, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
   ArrowLeft,
@@ -15,6 +15,7 @@ import {
   Heart,
   HelpCircle,
   Info,
+  LayoutDashboard,
   Maximize2,
   MessageSquare,
   Lock,
@@ -92,11 +93,28 @@ function PaymentBadges() {
 function ProductDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user, isAuthenticated } = useAuth()
+
+  const isAdminPreview =
+    searchParams.get('preview') === 'admin' ||
+    sessionStorage.getItem('sellvro_admin_preview') === '1'
+
+  useEffect(() => {
+    if (searchParams.get('preview') === 'admin') {
+      sessionStorage.setItem('sellvro_admin_preview', '1')
+    }
+  }, [searchParams])
 
   // Supplier can NEVER access public shop / product pages
   if (user?.role === 'supplier') {
     return <Navigate to="/supplier/dashboard" replace />
+  }
+
+  // Admin cannot access product pages by default with their email,
+  // UNLESS visiting via the Admin Panel preview option
+  if (user?.role === 'admin' && !isAdminPreview) {
+    return <Navigate to="/admin/dashboard" replace />
   }
 
   const [product, setProduct] = useState(null)
@@ -247,6 +265,10 @@ function ProductDetailPage() {
 
   const handleBuyNow = () => {
     if (!product || !isAvailable || isOutOfStock) return
+    if (user?.role === 'admin') {
+      alert('Admin Preview Mode: Order placement is only available for client accounts.')
+      return
+    }
     const token = localStorage.getItem('token') || localStorage.getItem('auth_token')
     if (!token || !isAuthenticated) {
       navigate('/login', {
@@ -266,6 +288,10 @@ function ProductDetailPage() {
   }
 
   const handleAddToCart = () => {
+    if (user?.role === 'admin') {
+      alert('Admin Preview Mode: Cart & checkout is only available for client accounts.')
+      return
+    }
     const token = localStorage.getItem('token') || localStorage.getItem('auth_token')
     if (!token || !isAuthenticated) {
       navigate('/login', {
@@ -373,6 +399,37 @@ function ProductDetailPage() {
   return (
     <div className="min-h-screen bg-[#f7f7f7] text-slate-800 antialiased font-sans selection:bg-blue-500 selection:text-white flex flex-col justify-between">
       <div>
+        {/* Admin Marketplace Preview Notice Banner */}
+        {user?.role === 'admin' && isAdminPreview && (
+          <div className="sticky top-0 z-50 border-b border-slate-800 bg-slate-900 px-4 py-2 text-white shadow-lg">
+            <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 text-xs sm:text-sm">
+              <div className="flex items-center gap-2.5">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                </span>
+                <span className="font-bold text-white">Admin Marketplace Preview Mode</span>
+                <span className="hidden text-slate-500 sm:inline">|</span>
+                <span className="hidden text-slate-300 md:inline">
+                  You are viewing this product listing as Admin ({user.email}).
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    sessionStorage.removeItem('sellvro_admin_preview')
+                    navigate('/admin/dashboard')
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-emerald-500 cursor-pointer"
+                >
+                  <LayoutDashboard className="h-3.5 w-3.5" />
+                  <span>Return to Admin Panel</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <MarketplaceTopBar />
         <MarketplaceSearchHeader onSearch={({ query }) => navigate(`/?q=${encodeURIComponent(query || '')}`)} />
 

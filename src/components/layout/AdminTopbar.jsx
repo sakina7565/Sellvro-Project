@@ -18,6 +18,7 @@ import {
   Compass,
   Check,
   DollarSign,
+  Globe,
 } from 'lucide-react'
 import Logo from '../ui/Logo.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -317,6 +318,20 @@ function AdminTopbar({ name, onMenuClick = () => {}, showMenuButton = true }) {
           </button>
 
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 sm:gap-x-8 md:gap-x-12">
+            {user?.role === 'admin' && (
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.setItem('sellvro_admin_preview', '1')
+                  navigate('/?preview=admin')
+                }}
+                className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800 transition-colors"
+                title="Visit Marketplace Landing Page"
+              >
+                <Globe className="h-3.5 w-3.5" />
+                <span>Visit Marketplace</span>
+              </button>
+            )}
             <button type="button" className="font-medium text-slate-500 transition-colors hover:text-slate-800">
               Helpline &amp; Contact
             </button>
@@ -603,7 +618,23 @@ function AdminTopbar({ name, onMenuClick = () => {}, showMenuButton = true }) {
           </div>
 
           {/* Right Actions: Notifications + Profile */}
-          <div className="flex shrink-0 items-center gap-3 sm:gap-4">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            {/* Visit Marketplace Landing Page button */}
+            {user?.role === 'admin' && (
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.setItem('sellvro_admin_preview', '1')
+                  navigate('/?preview=admin')
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/70 px-2.5 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 hover:text-blue-800 transition-all shadow-2xs"
+                title="View the public Marketplace Landing Page"
+              >
+                <Globe className="h-4 w-4 text-blue-600" />
+                <span className="hidden sm:inline">Visit Marketplace</span>
+              </button>
+            )}
+
             {/* Notification Bell with Filter Tabs & Live Updates */}
             <div className="relative" ref={notifRef}>
               <button
@@ -770,6 +801,22 @@ function AdminTopbar({ name, onMenuClick = () => {}, showMenuButton = true }) {
                     <ShieldCheck className="h-4 w-4 text-slate-400" />
                     My Dashboard
                   </Link>
+
+                  {user?.role === 'admin' && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        sessionStorage.setItem('sellvro_admin_preview', '1')
+                        navigate('/?preview=admin')
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-colors"
+                    >
+                      <Globe className="h-4 w-4 text-blue-500" />
+                      Visit Marketplace
+                    </button>
+                  )}
 
                   <button
                     type="button"

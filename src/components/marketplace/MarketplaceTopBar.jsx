@@ -42,6 +42,7 @@ function MarketplaceTopBar() {
   }, [])
 
   const handleLogout = async () => {
+    sessionStorage.removeItem('sellvro_admin_preview')
     setProfileOpen(false)
     const loginPath = user?.role === 'admin' ? '/admin/login' : '/login'
     try {
@@ -78,16 +79,19 @@ function MarketplaceTopBar() {
                     </div>
                     <Link
                       to={dashboardPath}
-                      onClick={() => setProfileOpen(false)}
+                      onClick={() => {
+                        sessionStorage.removeItem('sellvro_admin_preview')
+                        setProfileOpen(false)
+                      }}
                       className="flex items-center gap-2 rounded-md px-3 py-2 text-slate-700 hover:bg-slate-50"
                     >
                       <LayoutDashboard className="h-4 w-4 text-blue-600" />
-                      <span>My Dashboard</span>
+                      <span>{user?.role === 'admin' ? 'Return to Admin Panel' : 'My Dashboard'}</span>
                     </Link>
                     <button
                       type="button"
                       onClick={handleLogout}
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-red-600 hover:bg-red-50 text-left"
+                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-red-600 hover:bg-red-50 text-left cursor-pointer"
                     >
                       <LogOut className="h-4 w-4" />
                       <span>Sign Out</span>
@@ -99,11 +103,18 @@ function MarketplaceTopBar() {
               {/* Direct Dashboard Link */}
               <Link
                 to={dashboardPath}
-                className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 transition shadow-2xs"
-                title="Open your control dashboard"
+                onClick={() => {
+                  sessionStorage.removeItem('sellvro_admin_preview')
+                }}
+                className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-0.5 text-[11px] font-bold transition shadow-2xs ${
+                  user?.role === 'admin'
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                    : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                }`}
+                title={user?.role === 'admin' ? 'Return to Admin Panel' : 'Open your control dashboard'}
               >
-                <LayoutDashboard className="h-3 w-3 text-blue-600" />
-                <span>Dashboard</span>
+                <LayoutDashboard className={`h-3 w-3 ${user?.role === 'admin' ? 'text-emerald-600' : 'text-blue-600'}`} />
+                <span>{user?.role === 'admin' ? 'Admin Panel' : 'Dashboard'}</span>
               </Link>
             </div>
           ) : (
