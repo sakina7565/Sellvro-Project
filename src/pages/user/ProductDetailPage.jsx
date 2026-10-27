@@ -53,38 +53,17 @@ function isVideoUrl(url) {
 }
 
 /**
- * Payment method SVGs matching eBay checkout badges
+ * Payment method display — Prepaid via Sellvro Wallet only
  */
 function PaymentBadges() {
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {/* PayPal */}
-      <span className="inline-flex h-6 items-center rounded border border-slate-200 bg-white px-2 text-[10px] font-black italic text-[#003087] shadow-2xs">
-        Pay<span className="text-[#0079C1]">Pal</span>
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 shadow-2xs">
+        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+        <span>Prepaid via Sellvro Wallet</span>
       </span>
-      {/* Google Pay */}
-      <span className="inline-flex h-6 items-center rounded border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-700 shadow-2xs">
-        G<span className="text-slate-400 font-normal ml-0.5">Pay</span>
-      </span>
-      {/* Visa */}
-      <span className="inline-flex h-6 items-center rounded border border-slate-200 bg-white px-2 text-[10px] font-black text-[#1A1F71] shadow-2xs">
-        VISA
-      </span>
-      {/* Mastercard */}
-      <span className="inline-flex h-6 items-center rounded border border-slate-200 bg-white px-1.5 text-[10px] font-bold shadow-2xs">
-        <span className="flex -space-x-1.5 items-center mr-1">
-          <span className="h-3.5 w-3.5 rounded-full bg-[#EB001B] opacity-90 inline-block" />
-          <span className="h-3.5 w-3.5 rounded-full bg-[#F79E1B] opacity-90 inline-block" />
-        </span>
-        <span className="text-[9px] text-slate-700">mastercard</span>
-      </span>
-      {/* Discover */}
-      <span className="inline-flex h-6 items-center rounded border border-slate-200 bg-white px-2 text-[10px] font-bold text-[#FF6000] shadow-2xs">
-        DISCOVER
-      </span>
-      {/* Sellvro Wallet */}
-      <span className="inline-flex h-6 items-center rounded border border-emerald-300 bg-emerald-50 px-2 text-[10px] font-extrabold text-emerald-800 shadow-2xs">
-        Sellvro Wallet
+      <span className="text-[11px] text-slate-500">
+        Direct instant wallet deduction (Prepaid)
       </span>
     </div>
   )

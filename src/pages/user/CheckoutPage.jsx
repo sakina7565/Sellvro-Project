@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Building2,
+  CheckCircle2,
   FileCheck,
   FileText,
   MapPin,
@@ -14,6 +15,7 @@ import {
   Tag,
   UploadCloud,
   Warehouse,
+  Wallet,
   X,
 } from 'lucide-react'
 import UserLayout from '../../components/layout/UserLayout.jsx'
@@ -161,33 +163,30 @@ function UserCheckoutPage() {
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
-    if (!address.country?.trim()) {
-      setError('Recipient country is required.')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
+
+    const cleanAddress = {
+      ...address,
+      fullName: address.fullName.trim(),
+      phone: address.phone.trim(),
+      addressLine: address.addressLine.trim(),
+      city: address.city.trim(),
+      country: address.country?.trim() || 'Pakistan',
+      state: address.state?.trim() || address.city?.trim() || 'State',
+      postalCode: address.postalCode?.trim() || '00000',
     }
 
-    if (!orderLabelRef.trim()) {
-      setError('Shipping & Packaging Label Reference is required.')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
-    }
-    if (!brandLabel.trim()) {
-      setError('Merchant / Brand Label name is required.')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
-    }
-    if (!shippingLabelFile) {
-      setError('Please upload the External Shipping Label / Airway Bill file (PDF, PNG, or JPG).')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
-    }
+    // Auto-generate reference and brand label if empty
+    const finalOrderLabelRef =
+      orderLabelRef?.trim() || `LBL-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+    const finalBrandLabel =
+      brandLabel?.trim() || user?.businessName || user?.storeName || user?.fullName || 'Sellvro Customer'
 
     // Check wallet balance
     if ((walletBalance || 0) < total) {
       setError(
-        `Insufficient wallet balance. You need $${total.toFixed(2)}, but your wallet only has $${Number(walletBalance || 0).toFixed(2)}. Please deposit funds to proceed.`,
+        `Insufficient wallet balance. Total due is $${total.toFixed(2)}, but your Sellvro Wallet currently has $${Number(walletBalance || 0).toFixed(2)}. Please deposit funds to proceed.`,
       )
+      window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
 
@@ -197,9 +196,9 @@ function UserCheckoutPage() {
         {
           productId: product.id,
           quantity,
-          shippingAddress: address,
-          orderLabelRef: orderLabelRef.trim(),
-          brandLabel: brandLabel.trim(),
+          shippingAddress: cleanAddress,
+          orderLabelRef: finalOrderLabelRef,
+          brandLabel: finalBrandLabel,
           labelNotes: labelNotes.trim(),
         },
         shippingLabelFile,
@@ -214,6 +213,7 @@ function UserCheckoutPage() {
     } catch (err) {
       const msg = getErrorMessage(err, 'Could not place order.')
       setError(msg)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     } finally {
       setSubmitting(false)
     }
@@ -360,51 +360,140 @@ function UserCheckoutPage() {
               </div>
             </Card>
 
-            {/* Card 2: Mandatory Shipping & Packaging Label Specification */}
-            <Card className="border border-indigo-100 bg-gradient-to-b from-indigo-50/20 to-white p-5 shadow-soft">
+            {/* Card 2: Payment Method: Sellvro Prepaid Wallet */}
+            <Card className="border border-emerald-200 bg-gradient-to-b from-emerald-50/40 via-white to-white p-5 shadow-soft">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-2xs">
+                    <Wallet className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base font-bold text-slate-900">Payment: Sellvro Prepaid Wallet</h2>
+                      <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-800">
+                        <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                        Prepaid Active
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Aapka payment pehle se wallet mein mojood hai. Is order ki raqam direct aapke Sellvro Wallet se deduct hogi.
+                    </p>
+                  </div>
+                </div>
+                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                  Step 2: Payment
+                </span>
+              </div>
+
+              {/* Wallet Live Deduction Breakdown */}
+              <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/30 p-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      Your Available Wallet Balance
+                    </span>
+                    <p className="mt-1 text-lg font-black text-slate-900">
+                      ${Number(walletBalance || 0).toFixed(2)}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-emerald-700 font-medium">Verified Prepaid Balance</p>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      Order Deduction
+                    </span>
+                    <p className="mt-1 text-lg font-black text-rose-600">
+                      -${total.toFixed(2)}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-slate-500">{quantity}x item(s) + fulfillment</p>
+                  </div>
+
+                  <div
+                    className={`rounded-lg border p-3 shadow-2xs ${
+                      walletBalance >= total
+                        ? 'border-emerald-200 bg-white'
+                        : 'border-rose-300 bg-rose-50/50'
+                    }`}
+                  >
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      Remaining After Order
+                    </span>
+                    <p
+                      className={`mt-1 text-lg font-black ${
+                        walletBalance >= total ? 'text-emerald-700' : 'text-rose-600'
+                      }`}
+                    >
+                      ${Number(walletBalance - total).toFixed(2)}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-slate-500">
+                      {walletBalance >= total ? 'Sufficient balance' : 'Insufficient funds'}
+                    </p>
+                  </div>
+                </div>
+
+                {walletBalance < total ? (
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">⚠️</span>
+                      <p>
+                        Aapke wallet mein <strong>${Number(walletBalance || 0).toFixed(2)}</strong> hain aur order total <strong>${total.toFixed(2)}</strong> hai. Mazeed <strong>${(total - Number(walletBalance || 0)).toFixed(2)}</strong> deposit karein.
+                      </p>
+                    </div>
+                    <Link
+                      to="/user/wallet"
+                      className="inline-flex items-center gap-1 font-bold text-indigo-700 hover:text-indigo-900 underline"
+                    >
+                      Top-up Wallet Now &rarr;
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-emerald-800">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span>Aapka wallet balance verified hai. Order place karte hi payment foran deduct ho jayegi.</span>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* Card 3: Custom Dispatch Label & Notes (Optional) */}
+            <Card className="border border-slate-200 bg-white p-5 shadow-soft">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Tag className="h-5 w-5 text-indigo-600" />
                   <div>
                     <div className="flex items-center gap-2">
-                      <h2 className="text-base font-semibold text-slate-900">Shipping & Packaging Label Details</h2>
-                      <span className="rounded bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-700">
-                        Mandatory
+                      <h2 className="text-base font-semibold text-slate-900">Custom Dispatch Label & Notes</h2>
+                      <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                        Optional / Auto-Generated
                       </span>
                     </div>
                     <p className="text-xs text-slate-500">
-                      Essential parcel label printed by warehouse/supplier for order dispatch & tracking.
+                      Standard dispatch label auto-generate ho jata hai. Agar aap apna store name ya external airway bill attach karna chahein to yahan add kar sakte hain.
                     </p>
                   </div>
                 </div>
-                <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
-                  Step 2: Label Spec
+                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+                  Step 3: Label (Optional)
                 </span>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <FormLabel htmlFor="orderLabelRef" required>
-                    Order / Label Reference ID
-                  </FormLabel>
+                  <FormLabel htmlFor="orderLabelRef">Order / Label Reference ID (Optional)</FormLabel>
                   <input
                     id="orderLabelRef"
-                    required
                     value={orderLabelRef}
                     onChange={(e) => setOrderLabelRef(e.target.value)}
                     className={FIELD}
                     placeholder="e.g. LBL-8F29KD or Shopify Order #"
                   />
-                  <p className="mt-1 text-[11px] text-slate-400">Unique order reference code printed on the box.</p>
+                  <p className="mt-1 text-[11px] text-slate-400">Order reference code printed on the box.</p>
                 </div>
 
                 <div>
-                  <FormLabel htmlFor="brandLabel" required>
-                    Store / Brand Name
-                  </FormLabel>
+                  <FormLabel htmlFor="brandLabel">Store / Brand Name (Optional)</FormLabel>
                   <input
                     id="brandLabel"
-                    required
                     value={brandLabel}
                     onChange={(e) => setBrandLabel(e.target.value)}
                     className={FIELD}
@@ -414,9 +503,7 @@ function UserCheckoutPage() {
                 </div>
 
                 <div className="sm:col-span-2">
-                  <FormLabel htmlFor="labelNotes">
-                    Handling & Packaging Instructions (Optional)
-                  </FormLabel>
+                  <FormLabel htmlFor="labelNotes">Handling & Packaging Instructions (Optional)</FormLabel>
                   <input
                     id="labelNotes"
                     value={labelNotes}
@@ -427,14 +514,14 @@ function UserCheckoutPage() {
                 </div>
 
                 <div className="sm:col-span-2">
-                  <FormLabel htmlFor="shippingLabelFile" required>
-                    External Printable Shipping Label / Airway Bill (File Upload)
+                  <FormLabel htmlFor="shippingLabelFile">
+                    Attach External Airway Bill / Shipping Label (Optional)
                   </FormLabel>
 
                   {!shippingLabelFile ? (
                     <label
                       htmlFor="shippingLabelFile"
-                      className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/30 p-6 text-center cursor-pointer transition-colors hover:border-indigo-400 hover:bg-indigo-50/60"
+                      className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/60 p-4 text-center cursor-pointer transition-colors hover:border-indigo-400 hover:bg-indigo-50/40"
                     >
                       <input
                         id="shippingLabelFile"
@@ -446,47 +533,38 @@ function UserCheckoutPage() {
                           if (file) setShippingLabelFile(file)
                         }}
                       />
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 mb-2">
-                        <UploadCloud className="h-6 w-6" />
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 mb-1.5">
+                        <UploadCloud className="h-5 w-5" />
                       </div>
-                      <p className="text-sm font-semibold text-slate-800">
-                        Click to upload Shipping Label / Airway Bill
+                      <p className="text-xs font-semibold text-slate-700">
+                        Click to attach external Airway Bill / Courier Label (Optional)
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Supported: <strong className="text-slate-700">PDF, JPG, PNG</strong> (Max 25MB)
-                      </p>
-                      <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white shadow-xs">
-                        Browse File
-                      </span>
+                      <p className="mt-0.5 text-[11px] text-slate-400">PDF, JPG, PNG (Max 25MB)</p>
                     </label>
                   ) : (
-                    <div className="flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white font-bold text-xs uppercase">
-                          {shippingLabelFile.name.endsWith('.pdf') ? 'PDF' : <FileCheck className="h-5 w-5" />}
+                    <div className="flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50/60 p-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white font-bold text-xs uppercase">
+                          {shippingLabelFile.name.endsWith('.pdf') ? 'PDF' : <FileCheck className="h-4 w-4" />}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-bold text-slate-900">
+                          <p className="truncate text-xs font-bold text-slate-900">
                             {shippingLabelFile.name}
                           </p>
-                          <p className="text-xs text-slate-500">
-                            {(shippingLabelFile.size / 1024).toFixed(1)} KB • Ready for WMS Fulfillment
+                          <p className="text-[11px] text-slate-500">
+                            {(shippingLabelFile.size / 1024).toFixed(1)} KB • Attached
                           </p>
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => setShippingLabelFile(null)}
-                        className="ml-3 shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                        className="ml-3 shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50"
                       >
-                        Change / Remove
+                        Remove
                       </button>
                     </div>
                   )}
-
-                  <p className="mt-2 text-[11px] text-slate-500">
-                    Mandatory for WMS dispatch. Upload the shipping label file generated by your courier or marketplace.
-                  </p>
                 </div>
               </div>
             </Card>
@@ -699,9 +777,15 @@ function UserCheckoutPage() {
                 </div>
               </div>
 
-              <p className="mt-3 text-xs text-slate-400">
-                Payment is deducted from your wallet balance upon placing the order.
-              </p>
+              <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-2.5 text-xs text-emerald-900">
+                <p className="font-bold flex items-center gap-1.5 text-emerald-800">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  Prepaid Order Payment
+                </p>
+                <p className="mt-0.5 text-[11px] text-emerald-700">
+                  Total due will be deducted directly from your verified Sellvro Wallet.
+                </p>
+              </div>
 
               {/* Error display directly above submit button */}
               {error && (
@@ -733,10 +817,10 @@ function UserCheckoutPage() {
                 disabled={submitting || walletBalance < total}
               >
                 {submitting
-                  ? 'Placing Order & Attaching Label…'
+                  ? 'Processing Prepaid Order…'
                   : walletBalance < total
-                    ? `Top-up Wallet to Place Order ($${total.toFixed(2)})`
-                    : 'Place Order & Attach Label'}
+                    ? `Top-up Wallet ($${total.toFixed(2)} Required)`
+                    : `Pay from Wallet & Place Order ($${total.toFixed(2)})`}
               </Button>
             </Card>
           </div>

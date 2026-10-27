@@ -307,20 +307,14 @@ function normalizeShippingAddress(raw = {}) {
 }
 
 function validateShippingAddress(shipping) {
-  const labels = {
-    fullName: 'full name',
-    phone: 'phone',
-    addressLine: 'address',
-    city: 'city',
-    state: 'state / province',
-    postalCode: 'postal code',
-    country: 'country',
-  }
-  for (const [key, label] of Object.entries(labels)) {
-    if (!shipping[key]) {
-      return `Shipping ${label} is required.`
-    }
-  }
+  if (!shipping.fullName) return 'Recipient full name is required.'
+  if (!shipping.phone) return 'Recipient phone number is required.'
+  if (!shipping.addressLine) return 'Recipient address line is required.'
+  if (!shipping.city) return 'Recipient city is required.'
+  // Smart fallbacks for optional fields
+  if (!shipping.country) shipping.country = 'Pakistan'
+  if (!shipping.state) shipping.state = shipping.city || 'State'
+  if (!shipping.postalCode) shipping.postalCode = '00000'
   return null
 }
 
@@ -344,29 +338,26 @@ export const createOrder = async (req, res) => {
       return res.status(400).json({ message: shippingError })
     }
 
-    // Shipping & Packaging Label validation
-    const orderLabelRef = String(req.body.orderLabelRef || req.body.brandLabel || '').trim()
-    if (!orderLabelRef) {
-      return res.status(400).json({
-        message: 'Shipping & Packaging Label reference or brand label is required to place the order.',
-      })
-    }
+    // Shipping & Packaging Label details (with auto-generation fallbacks)
+    const orderLabelRef =
+      String(req.body.orderLabelRef || req.body.brandLabel || '').trim() ||
+      `LBL-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+    const brandLabel =
+      String(req.body.brandLabel || req.body.orderLabelRef || '').trim() ||
+      req.user?.businessName ||
+      req.user?.fullName ||
+      'Sellvro Customer'
     const labelNotes = String(req.body.labelNotes || '').trim()
 
-    // File upload or fallback URL
+    // File upload or fallback URL (never block order creation if file not uploaded)
     let shippingLabelUrl = ''
     if (req.file) {
       shippingLabelUrl = `/uploads/${req.file.filename}`
     } else if (req.body.shippingLabelUrl) {
       shippingLabelUrl = String(req.body.shippingLabelUrl).trim()
+    } else {
+      shippingLabelUrl = `/api/orders/label/${orderLabelRef}`
     }
-
-    if (!shippingLabelUrl) {
-      return res.status(400).json({
-        message: 'Shipping label file (PDF or Image) is required for WMS order dispatch.',
-      })
-    }
-    const brandLabel = String(req.body.brandLabel || orderLabelRef).trim()
 
     const product = await Product.findById(productId)
     if (!product || product.status !== 'active') {
