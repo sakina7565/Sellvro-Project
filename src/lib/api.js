@@ -238,6 +238,8 @@ export const walletApi = {
     if (receiptFile) formData.append('receipt', receiptFile)
     return apiRequest('/wallet/requests', { method: 'POST', formData })
   },
+  quickCredit: (amount = 500) =>
+    apiRequest('/wallet/quick-credit', { method: 'POST', body: { amount } }),
 }
 
 export const financeApi = {

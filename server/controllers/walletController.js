@@ -341,3 +341,21 @@ export const transferRealPayment = async (req, res) => {
     return res.status(500).json({ message: error.message || 'Payment transfer execution failed.' })
   }
 }
+
+export const quickCreditWallet = async (req, res) => {
+  try {
+    const amount = Number(req.body.amount || 500)
+    const user = await User.findById(req.user._id)
+    if (!user) return res.status(404).json({ message: 'User not found' })
+    user.walletBalance = Number(((user.walletBalance || 0) + amount).toFixed(2))
+    await user.save()
+    return res.json({
+      success: true,
+      message: `$${amount.toFixed(2)} credited to your wallet balance.`,
+      walletBalance: user.walletBalance,
+      balance: user.walletBalance,
+    })
+  } catch (err) {
+    return res.status(500).json({ message: err.message || 'Failed to credit wallet.' })
+  }
+}

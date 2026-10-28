@@ -63,7 +63,7 @@ function SupplierRoute({ children }) {
 }
 
 function UserRoute({ children }) {
-  return <ProtectedRoute roles={['user']}>{children}</ProtectedRoute>
+  return <ProtectedRoute roles={['user', 'admin']}>{children}</ProtectedRoute>
 }
 
 function App() {

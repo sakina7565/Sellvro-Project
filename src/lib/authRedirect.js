@@ -59,7 +59,7 @@ export function canAccessPath(user, path) {
   }
 
   if (path.startsWith('/user')) {
-    if (user.role !== 'user') return false
+    if (user.role !== 'user' && user.role !== 'admin') return false
     return true
   }
 

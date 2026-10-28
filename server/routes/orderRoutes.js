@@ -28,10 +28,10 @@ function handleShippingLabel(req, res, next) {
   })
 }
 
-router.post('/', protect, authorize('user'), handleShippingLabel, createOrder)
-router.get('/mine', protect, authorize('user'), listMyOrders)
+router.post('/', protect, authorize('user', 'admin'), handleShippingLabel, createOrder)
+router.get('/mine', protect, authorize('user', 'admin'), listMyOrders)
 router.get('/lookup', protect, authorize('user', 'supplier', 'admin'), lookupOrder)
-router.get('/dashboard/stats', protect, authorize('user'), getUserDashboardStats)
+router.get('/dashboard/stats', protect, authorize('user', 'admin'), getUserDashboardStats)
 router.get('/supplier', protect, authorize('supplier'), requireApproved, listSupplierOrders)
 router.get('/', protect, authorize('admin'), listAllOrders)
 

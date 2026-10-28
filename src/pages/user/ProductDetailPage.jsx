@@ -212,7 +212,8 @@ function ProductDetailPage() {
 
   const activeImage = images[activeImageIndex] || images[0] || PLACEHOLDER_IMAGE
 
-  const isAvailable = product?.status === 'active' || !product?.status
+  const isAvailable =
+    product?.status === 'active' || product?.status === 'approved' || !product?.status
   const maxStock =
     typeof product?.quantity === 'number' && product.quantity > 0 ? product.quantity : 999
   const isOutOfStock = typeof product?.quantity === 'number' && product.quantity <= 0
@@ -245,10 +246,6 @@ function ProductDetailPage() {
   const handleBuyNow = () => {
     if (!product || !isAvailable || isOutOfStock) return
     const prodId = product.id || product._id || id
-    if (user?.role === 'admin') {
-      alert('Admin Preview Mode: Order placement is only available for client accounts.')
-      return
-    }
     const token = localStorage.getItem('token') || localStorage.getItem('auth_token')
     if (!token || !isAuthenticated) {
       navigate('/login', {
@@ -268,10 +265,6 @@ function ProductDetailPage() {
   }
 
   const handleAddToCart = () => {
-    if (user?.role === 'admin') {
-      alert('Admin Preview Mode: Cart & checkout is only available for client accounts.')
-      return
-    }
     const token = localStorage.getItem('token') || localStorage.getItem('auth_token')
     if (!token || !isAuthenticated) {
       navigate('/login', {

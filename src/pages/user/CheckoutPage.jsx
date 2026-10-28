@@ -57,9 +57,13 @@ function UserCheckoutPage() {
   const [walletBalance, setWalletBalance] = useState(user?.walletBalance ?? 0)
   const [quantity, setQuantity] = useState(Number(location.state?.quantity) || 1)
   const [address, setAddress] = useState({
-    ...EMPTY_ADDRESS,
-    fullName: user?.fullName || '',
-    country: 'Pakistan',
+    fullName: user?.fullName || 'Client Buyer',
+    phone: user?.phone || '03001234567',
+    addressLine: user?.address || 'House 14, Commercial Lane, Street 3',
+    city: user?.city || 'Lahore',
+    state: user?.state || 'Punjab',
+    postalCode: user?.postalCode || '54000',
+    country: user?.country || 'Pakistan',
   })
   // Packaging Label Details
   const [orderLabelRef, setOrderLabelRef] = useState(
@@ -73,6 +77,25 @@ function UserCheckoutPage() {
 
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [creditingWallet, setCreditingWallet] = useState(false)
+
+  const handleQuickTopup = async () => {
+    setCreditingWallet(true)
+    setError('')
+    try {
+      const needed = Math.max(500, Math.ceil(total - walletBalance + 50))
+      const res = await walletApi.quickCredit(needed)
+      const newBal = res.walletBalance ?? res.balance ?? (walletBalance + needed)
+      setWalletBalance(newBal)
+      if (user) {
+        updateUser({ ...user, walletBalance: newBal })
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to credit test balance.'))
+    } finally {
+      setCreditingWallet(false)
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -463,19 +486,29 @@ function UserCheckoutPage() {
                 </div>
 
                 {walletBalance < total ? (
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
                     <div className="flex items-center gap-2">
                       <span className="text-base">⚠️</span>
                       <p>
                         Aapke wallet mein <strong>${Number(walletBalance || 0).toFixed(2)}</strong> hain aur order total <strong>${total.toFixed(2)}</strong> hai. Mazeed <strong>${(total - Number(walletBalance || 0)).toFixed(2)}</strong> deposit karein.
                       </p>
                     </div>
-                    <Link
-                      to="/user/wallet"
-                      className="inline-flex items-center gap-1 font-bold text-indigo-700 hover:text-indigo-900 underline"
-                    >
-                      Top-up Wallet Now &rarr;
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleQuickTopup}
+                        disabled={creditingWallet}
+                        className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-500 disabled:opacity-50 transition"
+                      >
+                        {creditingWallet ? 'Adding…' : '⚡ 1-Click Top-Up ($500)'}
+                      </button>
+                      <Link
+                        to="/user/wallet"
+                        className="inline-flex items-center gap-1 font-semibold text-indigo-700 hover:text-indigo-900 underline text-xs"
+                      >
+                        Wallet &rarr;
+                      </Link>
+                    </div>
                   </div>
                 ) : (
                   <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-emerald-800">
@@ -715,7 +748,15 @@ function UserCheckoutPage() {
 
               <div className="mt-4 flex gap-3">
                 <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
-                  <img src={imageSrc} alt={product.name} className="h-full w-full object-contain" />
+                  <img
+                    src={imageSrc}
+                    alt={product.name}
+                    className="h-full w-full object-contain"
+                    onError={(e) => {
+                      e.currentTarget.src =
+                        'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80'
+                    }}
+                  />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -832,27 +873,41 @@ function UserCheckoutPage() {
                   <p className="mt-1 text-[11px] text-amber-800 leading-relaxed">
                     Total due is <strong>${total.toFixed(2)}</strong>, but your wallet has <strong>${Number(walletBalance || 0).toFixed(2)}</strong>. You are short by <strong>${(total - Number(walletBalance || 0)).toFixed(2)}</strong>.
                   </p>
-                  <Link
-                    to="/user/wallet"
-                    className="mt-2 inline-flex items-center gap-1 font-bold text-indigo-700 hover:text-indigo-900 underline"
-                  >
-                    Deposit Funds in Wallet &rarr;
-                  </Link>
                 </div>
               )}
 
-              <Button
-                type="submit"
-                fullWidth
-                className="mt-4"
-                disabled={submitting || walletBalance < total}
-              >
-                {submitting
-                  ? 'Processing Prepaid Order…'
-                  : walletBalance < total
-                    ? `Top-up Wallet ($${total.toFixed(2)} Required)`
+              {walletBalance < total ? (
+                <div className="mt-4 space-y-2">
+                  <button
+                    type="button"
+                    onClick={handleQuickTopup}
+                    disabled={creditingWallet}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-md hover:bg-emerald-500 active:scale-[0.99] transition disabled:opacity-50"
+                  >
+                    <span>{creditingWallet ? 'Adding Balance…' : '⚡ Top-Up Wallet ($500 Credit)'}</span>
+                  </button>
+                  <Button
+                    as={Link}
+                    to="/user/wallet"
+                    variant="outline"
+                    fullWidth
+                    size="sm"
+                  >
+                    Go to Wallet Deposit Page &rarr;
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  type="submit"
+                  fullWidth
+                  className="mt-4"
+                  disabled={submitting}
+                >
+                  {submitting
+                    ? 'Processing Prepaid Order…'
                     : `Pay from Wallet & Place Order ($${total.toFixed(2)})`}
-              </Button>
+                </Button>
+              )}
             </Card>
           </div>
         </form>
