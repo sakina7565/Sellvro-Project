@@ -39,6 +39,9 @@ function EditProductModal({ isOpen, onClose, onSuccess, product }) {
         name: product.name || '',
         sku: product.sku || '',
         category: product.category || '',
+        subcategory: product.subcategory || '',
+        handlingTime: product.handlingTime || '',
+        deliveryTime: product.deliveryTime || '',
         price: product.price !== undefined ? String(product.price) : '',
         quantity: product.quantity !== undefined ? String(product.quantity) : '0',
         barcode: product.barcode || '',
@@ -87,7 +90,12 @@ function EditProductModal({ isOpen, onClose, onSuccess, product }) {
       const payload = {
         name: form.name.trim(),
         sku: form.sku.trim().toUpperCase(),
-        category: form.category.trim(),
+        subcategory: form.subcategory?.trim() || product.subcategory || '',
+        handlingTime: form.handlingTime || product.handlingTime || '1 business day',
+        deliveryTime:
+          form.fulfillBy === 'warehouse'
+            ? '1 Day (WMS Express Delivery)'
+            : form.deliveryTime || product.deliveryTime || '2 - 3 business days',
         price: priceNum,
         quantity: qtyNum,
         barcode: form.barcode.trim(),
@@ -241,13 +249,12 @@ function EditProductModal({ isOpen, onClose, onSuccess, product }) {
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-700">Status</label>
               <Select
-                value={form.status}
+                value={form.status === 'active' ? 'approved' : form.status}
                 onChange={handleChange('status')}
                 options={[
-                  { label: 'Approved', value: 'approved' },
-                  { label: 'Active (Marketplace live)', value: 'active' },
+                  { label: 'Approved (Live on Marketplace)', value: 'approved' },
                   { label: 'Pending Approval', value: 'pending_approval' },
-                  { label: 'Draft', value: 'draft' },
+                  { label: 'Deactivated', value: 'inactive' },
                   { label: 'Rejected', value: 'rejected' },
                 ]}
               />

@@ -269,6 +269,22 @@ export async function syncOrderWmsTracking(order) {
           note: `${d.tracking_status_detail || 'Package dispatched'}. Courier: ${d.carrier || order.carrier || 'FedEx'} (Tracking: ${d.tracking_number || order.trackingNumber}). Proof of dispatch verified.`,
         })
         hasChanges = true
+
+        // 🔔 Notify Buyer automatically with tracking ID and carrier
+        createNotification({
+          recipient: order.user?._id || order.user,
+          targetRole: 'user',
+          type: 'order',
+          title: `Order #${order.orderNo} Handed Over to Courier!`,
+          message: `Your package for "${order.productName || 'Order'}" has been packed at Sellvro Central WMS Hub and handed over to courier ${d.carrier || order.carrier || 'FedEx'}. Tracking ID: ${d.tracking_number || order.trackingNumber}.`,
+          link: '/user/orders',
+          metadata: {
+            orderNo: order.orderNo,
+            trackingNumber: d.tracking_number || order.trackingNumber,
+            carrier: d.carrier || order.carrier,
+            trackingStatus: 'in_transit',
+          },
+        })
       }
 
       if (hasChanges) {
@@ -387,18 +403,51 @@ export const createOrder = async (req, res) => {
     const commissionPercent = Number(product.commission || 0)
     const commission = Number(((total * commissionPercent) / 100).toFixed(2))
 
-    const buyer = await User.findById(req.user._id)
+    let buyer = null
+    if (req.user?._id) {
+      buyer = await User.findById(req.user._id)
+    }
+
     if (!buyer) {
-      return res.status(401).json({ message: 'User not found.' })
+      const guestPhone = shippingAddress.phone || '03001234567'
+      const guestEmail =
+        String(req.body.email || req.body.userEmail || '').trim().toLowerCase() ||
+        `${guestPhone.replace(/[^0-9]/g, '') || Date.now()}@customer.sellvro.local`
+
+      buyer = await User.findOne({ email: guestEmail })
+      if (!buyer) {
+        buyer = await User.create({
+          fullName: shippingAddress.fullName || 'Client Customer',
+          email: guestEmail,
+          phone: guestPhone,
+          role: 'user',
+          status: 'approved',
+          walletBalance: 0,
+          password: Math.random().toString(36),
+        })
+      }
     }
 
-    if ((buyer.walletBalance || 0) < total) {
-      return res.status(400).json({
-        message: `Insufficient wallet balance. Need $${total.toFixed(2)}, have $${Number(buyer.walletBalance || 0).toFixed(2)}.`,
-      })
+    const rawPayment = String(req.body.paymentMethod || 'wallet').trim().toLowerCase()
+    const paymentMethod =
+      rawPayment === 'cod' || rawPayment === 'cash_on_delivery' ? 'cod' : 'wallet'
+    const autoTopup = Boolean(req.body.autoTopup || req.body.autoFund)
+
+    if (paymentMethod === 'wallet') {
+      if ((buyer.walletBalance || 0) < total) {
+        if (autoTopup) {
+          // Instant 1-click test balance topup so order placement never fails
+          const needed = Math.max(500, Math.ceil(total - (buyer.walletBalance || 0) + 50))
+          buyer.walletBalance = Number(((buyer.walletBalance || 0) + needed).toFixed(2))
+        } else {
+          return res.status(400).json({
+            message: `Insufficient wallet balance. Total due is $${total.toFixed(2)}, but you currently have $${Number(buyer.walletBalance || 0).toFixed(2)}. Choose Cash on Delivery (COD) or click Quick Top-Up.`,
+          })
+        }
+      }
+      buyer.walletBalance = Number((buyer.walletBalance - total).toFixed(2))
     }
 
-    buyer.walletBalance = Number((buyer.walletBalance - total).toFixed(2))
     product.quantity -= quantity
     const orderNo = await uniqueOrderNo()
 
@@ -487,6 +536,7 @@ export const createOrder = async (req, res) => {
       orderLabelRef,
       labelNotes,
       shippingLabelUrl,
+      paymentMethod,
       payoutStatus: 'pending',
       shippingAddress,
     })
@@ -568,8 +618,12 @@ export const createOrder = async (req, res) => {
     }
 
     const populated = await populateOrder(Order.findById(order._id))
+    const successMsg =
+      paymentMethod === 'cod'
+        ? 'Order placed successfully with Cash on Delivery (COD).'
+        : 'Order placed successfully. Wallet debited.'
     return res.status(201).json({
-      message: 'Order placed. Wallet debited.',
+      message: successMsg,
       order: populated.toSafeObject(),
       walletBalance: buyer.walletBalance,
     })
@@ -612,28 +666,40 @@ export const lookupOrder = async (req, res) => {
   try {
     const ref = String(req.query.ref || '').trim()
     if (!ref) {
-      return res.status(400).json({ message: 'Order ID or order number is required.' })
+      return res.status(400).json({ message: 'Order ID, order number, or tracking ID is required.' })
     }
 
-    let order
+    let order = null
     if (mongoose.Types.ObjectId.isValid(ref)) {
       order = await populateOrder(Order.findById(ref))
-    } else {
-      order = await populateOrder(Order.findOne({ orderNo: ref.toUpperCase() }))
+    }
+    if (!order) {
+      order = await populateOrder(
+        Order.findOne({
+          $or: [
+            { orderNo: ref.toUpperCase() },
+            { trackingNumber: ref },
+            { trackingNumber: new RegExp(`^${ref}$`, 'i') },
+            { orderLabelRef: ref },
+          ],
+        }),
+      )
     }
 
     if (!order) {
       return res.status(404).json({ message: 'Order not found.' })
     }
 
-    const uid = req.user._id.toString()
-    const isAdmin = req.user.role === 'admin'
-    const isBuyer = order.user?._id?.toString?.() === uid || order.user?.toString?.() === uid
-    const isSupplier =
-      order.supplier?._id?.toString?.() === uid || order.supplier?.toString?.() === uid
+    if (req.user) {
+      const uid = req.user._id.toString()
+      const isAdmin = req.user.role === 'admin'
+      const isBuyer = order.user?._id?.toString?.() === uid || order.user?.toString?.() === uid
+      const isSupplier =
+        order.supplier?._id?.toString?.() === uid || order.supplier?.toString?.() === uid
 
-    if (!isAdmin && !isBuyer && !isSupplier) {
-      return res.status(403).json({ message: 'You do not have access to this order.' })
+      if (!isAdmin && !isBuyer && !isSupplier) {
+        return res.status(403).json({ message: 'You do not have access to this order.' })
+      }
     }
 
     return res.json({ order: order.toSafeObject() })
@@ -681,11 +747,59 @@ export const updateOrderTracking = async (req, res) => {
       return res.status(404).json({ message: 'Order not found.' })
     }
 
-    const { trackingStatus, carrier, trackingNumber, estimatedDelivery, note, location } = req.body
+    const isAdmin = req.user.role === 'admin'
+    const isSupplier =
+      req.user.role === 'supplier' &&
+      order.supplier &&
+      (order.supplier._id?.equals(req.user._id) || order.supplier.equals?.(req.user._id))
+
+    if (!isAdmin && !isSupplier) {
+      return res.status(403).json({ message: 'Not authorized to update tracking for this order.' })
+    }
+
+    const {
+      trackingStatus,
+      carrier,
+      trackingNumber,
+      estimatedDelivery,
+      note,
+      location,
+      isHandover,
+      isDispatched,
+    } = req.body
+
+    const wasDispatchedBefore = Boolean(order.isDispatched)
+    const prevTrackingStatus = order.trackingStatus
 
     if (carrier) order.carrier = String(carrier).trim()
-    if (trackingNumber) order.trackingNumber = String(trackingNumber).trim()
     if (estimatedDelivery !== undefined) order.estimatedDelivery = String(estimatedDelivery).trim()
+
+    // Determine if this represents handover to courier
+    const isNowDispatched = Boolean(
+      isHandover ||
+      isDispatched ||
+      trackingStatus === 'in_transit' ||
+      trackingStatus === 'out_for_delivery'
+    )
+
+    if (isNowDispatched) {
+      order.isDispatched = true
+      if (!order.dispatchedAt) {
+        order.dispatchedAt = new Date()
+      }
+      order.warehouseLocation = 'in_transit'
+      order.warehouseLocationLabel = 'In Courier Transit'
+      order.status = 'in_process'
+    }
+
+    // Auto-generate distinct tracking ID if none provided
+    if (trackingNumber && String(trackingNumber).trim()) {
+      order.trackingNumber = String(trackingNumber).trim()
+    } else if (isNowDispatched && (!order.trackingNumber || order.trackingNumber.startsWith('SLV-'))) {
+      const code = String(order.carrier || 'SLV').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4) || 'SLV'
+      const rand = Math.floor(100000000 + Math.random() * 900000000)
+      order.trackingNumber = `${code}-${rand}`
+    }
 
     if (req.body.warehouseLocation) {
       const loc = String(req.body.warehouseLocation).trim().toLowerCase()
@@ -701,21 +815,23 @@ export const updateOrderTracking = async (req, res) => {
       }
     }
 
-    if (trackingStatus) {
+    const targetStatus = trackingStatus || (isNowDispatched ? 'in_transit' : null)
+
+    if (targetStatus) {
       const allowedTracking = ['placed', 'processing', 'in_transit', 'out_for_delivery', 'delivered', 'cancelled']
-      if (allowedTracking.includes(trackingStatus.toLowerCase())) {
-        order.trackingStatus = trackingStatus.toLowerCase()
-        if (trackingStatus === 'cancelled') {
+      const s = targetStatus.toLowerCase()
+      if (allowedTracking.includes(s)) {
+        order.trackingStatus = s
+        if (s === 'cancelled') {
           order.status = 'cancelled'
-        } else if (trackingStatus === 'processing' || trackingStatus === 'in_transit' || trackingStatus === 'out_for_delivery') {
+        } else if (s === 'processing' || s === 'in_transit' || s === 'out_for_delivery') {
           order.status = 'in_process'
         }
 
-        // Auto sync warehouseLocation if tracking status progresses
-        if (trackingStatus === 'in_transit' || trackingStatus === 'out_for_delivery') {
+        if (s === 'in_transit' || s === 'out_for_delivery') {
           order.warehouseLocation = 'in_transit'
           order.warehouseLocationLabel = 'In Courier Transit'
-        } else if (trackingStatus === 'delivered') {
+        } else if (s === 'delivered') {
           order.warehouseLocation = 'delivered'
           order.warehouseLocationLabel = 'Delivered to Customer'
         }
@@ -723,8 +839,8 @@ export const updateOrderTracking = async (req, res) => {
         const titles = {
           placed: 'Order Placed & Verified',
           processing: 'Warehouse Processing & Packaging',
-          in_transit: 'Dispatched & In Transit',
-          out_for_delivery: 'Out for Delivery with Courier',
+          in_transit: `Handed Over to Courier (${order.carrier || 'Courier'})`,
+          out_for_delivery: 'Out for Delivery with Courier Rider',
           delivered: 'Package Delivered to Customer',
           cancelled: 'Order / Shipment Cancelled',
         }
@@ -733,17 +849,69 @@ export const updateOrderTracking = async (req, res) => {
           order.trackingTimeline = []
         }
 
+        const defaultNote =
+          s === 'in_transit'
+            ? `Package handed over to ${order.carrier || 'courier'}. Tracking ID: ${order.trackingNumber}. In transit to recipient.`
+            : `Status updated to ${s.replace(/_/g, ' ')}`
+
         order.trackingTimeline.push({
           status: order.trackingStatus,
           title: titles[order.trackingStatus] || order.trackingStatus,
-          location: String(location || 'Local Hub').trim(),
+          location: String(
+            location ||
+            (order.warehouseLocation === 'wms_hub'
+              ? 'Sellvro Central WMS Hub'
+              : 'Supplier Dispatch Facility')
+          ).trim(),
           timestamp: new Date(),
-          note: String(note || `Status updated to ${order.trackingStatus}`).trim(),
+          note: String(note || defaultNote).trim(),
         })
       }
     }
 
     await order.save()
+
+    // 🔔 Automatic Buyer & Admin Notifications
+    const justDispatched = isNowDispatched && !wasDispatchedBefore
+    if (justDispatched || (targetStatus === 'in_transit' && prevTrackingStatus !== 'in_transit')) {
+      // 1. User Notification
+      createNotification({
+        recipient: order.user?._id || order.user,
+        targetRole: 'user',
+        type: 'order',
+        title: `Order #${order.orderNo} Handed Over to Courier!`,
+        message: `Great news! Your package for "${order.productName || 'Order'}" has been handed over to ${order.carrier}. Tracking ID: ${order.trackingNumber}. You can now track your delivery in real-time.`,
+        link: '/user/orders',
+        metadata: {
+          orderNo: order.orderNo,
+          trackingNumber: order.trackingNumber,
+          carrier: order.carrier,
+          trackingStatus: 'in_transit',
+        },
+      })
+
+      // 2. Admin Notification if supplier fulfilled
+      if (isSupplier) {
+        createNotification({
+          targetRole: 'admin',
+          type: 'order',
+          title: `Order #${order.orderNo} Dispatched by Supplier`,
+          message: `Supplier ${req.user.fullName || 'Supplier'} has handed over order #${order.orderNo} to ${order.carrier} (Tracking: ${order.trackingNumber}).`,
+          link: '/admin/sales',
+          metadata: { orderNo: order.orderNo, trackingNumber: order.trackingNumber },
+        })
+      }
+    } else if (targetStatus === 'delivered' && prevTrackingStatus !== 'delivered') {
+      createNotification({
+        recipient: order.user?._id || order.user,
+        targetRole: 'user',
+        type: 'order',
+        title: `Order #${order.orderNo} Delivered!`,
+        message: `Your package for "${order.productName || 'Order'}" has been marked delivered by courier ${order.carrier}.`,
+        link: '/user/orders',
+        metadata: { orderNo: order.orderNo, trackingNumber: order.trackingNumber },
+      })
+    }
 
     return res.json({
       message: 'Parcel tracking updated successfully.',
@@ -751,6 +919,93 @@ export const updateOrderTracking = async (req, res) => {
     })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to update parcel tracking.' })
+  }
+}
+
+/**
+ * Public shipment tracking lookup (safe for unauthenticated visitors & customers).
+ * GET /api/orders/public-track/:ref
+ */
+export const getPublicOrderTracking = async (req, res) => {
+  try {
+    const ref = String(req.params.ref || req.query.ref || '').trim()
+    if (!ref) {
+      return res.status(400).json({ message: 'Tracking ID or Order Number is required.' })
+    }
+
+    let order = null
+    if (mongoose.Types.ObjectId.isValid(ref)) {
+      order = await Order.findById(ref).populate('product', 'name sku image')
+    }
+    if (!order) {
+      order = await Order.findOne({
+        $or: [
+          { trackingNumber: ref },
+          { trackingNumber: new RegExp(`^${ref}$`, 'i') },
+          { orderNo: ref.toUpperCase() },
+          { orderLabelRef: ref },
+        ],
+      }).populate('product', 'name sku image')
+    }
+
+    if (!order) {
+      return res.status(404).json({ message: `No shipment found matching "${ref}". Please verify your tracking ID.` })
+    }
+
+    if (order.isWmsOrder && order.wmsRequestNumber) {
+      await syncOrderWmsTracking(order).catch(() => null)
+    }
+
+    const shipping = order.shippingAddress || {}
+    const safeTracking = {
+      orderNo: order.orderNo,
+      trackingNumber: order.trackingNumber || `SLV-${order.orderNo.replace('ORD-', '')}`,
+      carrier: order.carrier || 'Sellvro Express',
+      trackingStatus: order.trackingStatus || 'placed',
+      orderStatus: order.status,
+      warehouseLocation: order.warehouseLocation || 'supplier_warehouse',
+      warehouseLocationLabel:
+        order.warehouseLocationLabel ||
+        (order.warehouseLocation === 'wms_hub'
+          ? 'At WMS Central Hub'
+          : order.warehouseLocation === 'in_transit'
+            ? 'In Courier Transit'
+            : order.warehouseLocation === 'delivered'
+              ? 'Delivered to Customer'
+              : 'At Supplier Warehouse'),
+      isWmsOrder: order.isWmsOrder,
+      estimatedDelivery:
+        order.estimatedDelivery ||
+        (order.warehouseLocation === 'wms_hub' ? '2 - 4 Business Days' : '3 - 5 Business Days'),
+      productName: order.productName || order.product?.name || 'Marketplace Item',
+      productImage: order.product?.image || '',
+      productSku: order.product?.sku || '',
+      quantity: order.quantity || 1,
+      shippingCity: shipping.city || '',
+      shippingCountry: shipping.country || 'Pakistan',
+      isDispatched: order.isDispatched,
+      dispatchedAt: order.dispatchedAt,
+      createdAt: order.createdAt,
+      trackingTimeline:
+        Array.isArray(order.trackingTimeline) && order.trackingTimeline.length > 0
+          ? order.trackingTimeline
+          : [
+              {
+                status: order.trackingStatus || 'placed',
+                title: 'Order Placed & Label Attached',
+                location: order.warehouseLocationLabel || 'Warehouse',
+                timestamp: order.createdAt,
+                note: 'Order confirmed and registered in shipping system.',
+              },
+            ],
+    }
+
+    return res.json({
+      success: true,
+      tracking: safeTracking,
+    })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to lookup tracking details.' })
   }
 }
 

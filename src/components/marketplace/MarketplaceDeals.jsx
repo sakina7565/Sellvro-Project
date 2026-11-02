@@ -20,17 +20,7 @@ function MarketplaceDeals({ products = [], activeCategory = 'All Categories', ac
     e.preventDefault()
     e.stopPropagation()
     const itemId = item._id || item.id
-    const hasToken = Boolean(localStorage.getItem('token') || localStorage.getItem('auth_token'))
-    if (!isAuthenticated || !hasToken) {
-      navigate('/login', {
-        state: {
-          from: `/user/checkout/${itemId}`,
-          message: 'Please sign in to your client account before placing an order.',
-        },
-      })
-      return
-    }
-    navigate(`/user/checkout/${itemId}`, { state: { product: { ...item, id: itemId } } })
+    navigate(`/checkout/${itemId}`, { state: { product: { ...item, id: itemId } } })
   }
 
   // Combine real database products with fallback deals if DB is small/empty
@@ -211,22 +201,15 @@ function MarketplaceDeals({ products = [], activeCategory = 'All Categories', ac
                       type="button"
                       onClick={(e) => handleOrderClick(item, e)}
                       className="flex-1 rounded-lg bg-blue-600 py-1.5 text-center text-[11px] font-bold text-white hover:bg-blue-700 active:scale-[0.98] transition shadow-2xs flex items-center justify-center gap-1"
-                      title={isAuthenticated ? 'Proceed to checkout' : 'Sign in required to place order'}
+                      title="Proceed directly to checkout"
                     >
-                      {!isAuthenticated && <Lock className="h-3 w-3 text-blue-200" />}
-                      <span>{isAuthenticated ? 'Order Now' : 'Order'}</span>
+                      <span>Order Now</span>
                     </button>
                   </div>
 
-                  {!isAuthenticated ? (
-                    <p className="mt-1 flex items-center justify-center gap-0.5 text-[9.5px] font-medium text-amber-700">
-                      <Lock className="h-2.5 w-2.5" /> Login required to order
-                    </p>
-                  ) : (
-                    <p className="mt-1 flex items-center justify-center gap-0.5 text-[9.5px] font-medium text-emerald-700">
-                      <CheckCircle className="h-2.5 w-2.5" /> 1-Click Order Ready
-                    </p>
-                  )}
+                  <p className="mt-1 flex items-center justify-center gap-0.5 text-[9.5px] font-medium text-emerald-700">
+                    <CheckCircle className="h-2.5 w-2.5" /> Verified Express Delivery
+                  </p>
                 </div>
               </div>
             </div>

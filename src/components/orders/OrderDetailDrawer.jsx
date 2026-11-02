@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Building2, ExternalLink, Printer, RefreshCw, Tag, Warehouse, X } from 'lucide-react'
+import { Building2, Check, ExternalLink, Printer, RefreshCw, Star, Tag, Truck, Warehouse, X } from 'lucide-react'
 import Badge from '../ui/Badge.jsx'
 import Button from '../ui/Button.jsx'
+import TrackingModal from './TrackingModal.jsx'
+import CourierHandoverModal from './CourierHandoverModal.jsx'
+import OrderReviewModal from './OrderReviewModal.jsx'
 import { getErrorMessage, orderApi, mediaUrl } from '../../lib/api.js'
 import { formatShippingAddress, hasShippingAddress, ORDER_STATUS_OPTIONS } from '../../lib/orderHelpers.js'
 
@@ -43,6 +46,9 @@ function OrderDetailDrawer({
   const [saving, setSaving] = useState(false)
   const [trackingLive, setTrackingLive] = useState(false)
   const [liveTrackSuccess, setLiveTrackSuccess] = useState('')
+  const [trackingModalOpen, setTrackingModalOpen] = useState(false)
+  const [courierModalOpen, setCourierModalOpen] = useState(false)
+  const [reviewModalOpen, setReviewModalOpen] = useState(false)
 
   const loadOrder = useCallback(async () => {
     if (!orderId) return
@@ -205,6 +211,43 @@ function OrderDetailDrawer({
                 )}
               </div>
 
+              {/* Delivery Rating & Feedback Prompt Banner (If Delivered) */}
+              {(() => {
+                const isDelivered =
+                  (order.trackingStatus || order.status || order.warehouseLocation || '').toLowerCase() === 'delivered'
+                if (!isDelivered) return null
+
+                if (order.isReviewed) {
+                  return (
+                    <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <span>
+                        <strong>Reviewed:</strong> You have submitted ratings &amp; review for this supplier and product.
+                      </span>
+                    </div>
+                  )
+                }
+
+                return (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-linear-to-r from-amber-50 to-orange-50 p-3 shadow-2xs">
+                    <div className="flex items-center gap-2.5">
+                      <Star className="h-5 w-5 fill-amber-500 text-amber-500 shrink-0" />
+                      <div>
+                        <h5 className="text-xs font-bold text-amber-900">Rate Supplier &amp; Product</h5>
+                        <p className="text-[11px] text-amber-700">Order delivered! Please share your feedback on delivery speed and product quality.</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReviewModalOpen(true)}
+                      className="inline-flex items-center gap-1 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-amber-600 transition cursor-pointer"
+                    >
+                      <Star className="h-3.5 w-3.5 fill-white" /> Rate Now
+                    </button>
+                  </div>
+                )
+              })()}
+
               {/* Warehouse Custody Banner */}
               <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="flex items-center gap-2.5">
@@ -293,7 +336,7 @@ function OrderDetailDrawer({
                   </div>
                   <div>
                     <p className="text-[11px] font-semibold text-rose-500">
-                      Sellvro Cut ({order.commissionPercent || Math.round((Number(order.commission || 0) / (Number(order.total) || 1)) * 100)}%)
+                      Platform Fee ({order.commissionPercent || Math.round((Number(order.commission || 0) / (Number(order.total) || 1)) * 100)}%)
                     </p>
                     <p className="font-bold text-rose-600">-${Number(order.commission || 0).toFixed(2)}</p>
                   </div>
@@ -569,6 +612,25 @@ function OrderDetailDrawer({
                     <span className="block text-[11px] text-slate-400">Est. Delivery:</span>
                     <span className="font-medium text-slate-800">{order.estimatedDelivery || '3 - 5 Business Days'}</span>
                   </div>
+                  <div className="col-span-2 pt-1 border-t border-indigo-100/60 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setTrackingModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 transition shadow-2xs"
+                    >
+                      <Truck className="h-3.5 w-3.5" />
+                      Live Shipment Tracker & Timeline
+                    </button>
+                    {showStatusUpdate && (
+                      <button
+                        type="button"
+                        onClick={() => setCourierModalOpen(true)}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 hover:text-blue-900 underline"
+                      >
+                        Handover Courier
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -585,10 +647,28 @@ function OrderDetailDrawer({
               {/* Admin / Supplier Status & Custody Location Updater */}
               {showStatusUpdate && (
                 <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Update Status & Warehouse Custody
-                  </p>
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Dispatch & Courier Management
+                    </p>
+                    <span className="text-[10px] font-bold text-indigo-700 uppercase">
+                      {order.warehouseLocation === 'wms_hub' ? 'WMS Fulfilled' : 'Supplier Fulfilled'}
+                    </span>
+                  </div>
+
+                  {/* Primary Handover to Courier Button */}
+                  <Button
+                    type="button"
+                    size="sm"
+                    fullWidth
+                    onClick={() => setCourierModalOpen(true)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-md shadow-blue-500/20 py-2.5"
+                  >
+                    <Truck className="h-4 w-4 mr-1.5" />
+                    Handover to Courier / Dispatch Parcel
+                  </Button>
+
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 pt-2 border-t border-slate-200/80">
                     <div>
                       <label className="mb-1 block text-[11px] font-medium text-slate-600">Order Status</label>
                       <select
@@ -652,6 +732,43 @@ function OrderDetailDrawer({
           )}
         </div>
       </aside>
+
+      {/* Interactive Tracking Modal */}
+      {order && (
+        <TrackingModal
+          order={order}
+          open={trackingModalOpen}
+          onClose={() => setTrackingModalOpen(false)}
+        />
+      )}
+
+      {/* Courier Handover Modal */}
+      {order && (
+        <CourierHandoverModal
+          order={order}
+          open={courierModalOpen}
+          onClose={() => setCourierModalOpen(false)}
+          onSuccess={(next) => {
+            setOrder(next)
+            setStatus(next.status || status)
+            setWarehouseLoc(next.warehouseLocation || warehouseLoc)
+            onUpdated?.(next)
+          }}
+        />
+      )}
+
+      {/* Order Review Modal */}
+      {reviewModalOpen && order && (
+        <OrderReviewModal
+          order={order}
+          open={reviewModalOpen}
+          onClose={() => setReviewModalOpen(false)}
+          onSuccess={() => {
+            loadOrder()
+            onUpdated?.()
+          }}
+        />
+      )}
     </div>
   )
 }

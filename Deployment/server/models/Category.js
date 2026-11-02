@@ -13,6 +13,10 @@ const categorySchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    subcategories: {
+      type: [String],
+      default: [],
+    },
   },
   { timestamps: true },
 )
@@ -22,6 +26,7 @@ categorySchema.methods.toSafeObject = function toSafeObject(productCount = 0) {
     id: this._id.toString(),
     name: this.name,
     description: this.description,
+    subcategories: Array.isArray(this.subcategories) ? this.subcategories : [],
     products: productCount,
     createdAt: this.createdAt,
   }

@@ -2,8 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   CheckCircle2,
+  Clock,
+  FileText,
   Lock,
   Plus,
+  Power,
+  PowerOff,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -20,7 +24,7 @@ import Badge from '../../components/ui/Badge.jsx'
 import { productApi, getErrorMessage } from '../../lib/api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import {
-  PRODUCT_STATUS_FILTER_OPTIONS,
+  SUPPLIER_PRODUCT_STATUS_FILTER_OPTIONS,
   PRODUCT_STATUS_HINT,
   PRODUCT_STATUS_LABEL,
   PRODUCT_STATUS_TONE,
@@ -32,7 +36,7 @@ const FILTERS = [
   { label: 'Select Category' },
   { label: 'Price' },
   { label: 'Location' },
-  { label: 'Product Status', options: PRODUCT_STATUS_FILTER_OPTIONS },
+  { label: 'Product Status', options: SUPPLIER_PRODUCT_STATUS_FILTER_OPTIONS },
 ]
 
 const TABLE_HEAD = [
@@ -43,7 +47,8 @@ const TABLE_HEAD = [
   'Stock (WMS Verified)',
   'Marketplace Fee',
   'Status',
-  'WMS Sync / Action',
+  'Product Action',
+  'WMS Sync / Verify',
 ]
 
 function SupplierProductsPage() {
@@ -55,7 +60,8 @@ function SupplierProductsPage() {
   const [actionSuccess, setActionSuccess] = useState('')
   const [loading, setLoading] = useState(true)
   const [verifyingId, setVerifyingId] = useState(null)
-  const [statusFilter, setStatusFilter] = useState('All Statuses')
+  const [statusActionLoadingId, setStatusActionLoadingId] = useState(null)
+  const [statusFilter, setStatusFilter] = useState('All Listings')
   const [searchParams, setSearchParams] = useSearchParams()
   const searchQuery = (searchParams.get('q') || '').trim()
 
@@ -77,6 +83,34 @@ function SupplierProductsPage() {
   useEffect(() => {
     loadProducts()
   }, [])
+
+  const handleToggleProductStatus = async (product, action) => {
+    setStatusActionLoadingId(product.id)
+    setError('')
+    setActionSuccess('')
+    try {
+      const res =
+        action === 'deactivate'
+          ? await productApi.deactivate(product.id)
+          : await productApi.activate(product.id)
+
+      setActionSuccess(
+        res.message ||
+          (action === 'deactivate'
+            ? `Product "${product.name}" deactivated.`
+            : `Product "${product.name}" activated and live on marketplace!`),
+      )
+      if (res.product) {
+        setProducts((prev) => prev.map((p) => (p.id === product.id ? res.product : p)))
+      } else {
+        loadProducts()
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, `Failed to ${action} product.`))
+    } finally {
+      setStatusActionLoadingId(null)
+    }
+  }
 
   const handleVerifyWms = async (product) => {
     setVerifyingId(product.id)
@@ -124,7 +158,24 @@ function SupplierProductsPage() {
     const qLower = searchQuery.toLowerCase()
 
     return products.filter((product) => {
-      if (statusValue && product.status !== statusValue) return false
+      if (statusValue) {
+        if (statusValue === 'pending_approval') {
+          if (product.status !== 'pending_approval') return false
+        } else if (statusValue === 'active_listing') {
+          const isApproved = product.status === 'approved' || product.status === 'active'
+          const inStock = Number(product.quantity || 0) > 0 && product.status !== 'out_of_stock'
+          if (!isApproved || !inStock) return false
+        } else if (statusValue === 'out_of_stock_listing') {
+          const isZeroStock = Number(product.quantity || 0) <= 0 || product.status === 'out_of_stock'
+          if (!isZeroStock) return false
+        } else if (statusValue === 'deactivated_listing') {
+          if (product.status !== 'inactive' && product.status !== 'deactivated') return false
+        } else if (statusValue === 'drafts') {
+          if (product.status !== 'draft') return false
+        } else if (product.status !== statusValue) {
+          return false
+        }
+      }
       if (qLower) {
         const nameMatch = product.name?.toLowerCase().includes(qLower)
         const skuMatch = product.sku?.toLowerCase().includes(qLower)
@@ -142,18 +193,48 @@ function SupplierProductsPage() {
     setSearchParams(next)
   }
 
+  const isSuspended = user?.status === 'suspended'
+
   return (
     <SupplierLayout>
       <PageHeader
         eyebrow="Supplier Panel • Inventory & Catalog"
         title="Products Listing"
         action={
-          <Button as={Link} to="/supplier/product/create" size="sm" className="w-full sm:w-auto">
-            <Plus className="h-4 w-4 mr-1" />
-            Add Product
-          </Button>
+          isSuspended ? (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3.5 py-2 text-xs font-bold text-rose-700 shadow-2xs cursor-not-allowed"
+              title="Product publishing disabled due to account suspension"
+            >
+              <Lock className="h-3.5 w-3.5" />
+              Add Product (Locked)
+            </span>
+          ) : (
+            <Button as={Link} to="/supplier/product/create" size="sm" className="w-full sm:w-auto">
+              <Plus className="h-4 w-4 mr-1" />
+              Add Product
+            </Button>
+          )
         }
       />
+
+      {isSuspended && (
+        <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50/80 p-3.5 text-xs text-rose-800 shadow-2xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <XCircle className="h-4 w-4 text-rose-600 shrink-0" />
+            <div>
+              <span className="font-bold">Marketplace Listings Deactivated — Account Suspended.</span>{' '}
+              <span>Your products are inactive and hidden from buyers. Reason: {user?.suspensionReason || 'Performance policy violation'}.</span>
+            </div>
+          </div>
+          <Link
+            to="/supplier/disputes"
+            className="shrink-0 rounded-lg bg-rose-600 hover:bg-rose-700 px-3 py-1 text-xs font-bold text-white shadow-xs"
+          >
+            Appeal
+          </Link>
+        </div>
+      )}
 
       <FilterBar
         filters={FILTERS.map((filter) =>
@@ -347,6 +428,60 @@ function SupplierProductsPage() {
                       </div>
                     </td>
 
+                    {/* Product Action (Deactivate / Activate Button) */}
+                    <td className="whitespace-nowrap px-4 py-4">
+                      {product.status === 'approved' || product.status === 'active' ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={statusActionLoadingId === product.id}
+                          onClick={() => handleToggleProductStatus(product, 'deactivate')}
+                          className="h-8 px-3 text-xs font-semibold text-rose-700 border-rose-300 bg-rose-50/70 hover:bg-rose-100 hover:text-rose-800 transition-all shadow-2xs cursor-pointer inline-flex items-center gap-1.5"
+                          title="Deactivate this product to temporarily hide it from the marketplace"
+                        >
+                          <PowerOff className="h-3.5 w-3.5 text-rose-600" />
+                          <span>{statusActionLoadingId === product.id ? 'Working…' : 'Deactivate'}</span>
+                        </Button>
+                      ) : product.status === 'inactive' || product.status === 'deactivated' ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={statusActionLoadingId === product.id}
+                          onClick={() => handleToggleProductStatus(product, 'activate')}
+                          className="h-8 px-3 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-all shadow-2xs cursor-pointer inline-flex items-center gap-1.5"
+                          title="Activate this product to make it live again on the marketplace"
+                        >
+                          <Power className="h-3.5 w-3.5 text-white" />
+                          <span>{statusActionLoadingId === product.id ? 'Working…' : 'Activate'}</span>
+                        </Button>
+                      ) : product.status === 'draft' ? (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 border border-slate-200"
+                          title="Draft saved. Complete and submit for admin approval."
+                        >
+                          <FileText className="h-3.5 w-3.5 text-slate-500" />
+                          <span>Draft Saved</span>
+                        </span>
+                      ) : product.status === 'pending_approval' ? (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 border border-amber-200"
+                          title="Waiting for admin approval"
+                        >
+                          <Clock className="h-3.5 w-3.5 text-amber-600" />
+                          <span>Pending Review</span>
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-lg bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-800 border border-rose-200"
+                          title="Rejected by admin. Edit and resubmit."
+                        >
+                          <XCircle className="h-3.5 w-3.5 text-rose-600" />
+                          <span>Rejected</span>
+                        </span>
+                      )}
+                    </td>
+
                     {/* WMS Sync / Action */}
                     <td className="whitespace-nowrap px-4 py-4">
                       {isVerified ? (
@@ -441,34 +576,66 @@ function SupplierProductsPage() {
                   </div>
                 </div>
 
-                {isWmsSupplier && (
-                  <div className="pt-1 flex justify-end">
-                    {isVerified ? (
+                {/* Mobile Actions: Status Action + WMS Action */}
+                <div className="pt-1 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100">
+                  <div>
+                    {product.status === 'approved' || product.status === 'active' ? (
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        disabled={isBusy}
-                        onClick={() => handleSyncWms(product)}
-                        className="text-xs h-8"
+                        disabled={statusActionLoadingId === product.id}
+                        onClick={() => handleToggleProductStatus(product, 'deactivate')}
+                        className="h-8 px-2.5 text-xs font-semibold text-rose-700 border-rose-300 bg-rose-50 hover:bg-rose-100"
                       >
-                        <RefreshCw className={`h-3 w-3 mr-1 ${isBusy ? 'animate-spin' : ''}`} />
-                        <span>Sync WMS Stock</span>
+                        <PowerOff className="h-3 w-3 mr-1 text-rose-600" />
+                        <span>Deactivate</span>
                       </Button>
-                    ) : (
+                    ) : product.status === 'inactive' || product.status === 'deactivated' ? (
                       <Button
                         type="button"
                         size="sm"
-                        disabled={isBusy}
-                        onClick={() => handleVerifyWms(product)}
-                        className="text-xs h-8 bg-emerald-600 hover:bg-emerald-700 text-white"
+                        disabled={statusActionLoadingId === product.id}
+                        onClick={() => handleToggleProductStatus(product, 'activate')}
+                        className="h-8 px-2.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700"
                       >
-                        <ShieldCheck className="h-3 w-3 mr-1 text-white" />
-                        <span>Verify with WMS</span>
+                        <Power className="h-3 w-3 mr-1 text-white" />
+                        <span>Activate</span>
                       </Button>
+                    ) : (
+                      <span className="text-xs text-slate-400 capitalize">{product.status}</span>
                     )}
                   </div>
-                )}
+
+                  {isWmsSupplier && (
+                    <div>
+                      {isVerified ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={isBusy}
+                          onClick={() => handleSyncWms(product)}
+                          className="text-xs h-8"
+                        >
+                          <RefreshCw className={`h-3 w-3 mr-1 ${isBusy ? 'animate-spin' : ''}`} />
+                          <span>Sync WMS</span>
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={isBusy}
+                          onClick={() => handleVerifyWms(product)}
+                          className="text-xs h-8 bg-emerald-600 hover:bg-emerald-700 text-white"
+                        >
+                          <ShieldCheck className="h-3 w-3 mr-1 text-white" />
+                          <span>Verify with WMS</span>
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )
           })}

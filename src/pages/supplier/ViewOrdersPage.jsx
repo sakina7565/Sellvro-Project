@@ -3,6 +3,8 @@ import { Building2, Eye, Search, Truck, Warehouse } from 'lucide-react'
 import SupplierLayout from '../../components/layout/SupplierLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import OrderDetailDrawer from '../../components/orders/OrderDetailDrawer.jsx'
+import CourierHandoverModal from '../../components/orders/CourierHandoverModal.jsx'
+import TrackingModal from '../../components/orders/TrackingModal.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Badge from '../../components/ui/Badge.jsx'
 import IconAction from '../../components/ui/IconAction.jsx'
@@ -36,6 +38,8 @@ function SupplierViewOrdersPage() {
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [handoverOrder, setHandoverOrder] = useState(null)
+  const [trackingOrder, setTrackingOrder] = useState(null)
 
   // Filter states
   const [activeTab, setActiveTab] = useState('all')
@@ -294,7 +298,39 @@ function SupplierViewOrdersPage() {
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3.5">
-                      <TrackingStatusBadge status={order.status} trackingStatus={order.trackingStatus} />
+                      <div className="flex flex-col gap-1.5 items-start">
+                        <div className="flex items-center gap-1.5">
+                          <TrackingStatusBadge status={order.status} trackingStatus={order.trackingStatus} />
+                          {order.warehouseLocation !== 'in_transit' &&
+                          order.warehouseLocation !== 'delivered' &&
+                          order.trackingStatus !== 'in_transit' &&
+                          order.trackingStatus !== 'delivered' &&
+                          order.trackingStatus !== 'cancelled' ? (
+                            <button
+                              type="button"
+                              onClick={() => setHandoverOrder(order)}
+                              className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2 py-0.5 text-[11px] font-bold text-white hover:bg-blue-700 shadow-2xs transition"
+                              title="Handover order to courier company"
+                            >
+                              <Truck className="h-3 w-3" /> Handover
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setTrackingOrder(order)}
+                              className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-200 border border-slate-200 transition"
+                              title="View live parcel tracking"
+                            >
+                              <Truck className="h-3 w-3 text-blue-600" /> Track
+                            </button>
+                          )}
+                        </div>
+                        {order.trackingNumber && (
+                          <span className="font-mono text-[10px] text-slate-500 font-semibold" title={order.carrier}>
+                            {order.carrier || 'Courier'}: {order.trackingNumber}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3.5 text-xs text-slate-500">{order.date}</td>
@@ -319,12 +355,16 @@ function SupplierViewOrdersPage() {
           {filteredOrders.map((order) => {
             const userDisplay =
               order.userDisplayId || (order.userId ? `USR-${order.userId.slice(-6).toUpperCase()}` : '—')
+            const isDispatched =
+              order.warehouseLocation === 'in_transit' ||
+              order.warehouseLocation === 'delivered' ||
+              order.trackingStatus === 'in_transit' ||
+              order.trackingStatus === 'delivered'
+
             return (
-              <button
+              <div
                 key={order.id}
-                type="button"
-                onClick={() => openOrder(order)}
-                className="block w-full p-4 text-left hover:bg-slate-50"
+                className="block w-full p-4 text-left hover:bg-slate-50 space-y-2"
               >
                 <div className="flex items-center justify-between">
                   <p className="font-semibold text-slate-800">{order.orderNo}</p>
@@ -345,7 +385,33 @@ function SupplierViewOrdersPage() {
                     {order.warehouseLocation === 'wms_hub' ? '🏢 WMS Hub' : '🏭 Supplier Whse'}
                   </span>
                 </div>
-              </button>
+                <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+                  {!isDispatched && order.trackingStatus !== 'cancelled' ? (
+                    <button
+                      type="button"
+                      onClick={() => setHandoverOrder(order)}
+                      className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-blue-700 inline-flex items-center gap-1"
+                    >
+                      <Truck className="h-3 w-3" /> Handover Courier
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setTrackingOrder(order)}
+                      className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200 inline-flex items-center gap-1"
+                    >
+                      <Truck className="h-3 w-3 text-blue-600" /> Track
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => openOrder(order)}
+                    className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    View Details
+                  </button>
+                </div>
+              </div>
             )
           })}
         </div>
@@ -359,6 +425,25 @@ function SupplierViewOrdersPage() {
         showStatusUpdate
         title="Order Details & Packaging Label"
       />
+
+      {/* Courier Handover Modal */}
+      {handoverOrder && (
+        <CourierHandoverModal
+          order={handoverOrder}
+          open={Boolean(handoverOrder)}
+          onClose={() => setHandoverOrder(null)}
+          onSuccess={handleOrderUpdated}
+        />
+      )}
+
+      {/* Live Tracking Modal */}
+      {trackingOrder && (
+        <TrackingModal
+          order={trackingOrder}
+          open={Boolean(trackingOrder)}
+          onClose={() => setTrackingOrder(null)}
+        />
+      )}
     </SupplierLayout>
   )
 }

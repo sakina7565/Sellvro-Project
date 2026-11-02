@@ -27,6 +27,9 @@ import {
   updateAccount,
   deleteAccount,
   impersonateAccount,
+  warnSupplierAccount,
+  suspendSupplierAccount,
+  reinstateSupplierAccount,
   listCountries,
   createCountry,
   deleteCountry,
@@ -389,6 +392,23 @@ router.post(
   '/impersonate/:id',
   requirePermission('admin.suppliers.view', 'admin.users.view'),
   impersonateAccount,
+)
+
+// Supplier Performance Warning & Suspension Routes
+router.post(
+  '/suppliers/:id/warn',
+  requirePermission('admin.suppliers.approve'),
+  warnSupplierAccount,
+)
+router.post(
+  '/suppliers/:id/suspend',
+  requirePermission('admin.suppliers.approve'),
+  suspendSupplierAccount,
+)
+router.post(
+  '/suppliers/:id/reinstate',
+  requirePermission('admin.suppliers.approve'),
+  reinstateSupplierAccount,
 )
 
 export default router

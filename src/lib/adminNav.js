@@ -65,7 +65,6 @@ export const ADMIN_NAV_ITEMS = [
     icon: Settings,
     children: [
       { label: 'Roles', to: '/admin/roles' },
-      { label: 'Create User', to: '/admin/users/roles' },
       { label: 'Accounts Management', to: '/admin/accounts' },
       { label: 'Location', to: '/admin/location' },
       { label: 'Country', to: '/admin/country' },

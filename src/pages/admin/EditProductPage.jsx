@@ -527,14 +527,12 @@ function EditProductPage() {
                       Inventory Status
                     </label>
                     <Select
-                      value={form.status}
+                      value={form.status === 'active' ? 'approved' : form.status}
                       onChange={updateField('status')}
                       options={[
-                        { label: 'Active', value: 'active' },
-                        { label: 'Approved', value: 'approved' },
-                        { label: 'In Stock', value: 'active' },
+                        { label: 'Approved (Live on Marketplace)', value: 'approved' },
                         { label: 'Pending Approval', value: 'pending_approval' },
-                        { label: 'Draft', value: 'draft' },
+                        { label: 'Deactivated', value: 'inactive' },
                         { label: 'Rejected', value: 'rejected' },
                       ]}
                     />
@@ -602,7 +600,7 @@ function EditProductPage() {
                         <span className="font-bold text-slate-900">${Number(form.price || 0).toFixed(2)}</span>
                       </div>
                       <div className="rounded-lg bg-white p-2 border border-slate-100">
-                        <span className="block text-[10px] uppercase font-bold text-rose-500">Sellvro Cut ({form.commission || 0}%)</span>
+                        <span className="block text-[10px] uppercase font-bold text-rose-500">Platform Fee ({form.commission || 0}%)</span>
                         <span className="font-bold text-rose-600">+${((Number(form.price || 0) * Number(form.commission || 0)) / 100).toFixed(2)}</span>
                       </div>
                       <div className="rounded-lg bg-white p-2 border border-slate-100">

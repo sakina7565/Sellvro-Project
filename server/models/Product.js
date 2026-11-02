@@ -27,20 +27,34 @@ const productSchema = new mongoose.Schema(
     images: { type: [String], default: [] },
     supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     /**
-     * draft            → saved, not submitted
+     * draft            → saved by supplier, not submitted to admin
      * pending_approval → waiting for admin review
-     * approved         → admin approved; supplier can manage, not on marketplace
-     * active           → visible to buyers on marketplace
+     * approved / active → approved by admin; live on marketplace
+     * inactive / deactivated → temporarily deactivated by supplier/admin
      * rejected         → admin rejected
      */
     status: {
       type: String,
-      enum: ['draft', 'pending_approval', 'approved', 'active', 'rejected'],
+      enum: ['draft', 'pending_approval', 'approved', 'active', 'rejected', 'inactive', 'deactivated', 'out_of_stock'],
       default: 'pending_approval',
     },
     condition: { type: String, trim: true, default: '' },
+    subcategory: { type: String, trim: true, default: '' },
+    handlingTime: { type: String, trim: true, default: '1 business day' },
+    deliveryTime: { type: String, trim: true, default: '' },
+    color: { type: String, trim: true, default: '' },
+    material: { type: String, trim: true, default: '' },
+    mpn: { type: String, trim: true, default: '' },
+    itemType: { type: String, trim: true, default: '' },
+    numItemsInSet: { type: String, trim: true, default: '1' },
+    itemSpecifics: { type: mongoose.Schema.Types.Mixed, default: {} },
+    variations: { type: [mongoose.Schema.Types.Mixed], default: [] },
     watchers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     viewsCount: { type: Number, default: 0, min: 0 },
+    averageRating: { type: Number, default: 0, min: 0, max: 5 },
+    reviewsCount: { type: Number, default: 0, min: 0 },
+    deliveryRatingAverage: { type: Number, default: 0, min: 0, max: 5 },
+    onTimeDeliveryPercent: { type: Number, default: 100, min: 0, max: 100 },
   },
   { timestamps: true },
 )
@@ -62,6 +76,19 @@ productSchema.methods.toSafeObject = function toSafeObject() {
     name: this.name,
     sku: this.sku,
     category: this.category,
+    subcategory: this.subcategory || '',
+    handlingTime: this.handlingTime || '1 business day',
+    deliveryTime:
+      this.fulfillBy === 'warehouse' || this.inWarehouse
+        ? '1 Day (WMS Express Delivery)'
+        : this.deliveryTime || '2-3 Days',
+    color: this.color || '',
+    material: this.material || '',
+    mpn: this.mpn || '',
+    itemType: this.itemType || '',
+    numItemsInSet: this.numItemsInSet || '1',
+    itemSpecifics: this.itemSpecifics || {},
+    variations: Array.isArray(this.variations) ? this.variations : [],
     brand: this.brand,
     description: this.description,
     price: this.price,
@@ -98,6 +125,10 @@ productSchema.methods.toSafeObject = function toSafeObject() {
     watchersCount: Array.isArray(this.watchers) ? this.watchers.length : 0,
     viewsCount: this.viewsCount || 0,
     watchers: Array.isArray(this.watchers) ? this.watchers.map((w) => w.toString()) : [],
+    averageRating: Number(this.averageRating || 0),
+    reviewsCount: Number(this.reviewsCount || 0),
+    deliveryRatingAverage: Number(this.deliveryRatingAverage || 0),
+    onTimeDeliveryPercent: Number(this.onTimeDeliveryPercent ?? 100),
     createdAt: this.createdAt,
   }
 }

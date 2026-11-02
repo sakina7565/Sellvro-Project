@@ -33,9 +33,20 @@ const productSchema = new mongoose.Schema(
      */
     status: {
       type: String,
-      enum: ['draft', 'pending_approval', 'approved', 'active', 'rejected'],
+      enum: ['draft', 'pending_approval', 'approved', 'active', 'rejected', 'inactive', 'deactivated', 'out_of_stock'],
       default: 'pending_approval',
     },
+    condition: { type: String, trim: true, default: '' },
+    subcategory: { type: String, trim: true, default: '' },
+    handlingTime: { type: String, trim: true, default: '1 business day' },
+    deliveryTime: { type: String, trim: true, default: '' },
+    color: { type: String, trim: true, default: '' },
+    material: { type: String, trim: true, default: '' },
+    mpn: { type: String, trim: true, default: '' },
+    itemType: { type: String, trim: true, default: '' },
+    numItemsInSet: { type: String, trim: true, default: '1' },
+    itemSpecifics: { type: mongoose.Schema.Types.Mixed, default: {} },
+    variations: { type: [mongoose.Schema.Types.Mixed], default: [] },
   },
   { timestamps: true },
 )
@@ -53,6 +64,19 @@ productSchema.methods.toSafeObject = function toSafeObject() {
     name: this.name,
     sku: this.sku,
     category: this.category,
+    subcategory: this.subcategory || '',
+    handlingTime: this.handlingTime || '1 business day',
+    deliveryTime:
+      this.fulfillBy === 'warehouse' || this.inWarehouse
+        ? '1 Day (WMS Express Delivery)'
+        : this.deliveryTime || '2-3 Days',
+    color: this.color || '',
+    material: this.material || '',
+    mpn: this.mpn || '',
+    itemType: this.itemType || '',
+    numItemsInSet: this.numItemsInSet || '1',
+    itemSpecifics: this.itemSpecifics || {},
+    variations: Array.isArray(this.variations) ? this.variations : [],
     brand: this.brand,
     description: this.description,
     price: this.price,

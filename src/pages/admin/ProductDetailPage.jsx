@@ -54,7 +54,7 @@ function ProductDetailPage() {
     setError('')
     try {
       await adminApi.approveProduct(id, { commission: commVal, activate: true })
-      setCommissionSuccess(`Product approved and activated with ${commVal}% marketplace commission!`)
+      setCommissionSuccess(`Product approved and is now live on the marketplace with ${commVal}% marketplace commission!`)
       await loadProduct()
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to approve product.'))
@@ -294,7 +294,7 @@ function ProductDetailPage() {
                 </div>
 
                 <p className="mt-1 text-xs text-slate-500">
-                  Set the platform cut for this SKU. When an order is placed, this commission is deducted and retained by Sellvro, and the remainder is credited to the supplier.
+                  Set the platform fee for this SKU. When an order is placed, this commission is deducted and retained by Sellvro, and the remainder is credited to the supplier.
                 </p>
 
                 <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -348,8 +348,8 @@ function ProductDetailPage() {
                 {(() => {
                   const price = Number(product.price || 0)
                   const commPct = Number(commission) || 0
-                  const adminCut = (price * commPct) / 100
-                  const supplierNet = price - adminCut
+                  const platformFee = (price * commPct) / 100
+                  const supplierNet = price - platformFee
 
                   return (
                     <div className="mt-4 grid grid-cols-3 gap-2 rounded-lg border border-indigo-100/80 bg-white p-3 text-center shadow-2xs">
@@ -363,10 +363,10 @@ function ProductDetailPage() {
                       </div>
                       <div className="border-x border-slate-100">
                         <span className="block text-[10px] font-bold uppercase tracking-wider text-rose-500">
-                          Admin Cut ({commPct}%)
+                          Platform Fee ({commPct}%)
                         </span>
                         <span className="text-sm font-bold text-rose-600">
-                          +${adminCut.toFixed(2)}
+                          +${platformFee.toFixed(2)}
                         </span>
                       </div>
                       <div>
@@ -395,7 +395,7 @@ function ProductDetailPage() {
                   <div className="flex items-center gap-2">
                     <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400 bg-white px-4 py-2 text-xs font-semibold text-emerald-600 shadow-xs cursor-default">
                       <Check className="h-4 w-4 text-emerald-600" />
-                      <span>Approved ({product.commission || commission}% Cut)</span>
+                      <span>Approved ({product.commission || commission}% Fee)</span>
                     </span>
                   </div>
                 ) : (
@@ -406,7 +406,7 @@ function ProductDetailPage() {
                     className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 text-xs font-semibold shadow-xs transition-colors"
                   >
                     <Check className="h-4 w-4" />
-                    <span>{actionLoading ? 'Approving…' : `Approve & Activate (${commission || 10}% Commission)`}</span>
+                    <span>{actionLoading ? 'Approving…' : `Approve Product (${commission || 10}% Commission)`}</span>
                   </button>
                 )}
 

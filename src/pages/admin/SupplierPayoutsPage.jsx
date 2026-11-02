@@ -650,7 +650,7 @@ Status: VERIFIED & COMPLETED
               >
                 <option value="all">All Weekly Cycles ({pendingWeeks.length})</option>
                 <option value="actionable">🟢 Actionable (Mature Ready to Release)</option>
-                <option value="holding">🟡 In Transit / Awaiting Delivery</option>
+                <option value="holding">🟡 Pending Delivery</option>
               </select>
             </div>
 
@@ -670,7 +670,7 @@ Status: VERIFIED & COMPLETED
                     <th className="px-4 py-3.5">Weekly Cycle & Period</th>
                     <th className="px-4 py-3.5">Saturday Release Date</th>
                     <th className="px-4 py-3.5">Fulfillment Status</th>
-                    <th className="px-4 py-3.5">Gross / Cut</th>
+                    <th className="px-4 py-3.5">Gross / Platform Fee</th>
                     <th className="px-4 py-3.5">Mature Ready to Pay</th>
                     <th className="px-4 py-3.5">Remaining Pending</th>
                     <th className="px-4 py-3.5">Cycle Status</th>
@@ -753,10 +753,10 @@ Status: VERIFIED & COMPLETED
                         </div>
                       </td>
 
-                      {/* Gross & Cut */}
+                      {/* Gross & Platform Fee */}
                       <td className="whitespace-nowrap px-4 py-3.5 text-xs">
                         <p className="font-semibold text-slate-800">${item.grossSales.toFixed(2)}</p>
-                        <p className="text-[11px] text-rose-600">Cut: -${item.commission.toFixed(2)}</p>
+                        <p className="text-[11px] text-rose-600">Fee: -${item.commission.toFixed(2)}</p>
                       </td>
 
                       {/* Mature Balance Ready to Pay */}
@@ -942,7 +942,7 @@ Status: VERIFIED & COMPLETED
                     <th className="px-4 py-3.5">Supplier & Business</th>
                     <th className="px-4 py-3.5">Bank Account Details</th>
                     <th className="px-4 py-3.5">Orders Summary</th>
-                    <th className="px-4 py-3.5">Gross / Cut</th>
+                    <th className="px-4 py-3.5">Gross / Platform Fee</th>
                     <th className="px-4 py-3.5">Mature Balance (Delivered)</th>
                     <th className="px-4 py-3.5">Pending Delivery</th>
                     <th className="px-4 py-3.5">Total Paid</th>
@@ -998,7 +998,7 @@ Status: VERIFIED & COMPLETED
 
                       <td className="whitespace-nowrap px-4 py-3.5 text-xs">
                         <p className="font-semibold text-slate-800">${s.grossSales.toFixed(2)}</p>
-                        <p className="text-[11px] text-slate-500">Cut: ${s.commissionTotal.toFixed(2)}</p>
+                        <p className="text-[11px] text-slate-500">Fee: ${s.commissionTotal.toFixed(2)}</p>
                       </td>
 
                       <td className="whitespace-nowrap px-4 py-3.5">
@@ -1119,7 +1119,7 @@ Status: VERIFIED & COMPLETED
                     <th className="px-4 py-3.5">Month</th>
                     <th className="px-4 py-3.5">Orders Summary</th>
                     <th className="px-4 py-3.5">Gross Revenue</th>
-                    <th className="px-4 py-3.5">Platform Cut</th>
+                    <th className="px-4 py-3.5">Platform Fee</th>
                     <th className="px-4 py-3.5">Net Supplier Share</th>
                     <th className="px-4 py-3.5">Mature Balance (Delivered)</th>
                     <th className="px-4 py-3.5">Pending Delivery</th>
@@ -1312,7 +1312,7 @@ Status: VERIFIED & COMPLETED
                 <p className="text-sm font-bold text-slate-800">${selectedMonthObj?.grossSales?.toFixed(2) || '0.00'}</p>
               </div>
               <div className="rounded-lg bg-rose-50/60 p-2.5">
-                <span className="text-[10px] uppercase font-bold text-rose-500">Platform Cut</span>
+                <span className="text-[10px] uppercase font-bold text-rose-500">Platform Fee</span>
                 <p className="text-sm font-bold text-rose-700">-${selectedMonthObj?.commission?.toFixed(2) || '0.00'}</p>
               </div>
               <div className="rounded-lg bg-emerald-50 p-2.5 border border-emerald-200">
@@ -1343,7 +1343,7 @@ Status: VERIFIED & COMPLETED
                     <th className="px-4 py-3.5">Saturday Release Cycle</th>
                     <th className="px-4 py-3.5">Orders Summary</th>
                     <th className="px-4 py-3.5">Gross Sales</th>
-                    <th className="px-4 py-3.5">Platform Cut</th>
+                    <th className="px-4 py-3.5">Platform Fee</th>
                     <th className="px-4 py-3.5">Net Share</th>
                     <th className="px-4 py-3.5">Mature Balance (Delivered)</th>
                     <th className="px-4 py-3.5">Status</th>
@@ -1482,7 +1482,7 @@ Status: VERIFIED & COMPLETED
                   {monthOrdersData?.monthLabel || selectedMonthKey} Orders Breakdown
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Orders are mature upon delivery. Net payout reflects platform commission cut.
+                  Orders are mature upon delivery. Net payout reflects platform fee.
                 </p>
               </div>
 
@@ -1536,7 +1536,7 @@ Status: VERIFIED & COMPLETED
                     <th className="px-4 py-3.5">Product & SKU</th>
                     <th className="px-4 py-3.5">Price & Qty</th>
                     <th className="px-4 py-3.5">Total Amount</th>
-                    <th className="px-4 py-3.5">Platform Cut</th>
+                    <th className="px-4 py-3.5">Platform Fee</th>
                     <th className="px-4 py-3.5">Supplier Net</th>
                     <th className="px-4 py-3.5">Maturity Status</th>
                     <th className="px-4 py-3.5">Payout Status</th>

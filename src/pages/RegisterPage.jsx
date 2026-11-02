@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { UserCog, User, Mail, Lock, ShieldCheck } from 'lucide-react'
+import { UserCog, User, Mail, Lock, ShieldCheck, Warehouse } from 'lucide-react'
 import AuthLayout from '../components/layout/AuthLayout.jsx'
 import Input from '../components/ui/Input.jsx'
 import Select from '../components/ui/Select.jsx'
@@ -85,6 +85,28 @@ function RegisterPage() {
           <option value="supplier">Supplier (Manufacturer)</option>
           <option value="user">User (Reseller / Buyer)</option>
         </Select>
+
+        {role === 'supplier' && (
+          <div className="rounded-xl border border-primary-200 bg-linear-to-r from-primary-50/90 via-sky-50/70 to-primary-50/90 p-3.5 shadow-2xs text-xs text-slate-700">
+            <div className="flex items-start gap-2.5">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary-600 text-white shadow-2xs mt-0.5">
+                <Warehouse className="h-4 w-4" />
+              </div>
+              <div className="leading-relaxed">
+                <span className="font-bold text-primary-950 block text-[12px]">
+                  Notice for WMS Suppliers:
+                </span>
+                <p className="mt-0.5 text-slate-700">
+                  If you are already registered on the <strong>WMS (Warehouse)</strong> platform, you do not need to register a new account. Go directly to the{' '}
+                  <Link to="/login" className="font-bold text-primary underline underline-offset-2 hover:text-primary-800">
+                    Sign In page
+                  </Link>{' '}
+                  and log in using your <strong>same WMS email and password</strong> so your warehouse inventory details sync automatically.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <Input
           id="fullName"

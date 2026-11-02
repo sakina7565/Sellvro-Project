@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Warehouse, Store, AlertTriangle, ShieldCheck } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Warehouse, Store, AlertTriangle, ShieldCheck, ShieldAlert } from 'lucide-react'
 import SupplierLayout from '../../components/layout/SupplierLayout.jsx'
 import WmsInventoryProductForm from '../../components/products/WmsInventoryProductForm.jsx'
 import AddProductForm from '../../components/products/AddProductForm.jsx'
@@ -8,6 +9,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 function SupplierAddProductPage() {
   const { user } = useAuth()
   const isWmsRegistered = Boolean(user?.isWmsRegistered)
+  const isSuspended = user?.status === 'suspended'
 
   // If WMS registered: default to 'wms'. If not registered on WMS: 'direct' only.
   const [activeChannel, setActiveChannel] = useState(isWmsRegistered ? 'wms' : 'direct')
@@ -15,7 +17,38 @@ function SupplierAddProductPage() {
   return (
     <SupplierLayout>
       <div className="mx-auto max-w-6xl">
-        {isWmsRegistered ? (
+        {isSuspended ? (
+          <div className="rounded-2xl border-2 border-rose-200 bg-rose-50/70 p-8 text-center shadow-soft">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-600 text-white shadow-md">
+              <ShieldAlert className="h-7 w-7" />
+            </div>
+            <h2 className="mt-4 text-lg font-black text-rose-950">
+              Product Creation Disabled — Account Suspended
+            </h2>
+            <p className="mx-auto mt-2 max-w-lg text-sm text-rose-700 leading-relaxed">
+              Your supplier account is currently suspended due to marketplace policy violations. You cannot publish new products until the account is reinstated.
+            </p>
+            {user.suspensionReason && (
+              <p className="mt-3 inline-block rounded-xl bg-white border border-rose-200 px-4 py-2 font-mono text-xs font-bold text-rose-900">
+                Reason: {user.suspensionReason}
+              </p>
+            )}
+            <div className="mt-6 flex justify-center gap-3">
+              <Link
+                to="/supplier/disputes"
+                className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-rose-700 cursor-pointer"
+              >
+                Submit Appeal / Dispute
+              </Link>
+              <Link
+                to="/supplier/dashboard"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 cursor-pointer"
+              >
+                Back to Dashboard
+              </Link>
+            </div>
+          </div>
+        ) : isWmsRegistered ? (
           /* ── Channel Switcher Bar (Shown ONLY to WMS-Registered Suppliers) ── */
           <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-2 shadow-xs">
             <div className="mb-2 px-3 pt-2 flex flex-wrap items-center justify-between gap-2 text-xs">

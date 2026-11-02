@@ -66,7 +66,7 @@ function SupplierFinancePage() {
         tone: 'blue',
       },
       {
-        label: 'Platform Commission Cut',
+        label: 'Platform Fee',
         value: `-$${Number(summary.commissionTotal || 0).toFixed(2)}`,
         icon: TrendingDown,
         tone: 'pink',

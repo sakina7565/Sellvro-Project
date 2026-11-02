@@ -12,9 +12,11 @@ import {
   listLiveWmsOrders,
   getWmsSupplierOrders,
   updateWmsOrderDispatch,
+  getPublicOrderTracking,
 } from '../controllers/orderController.js'
 import { getUserDashboardStats } from '../controllers/dashboardController.js'
-import { protect, authorize, requireApproved } from '../middleware/auth.js'
+import { submitOrderReview, getPendingReviewOrders } from '../controllers/reviewController.js'
+import { protect, optionalProtect, authorize, requireApproved } from '../middleware/auth.js'
 import { productUpload } from '../middleware/upload.js'
 
 const router = Router()
@@ -28,9 +30,14 @@ function handleShippingLabel(req, res, next) {
   })
 }
 
-router.post('/', protect, authorize('user', 'admin'), handleShippingLabel, createOrder)
+// Public Tracking Lookup (no login required)
+router.get('/public-track/:ref', getPublicOrderTracking)
+
+router.post('/', optionalProtect, handleShippingLabel, createOrder)
 router.get('/mine', protect, authorize('user', 'admin'), listMyOrders)
-router.get('/lookup', protect, authorize('user', 'supplier', 'admin'), lookupOrder)
+router.get('/pending-review', protect, authorize('user', 'admin'), getPendingReviewOrders)
+router.post('/:id/review', protect, authorize('user', 'admin'), submitOrderReview)
+router.get('/lookup', optionalProtect, lookupOrder)
 router.get('/dashboard/stats', protect, authorize('user', 'admin'), getUserDashboardStats)
 router.get('/supplier', protect, authorize('supplier'), requireApproved, listSupplierOrders)
 router.get('/', protect, authorize('admin'), listAllOrders)

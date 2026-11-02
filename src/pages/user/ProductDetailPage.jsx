@@ -28,8 +28,10 @@ import {
   ShieldCheck,
   ShoppingCart,
   Sparkles,
+  Star,
   Store,
   Tag,
+  ThumbsUp,
   Truck,
   Warehouse,
   TrendingUp,
@@ -111,6 +113,53 @@ function ProductDetailPage() {
   const [similarProducts, setSimilarProducts] = useState([])
   const [loadingSimilar, setLoadingSimilar] = useState(false)
   const [activeTab, setActiveTab] = useState('description')
+  const [reviewsData, setReviewsData] = useState({
+    count: 0,
+    stats: {
+      averageRating: 0,
+      reviewsCount: 0,
+      deliveryRatingAverage: 0,
+      onTimeDeliveryPercent: 100,
+      distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
+    },
+    data: [],
+  })
+  const [loadingReviews, setLoadingReviews] = useState(false)
+
+  // Fetch verified customer reviews & ratings for this product
+  useEffect(() => {
+    if (!id) return
+    let active = true
+    setLoadingReviews(true)
+    productApi
+      .reviews(id)
+      .then((res) => {
+        if (!active) return
+        if (res && res.data) {
+          setReviewsData({
+            count: res.count || 0,
+            stats: res.stats || {
+              averageRating: 0,
+              reviewsCount: 0,
+              deliveryRatingAverage: 0,
+              onTimeDeliveryPercent: 100,
+              distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
+            },
+            data: res.data || [],
+          })
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load reviews:', err)
+      })
+      .finally(() => {
+        if (active) setLoadingReviews(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [id])
 
   useEffect(() => {
     let active = true
@@ -246,17 +295,7 @@ function ProductDetailPage() {
   const handleBuyNow = () => {
     if (!product || !isAvailable || isOutOfStock) return
     const prodId = product.id || product._id || id
-    const token = localStorage.getItem('token') || localStorage.getItem('auth_token')
-    if (!token || !isAuthenticated) {
-      navigate('/login', {
-        state: {
-          from: `/user/checkout/${prodId}`,
-          message: 'Please sign in to your client account before placing an order.',
-        },
-      })
-      return
-    }
-    navigate(`/user/checkout/${prodId}`, {
+    navigate(`/checkout/${prodId}`, {
       state: {
         product: { ...product, id: prodId },
         quantity,
@@ -265,8 +304,11 @@ function ProductDetailPage() {
   }
 
   const handleAddToCart = () => {
-    const token = localStorage.getItem('token') || localStorage.getItem('auth_token')
-    if (!token || !isAuthenticated) {
+    const token =
+      localStorage.getItem('sellvro_token') ||
+      localStorage.getItem('token') ||
+      localStorage.getItem('auth_token')
+    if (!token && !isAuthenticated) {
       navigate('/login', {
         state: {
           from: window.location.pathname,
@@ -633,13 +675,67 @@ function ProductDetailPage() {
         {/* RIGHT COLUMN: eBay Buy Box & Product Specifications (5 cols lg)   */}
         {/* ================================================================= */}
         <div className="lg:col-span-5 space-y-5">
-          {/* 1. Main Product Title */}
+          {/* 1. Main Product Title & Ratings */}
           <div>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#111827] leading-snug">
               {product.name}
               {product.brand ? ` by ${product.brand}` : ''}
               {product.sku ? ` (${product.sku})` : ''}
             </h1>
+
+            {/* Live Ratings & Delivery Score Bar */}
+            <div className="mt-2.5 flex flex-wrap items-center gap-3 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('reviews')
+                  document.getElementById('product-tabs-section')?.scrollIntoView({ behavior: 'smooth' })
+                }}
+                className="flex items-center gap-1.5 hover:opacity-85 transition group cursor-pointer"
+                title="View verified customer reviews"
+              >
+                <div className="flex items-center">
+                  {[1, 2, 3, 4, 5].map((star) => {
+                    const avg = reviewsData.stats.averageRating || product.averageRating || 0
+                    return (
+                      <Star
+                        key={star}
+                        className={`h-4 w-4 ${
+                          star <= Math.round(avg)
+                            ? 'fill-amber-400 text-amber-500'
+                            : 'fill-slate-100 text-slate-300'
+                        }`}
+                      />
+                    )
+                  })}
+                </div>
+                <span className="font-bold text-slate-900">
+                  {reviewsData.stats.averageRating > 0
+                    ? reviewsData.stats.averageRating.toFixed(1)
+                    : product.averageRating > 0
+                    ? Number(product.averageRating).toFixed(1)
+                    : 'New'}
+                </span>
+                <span className="text-blue-600 underline font-medium">
+                  ({reviewsData.count || product.reviewsCount || 0} reviews)
+                </span>
+              </button>
+
+              <span className="text-slate-300">|</span>
+
+              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-200">
+                <Truck className="h-3 w-3 text-emerald-600" />
+                <span>
+                  {reviewsData.stats.onTimeDeliveryPercent ?? product.onTimeDeliveryPercent ?? 100}% On-Time Delivery
+                </span>
+              </span>
+
+              {reviewsData.stats.deliveryRatingAverage > 0 && (
+                <span className="text-[11px] font-semibold text-slate-600">
+                  ⚡ Delivery: <strong className="text-indigo-700">{reviewsData.stats.deliveryRatingAverage}/5</strong>
+                </span>
+              )}
+            </div>
           </div>
 
           {/* 2. Seller Info Row (eBay Style Store Header) */}
@@ -753,14 +849,7 @@ function ProductDetailPage() {
               onClick={handleBuyNow}
               className="w-full rounded-full bg-[#3665f3] py-3 text-sm font-bold text-white shadow-sm hover:bg-[#2b54d6] active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {!isAuthenticated && !isOutOfStock && <Lock className="h-4 w-4 text-blue-200" />}
-              <span>
-                {isOutOfStock
-                  ? 'Out of Stock'
-                  : !isAuthenticated
-                  ? 'Sign In to Order Now'
-                  : 'Order Now'}
-              </span>
+              <span>{isOutOfStock ? 'Out of Stock' : 'Order Now'}</span>
             </button>
 
             {/* Add to Cart (White with Blue border) */}
@@ -857,9 +946,24 @@ function ProductDetailPage() {
             <div className="grid grid-cols-4 items-start gap-2 border-t border-slate-100 pt-2.5">
               <span className="font-semibold text-slate-500">Delivery:</span>
               <div className="col-span-3 text-slate-800">
-                <span className="font-bold">Estimated 2 - 4 business days</span>
+                {isWms || product.fulfillBy === 'warehouse' ? (
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-700">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-xs">
+                      ⚡
+                    </span>
+                    <span>1 Day (WMS Express Delivery)</span>
+                  </div>
+                ) : (
+                  <span className="font-bold">
+                    Estimated {product.deliveryTime || '2 - 3 business days'}
+                  </span>
+                )}
                 <span className="block text-[11px] text-slate-500 mt-0.5">
-                  Ships via Sellvro Express / Trax Logistics with live airway bill tracking.
+                  {isWms || product.fulfillBy === 'warehouse'
+                    ? 'Dispatched directly from Sellvro Central Warehouse. Guaranteed same-day fulfillment.'
+                    : `Ships directly from verified vendor with live courier tracking. Handling time: ${
+                        product.handlingTime || '1 business day'
+                      }.`}
                 </span>
               </div>
             </div>
@@ -1003,13 +1107,13 @@ function ProductDetailPage() {
       {/* ===================================================================== */}
       {/* TABS: Description, Item Specifics, Warehouse & Shipping Details      */}
       {/* ===================================================================== */}
-      <div className="mt-12 rounded-2xl border border-slate-200 bg-white shadow-soft overflow-hidden">
+      <div id="product-tabs-section" className="mt-12 rounded-2xl border border-slate-200 bg-white shadow-soft overflow-hidden">
         {/* Tab Headers */}
-        <div className="flex border-b border-slate-200 bg-slate-50/80 px-6">
+        <div className="flex border-b border-slate-200 bg-slate-50/80 px-6 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab('description')}
-            className={`border-b-2 py-4 px-4 text-xs font-bold transition-colors ${
+            className={`border-b-2 py-4 px-4 text-xs font-bold transition-colors whitespace-nowrap ${
               activeTab === 'description'
                 ? 'border-blue-600 text-blue-600 bg-white'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -1020,7 +1124,7 @@ function ProductDetailPage() {
           <button
             type="button"
             onClick={() => setActiveTab('specifics')}
-            className={`border-b-2 py-4 px-4 text-xs font-bold transition-colors ${
+            className={`border-b-2 py-4 px-4 text-xs font-bold transition-colors whitespace-nowrap ${
               activeTab === 'specifics'
                 ? 'border-blue-600 text-blue-600 bg-white'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -1031,13 +1135,25 @@ function ProductDetailPage() {
           <button
             type="button"
             onClick={() => setActiveTab('shipping')}
-            className={`border-b-2 py-4 px-4 text-xs font-bold transition-colors ${
+            className={`border-b-2 py-4 px-4 text-xs font-bold transition-colors whitespace-nowrap ${
               activeTab === 'shipping'
                 ? 'border-blue-600 text-blue-600 bg-white'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             Shipping &amp; WMS Custody
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('reviews')}
+            className={`border-b-2 py-4 px-4 text-xs font-bold transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'reviews'
+                ? 'border-blue-600 text-blue-600 bg-white'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" />
+            <span>Customer Reviews ({reviewsData.count || 0})</span>
           </button>
         </div>
 
@@ -1056,12 +1172,49 @@ function ProductDetailPage() {
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-xs">
                 <div className="flex justify-between py-2 border-b border-slate-100">
                   <dt className="text-slate-400 font-medium">Category</dt>
-                  <dd className="font-semibold text-slate-800">{product.category || 'General'}</dd>
+                  <dd className="font-semibold text-slate-800">
+                    {product.category || 'General'}
+                    {product.subcategory && ` > ${product.subcategory}`}
+                  </dd>
+                </div>
+                <div className="flex justify-between py-2 border-b border-slate-100">
+                  <dt className="text-slate-400 font-medium">Condition</dt>
+                  <dd className="font-semibold text-emerald-700">{product.condition || 'Brand New'}</dd>
                 </div>
                 <div className="flex justify-between py-2 border-b border-slate-100">
                   <dt className="text-slate-400 font-medium">Brand</dt>
                   <dd className="font-semibold text-slate-800">{product.brand || 'Unbranded'}</dd>
                 </div>
+                {product.itemType && (
+                  <div className="flex justify-between py-2 border-b border-slate-100">
+                    <dt className="text-slate-400 font-medium">Sport / Activity / Type</dt>
+                    <dd className="font-semibold text-slate-800">{product.itemType}</dd>
+                  </div>
+                )}
+                {product.color && (
+                  <div className="flex justify-between py-2 border-b border-slate-100">
+                    <dt className="text-slate-400 font-medium">Color</dt>
+                    <dd className="font-semibold text-slate-800">{product.color}</dd>
+                  </div>
+                )}
+                {product.material && (
+                  <div className="flex justify-between py-2 border-b border-slate-100">
+                    <dt className="text-slate-400 font-medium">Material</dt>
+                    <dd className="font-semibold text-slate-800">{product.material}</dd>
+                  </div>
+                )}
+                {product.country && (
+                  <div className="flex justify-between py-2 border-b border-slate-100">
+                    <dt className="text-slate-400 font-medium">Country/Region of Origin</dt>
+                    <dd className="font-semibold text-slate-800">{product.country}</dd>
+                  </div>
+                )}
+                {product.mpn && (
+                  <div className="flex justify-between py-2 border-b border-slate-100">
+                    <dt className="text-slate-400 font-medium">MPN</dt>
+                    <dd className="font-mono text-slate-700">{product.mpn}</dd>
+                  </div>
+                )}
                 <div className="flex justify-between py-2 border-b border-slate-100">
                   <dt className="text-slate-400 font-medium">Model / SKU</dt>
                   <dd className="font-mono font-semibold text-slate-800">{product.sku || '—'}</dd>
@@ -1069,6 +1222,18 @@ function ProductDetailPage() {
                 <div className="flex justify-between py-2 border-b border-slate-100">
                   <dt className="text-slate-400 font-medium">Barcode / UPC</dt>
                   <dd className="font-mono text-slate-700">{product.barcode || 'N/A'}</dd>
+                </div>
+                <div className="flex justify-between py-2 border-b border-slate-100">
+                  <dt className="text-slate-400 font-medium">Handling Time</dt>
+                  <dd className="font-semibold text-slate-800">{product.handlingTime || '1 business day'}</dd>
+                </div>
+                <div className="flex justify-between py-2 border-b border-slate-100">
+                  <dt className="text-slate-400 font-medium">Delivery Guarantee</dt>
+                  <dd className="font-semibold text-emerald-700">
+                    {isWms || product.fulfillBy === 'warehouse'
+                      ? '1 Day (WMS Express Delivery)'
+                      : product.deliveryTime || '2 - 3 business days'}
+                  </dd>
                 </div>
                 <div className="flex justify-between py-2 border-b border-slate-100">
                   <dt className="text-slate-400 font-medium">Item Weight</dt>
@@ -1115,6 +1280,216 @@ function ProductDetailPage() {
                       : 'Vendor Stock Location'}
                   </strong>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'reviews' && (
+            <div className="space-y-8">
+              {/* Top Ratings & Delivery Score Overview */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 rounded-2xl border border-slate-200/90 bg-linear-to-br from-slate-50 via-white to-amber-50/30 p-6 shadow-2xs">
+                {/* 1. Overall Product Rating */}
+                <div className="flex flex-col items-center justify-center text-center p-4 rounded-xl border border-slate-100 bg-white shadow-2xs">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Product Quality Rating
+                  </span>
+                  <div className="mt-2 text-4xl font-black text-slate-900 tracking-tight">
+                    {reviewsData.stats.averageRating > 0
+                      ? reviewsData.stats.averageRating.toFixed(1)
+                      : product.averageRating > 0
+                      ? Number(product.averageRating).toFixed(1)
+                      : '0.0'}
+                    <span className="text-lg font-semibold text-slate-400"> / 5.0</span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => {
+                      const avg = reviewsData.stats.averageRating || product.averageRating || 0
+                      return (
+                        <Star
+                          key={star}
+                          className={`h-5 w-5 ${
+                            star <= Math.round(avg)
+                              ? 'fill-amber-400 text-amber-500'
+                              : 'fill-slate-100 text-slate-300'
+                          }`}
+                        />
+                      )
+                    })}
+                  </div>
+                  <span className="mt-2 text-xs text-slate-500">
+                    Based on <strong className="text-slate-800">{reviewsData.count || 0}</strong> verified buyer reviews
+                  </span>
+                </div>
+
+                {/* 2. Supplier Delivery Performance */}
+                <div className="flex flex-col items-center justify-center text-center p-4 rounded-xl border border-slate-100 bg-white shadow-2xs">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Supplier Delivery Performance
+                  </span>
+                  <div className="mt-2 text-4xl font-black text-emerald-700 tracking-tight">
+                    {reviewsData.stats.onTimeDeliveryPercent ?? 100}%
+                  </div>
+                  <div className="mt-2 flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                    <Truck className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>On-Time Delivery Rate</span>
+                  </div>
+                  <span className="mt-2 text-xs text-slate-500">
+                    Average Delivery Speed:{' '}
+                    <strong className="text-slate-800">
+                      {reviewsData.stats.deliveryRatingAverage > 0
+                        ? `${reviewsData.stats.deliveryRatingAverage} / 5.0`
+                        : '5.0 / 5.0'}
+                    </strong>
+                  </span>
+                </div>
+
+                {/* 3. Star Distribution Bars */}
+                <div className="flex flex-col justify-center p-4 rounded-xl border border-slate-100 bg-white shadow-2xs">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                    Rating Breakdown
+                  </span>
+                  <div className="space-y-1.5">
+                    {[5, 4, 3, 2, 1].map((star) => {
+                      const starCount = reviewsData.stats.distribution?.[star] || 0
+                      const pct = reviewsData.count > 0 ? Math.round((starCount / reviewsData.count) * 100) : 0
+                      return (
+                        <div key={star} className="flex items-center gap-2 text-xs">
+                          <span className="w-6 font-semibold text-slate-600 flex items-center gap-0.5">
+                            {star} <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-500" />
+                          </span>
+                          <div className="h-2 flex-1 rounded-full bg-slate-100 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-amber-400 transition-all duration-500"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="w-8 text-right font-mono text-[11px] text-slate-400">
+                            {pct}%
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Reviews List */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Verified Customer Reviews ({reviewsData.count})
+                  </h3>
+                  <span className="text-xs text-slate-400">
+                    Delivered orders par customers ka feedback
+                  </span>
+                </div>
+
+                {loadingReviews ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((n) => (
+                      <div key={n} className="h-24 rounded-xl bg-slate-50 animate-pulse" />
+                    ))}
+                  </div>
+                ) : reviewsData.data.length === 0 ? (
+                  <div className="rounded-2xl border border-slate-200/80 bg-slate-50/60 p-8 text-center">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600 mb-3">
+                      <Star className="h-6 w-6 fill-amber-500" />
+                    </div>
+                    <h4 className="text-sm font-bold text-slate-800">No Reviews Yet</h4>
+                    <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
+                      Is product par abhi tak koi customer review nahi mila. Jab aap ye product order karenge aur parcel deliver ho jayega, to system aapko supplier aur product rating dene ko kahega jo yahan show hogi.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {reviewsData.data.map((rev) => (
+                      <div
+                        key={rev.id || rev._id}
+                        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs hover:shadow-sm transition-all space-y-3"
+                      >
+                        {/* Top: Reviewer Name & Badges */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-linear-to-br from-indigo-500 to-blue-600 text-white font-bold text-xs shadow-2xs">
+                              {(rev.reviewerName || 'B').charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <h5 className="text-xs font-bold text-slate-900">
+                                  {rev.reviewerName || 'Verified Buyer'}
+                                </h5>
+                                <span className="inline-flex items-center gap-0.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                                  <Check className="h-2.5 w-2.5" /> Verified Order
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-slate-400">
+                                {rev.createdAt
+                                  ? new Date(rev.createdAt).toLocaleDateString(undefined, {
+                                      year: 'numeric',
+                                      month: 'short',
+                                      day: 'numeric',
+                                    })
+                                  : 'Recently'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Delivered On-Time Badge */}
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                              rev.deliveredOnTime
+                                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                : 'bg-rose-50 text-rose-800 border border-rose-200'
+                            }`}
+                          >
+                            <Truck className="h-3 w-3" />
+                            {rev.deliveredOnTime ? 'On Time' : 'Delayed'}
+                          </span>
+                        </div>
+
+                        {/* Star Ratings Row */}
+                        <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-slate-100 text-xs">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[11px] font-medium text-slate-400">Quality:</span>
+                            <div className="flex items-center">
+                              {[1, 2, 3, 4, 5].map((s) => (
+                                <Star
+                                  key={s}
+                                  className={`h-3.5 w-3.5 ${
+                                    s <= (rev.productRating || 5)
+                                      ? 'fill-amber-400 text-amber-500'
+                                      : 'fill-slate-100 text-slate-300'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                            <span className="font-bold text-slate-800 text-[11px]">
+                              {rev.productRating || 5}/5
+                            </span>
+                          </div>
+
+                          <span className="text-slate-200">|</span>
+
+                          <div className="flex items-center gap-1">
+                            <span className="text-[11px] font-medium text-slate-400">Delivery:</span>
+                            <span className="font-bold text-indigo-700 text-[11px]">
+                              ⚡ {rev.deliveryRating || 5}/5
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Customer Feedback Comment */}
+                        {rev.comment ? (
+                          <p className="text-xs text-slate-700 leading-relaxed bg-slate-50/60 p-2.5 rounded-xl border border-slate-100">
+                            &ldquo;{rev.comment}&rdquo;
+                          </p>
+                        ) : (
+                          <p className="text-xs text-slate-400 italic">No written comment provided.</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

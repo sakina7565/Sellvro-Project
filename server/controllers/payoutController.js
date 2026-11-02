@@ -425,7 +425,7 @@ export const getPendingWeeklyPayouts = async (_req, res) => {
         } else if (mAmount > 0) {
           status = 'Ready for Saturday Release'
         } else if (imAmount > 0 && pAmount > 0) {
-          status = 'Partially Paid (Awaiting Delivery)'
+          status = 'Partially Paid (Pending Delivery)'
         } else if (imAmount > 0) {
           status = 'Pending Delivery'
         } else if (pAmount > 0) {
@@ -656,7 +656,7 @@ export const getSupplierMonthlyHistory = async (req, res) => {
       } else if (g.matureAmount > 0) {
         payoutStatus = 'Mature (Ready for Saturday Release)'
       } else if (g.immatureAmount > 0) {
-        payoutStatus = 'Awaiting Delivery'
+        payoutStatus = 'Pending Delivery'
       }
 
       // Group orders of this month into Weekly cycles (ending Saturday)
@@ -737,7 +737,7 @@ export const getSupplierMonthlyHistory = async (req, res) => {
           if (mAmount > 0) {
             wStatus = 'Mature (Ready for Saturday Release)'
           } else if (imAmount > 0) {
-            wStatus = 'Awaiting Delivery'
+            wStatus = 'Pending Delivery'
           } else if (pAmount > 0) {
             wStatus = 'Paid'
           }

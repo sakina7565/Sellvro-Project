@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Mail, Lock, ShieldAlert } from 'lucide-react'
+import { Mail, Lock, ShieldAlert, Warehouse } from 'lucide-react'
 import AuthLayout from '../components/layout/AuthLayout.jsx'
 import Input from '../components/ui/Input.jsx'
 import Checkbox from '../components/ui/Checkbox.jsx'
@@ -72,6 +72,23 @@ function LoginPage() {
       <p className="mt-1 text-center text-sm text-slate-500">Please sign in to your Ezone account</p>
 
       <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+        {/* Important Notice for WMS Suppliers */}
+        <div className="rounded-xl border border-primary-200 bg-linear-to-r from-primary-50/90 via-sky-50/70 to-primary-50/90 p-3.5 shadow-2xs">
+          <div className="flex items-start gap-2.5">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary-600 text-white shadow-2xs mt-0.5">
+              <Warehouse className="h-4 w-4" />
+            </div>
+            <div className="text-xs leading-relaxed text-slate-700">
+              <span className="font-bold text-primary-950 block text-[12px]">
+                Important Notice for WMS Suppliers:
+              </span>
+              <p className="mt-0.5 text-slate-700">
+                If you are a registered <strong>WMS (Warehouse)</strong> supplier, please log in using your <strong>identical WMS email and password</strong>. Logging in with different credentials will prevent your warehouse products and inventory details from syncing.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Info message if redirected from an order/checkout action */}
         {location.state?.message && !error && !isAdminError && (
           <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs text-blue-900 font-medium">

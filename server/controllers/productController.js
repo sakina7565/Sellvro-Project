@@ -51,16 +51,56 @@ function readProductFields(body) {
     (fulfillBy === '' &&
       (body.inWarehouse === true || body.inWarehouse === 'true' || body.inWarehouse === '1'))
 
+  let itemSpecifics = {}
+  if (body.itemSpecifics) {
+    try {
+      itemSpecifics =
+        typeof body.itemSpecifics === 'string'
+          ? JSON.parse(body.itemSpecifics)
+          : body.itemSpecifics
+    } catch {
+      itemSpecifics = {}
+    }
+  }
+
+  let variations = []
+  if (body.variations) {
+    try {
+      variations =
+        typeof body.variations === 'string'
+          ? JSON.parse(body.variations)
+          : body.variations
+    } catch {
+      variations = []
+    }
+  }
+
+  const deliveryTime =
+    fulfillBy === 'warehouse' || inWarehouse
+      ? '1 Day (WMS Express Delivery)'
+      : String(body.deliveryTime || '2-3 Days').trim()
+
   return {
     name: String(body.name || '').trim(),
     sku: body.sku,
     category: String(body.category || '').trim(),
+    subcategory: String(body.subcategory || '').trim(),
     brand: String(body.brand || '').trim(),
     description: String(body.description || '').trim(),
     price: Number(body.price),
     quantity: Number(body.quantity || 0),
     fulfillBy,
     inWarehouse,
+    handlingTime: String(body.handlingTime || '1 business day').trim(),
+    deliveryTime,
+    condition: String(body.condition || 'Brand New').trim(),
+    color: String(body.color || '').trim(),
+    material: String(body.material || '').trim(),
+    mpn: String(body.mpn || '').trim(),
+    itemType: String(body.itemType || '').trim(),
+    numItemsInSet: String(body.numItemsInSet || '1').trim(),
+    itemSpecifics,
+    variations,
     location: String(body.location || '').trim(),
     country: String(body.country || '').trim(),
     barcode: String(body.barcode || '').trim(),
@@ -82,6 +122,10 @@ export const createProduct = async (req, res) => {
 
     if (!fields.name || !fields.category) {
       return res.status(400).json({ message: 'Product name and category are required.' })
+    }
+
+    if (!asDraft && !fields.subcategory) {
+      return res.status(400).json({ message: 'Subcategory is required. Please select a subcategory.' })
     }
 
     if (!asDraft && (!fields.fulfillBy || !['warehouse', 'self'].includes(fields.fulfillBy))) {
@@ -114,6 +158,7 @@ export const createProduct = async (req, res) => {
       fields.commission = wmsFee
       fields.isWmsVerified = true
       fields.wmsVerifiedAt = new Date()
+      fields.deliveryTime = '1 Day (WMS Express Delivery)'
     } else if (fields.fulfillBy === 'self' || req.user.role === 'supplier') {
       fields.commission = adminMarketplaceFee
       fields.isWmsVerified = false
@@ -126,13 +171,13 @@ export const createProduct = async (req, res) => {
       : []
     const images = uploaded.length > 0 ? uploaded : fields.image ? [fields.image] : []
 
-    // Supplier restriction: Must upload at least 2 images
-    if (images.length < 2) {
+    // 6 images mandatory out of 10 (unless draft)
+    if (!asDraft && images.length < 6) {
       return res.status(400).json({
         message:
           images.length === 0
-            ? 'Please upload at least 2 images for the product. Multiple images are required.'
-            : 'Please upload at least 2 images. Products cannot be submitted with only 1 image.',
+            ? 'Please upload at least 6 images/videos for the product. Minimum 6 images are mandatory out of 10.'
+            : `Please upload at least 6 images/videos. Currently uploaded: ${images.length} of 6 mandatory.`,
       })
     }
 
@@ -445,7 +490,7 @@ export const listMyProducts = async (req, res) => {
 
 export const listApprovedProducts = async (_req, res) => {
   try {
-    const products = await Product.find({ status: 'active' })
+    const products = await Product.find({ status: { $in: ['active', 'approved'] } })
       .populate('supplier', 'fullName email phone clientId')
       .sort({ createdAt: -1 })
 
@@ -458,7 +503,8 @@ export const listApprovedProducts = async (_req, res) => {
 
 export const listAllProducts = async (_req, res) => {
   try {
-    const products = await Product.find()
+    // Drafts are private to the supplier and never show in admin product list
+    const products = await Product.find({ status: { $ne: 'draft' } })
       .populate('supplier', 'fullName email phone clientId')
       .sort({ createdAt: -1 })
 
@@ -469,11 +515,11 @@ export const listAllProducts = async (_req, res) => {
   }
 }
 
-const APPROVABLE_STATUSES = ['draft', 'pending_approval', 'rejected']
-/** Approved products, or pending/draft when admin chooses Activate / Approve & Activate. */
-const ACTIVATABLE_STATUSES = ['approved', 'pending_approval', 'draft', 'rejected']
-const DEACTIVATABLE_STATUSES = ['active']
-const REJECTABLE_STATUSES = ['draft', 'pending_approval', 'approved', 'active']
+const APPROVABLE_STATUSES = ['draft', 'pending_approval', 'rejected', 'inactive', 'deactivated']
+/** Active / approved or deactivated products. */
+const ACTIVATABLE_STATUSES = ['approved', 'active', 'inactive', 'deactivated', 'pending_approval']
+const DEACTIVATABLE_STATUSES = ['active', 'approved']
+const REJECTABLE_STATUSES = ['draft', 'pending_approval', 'approved', 'active', 'inactive', 'deactivated']
 
 export const getProductById = async (req, res) => {
   try {
@@ -588,7 +634,7 @@ export const getStoreDetails = async (req, res) => {
 
     const products = await Product.find({
       supplier: supplierId,
-      status: 'active',
+      status: { $in: ['active', 'approved'] },
     }).sort({ createdAt: -1 })
 
     let followersCount = 0
@@ -687,12 +733,8 @@ export const approveProduct = async (req, res) => {
       })
     }
 
-    const alsoActivate =
-      req.body.activate === true ||
-      req.body.activate === 'true' ||
-      req.body.activate === '1'
-
-    product.status = alsoActivate ? 'active' : 'approved'
+    // Direct approval makes the product approved and live on marketplace immediately!
+    product.status = 'approved'
     await product.save()
 
     createNotification({
@@ -700,14 +742,12 @@ export const approveProduct = async (req, res) => {
       targetRole: 'supplier',
       type: 'product',
       title: 'Product Approved',
-      message: `Your product "${product.name}" was approved${alsoActivate ? ' and activated on the marketplace' : ''}.`,
+      message: `Your product "${product.name}" was approved and is now live on the marketplace.`,
       link: '/supplier/products',
     })
 
     return res.json({
-      message: alsoActivate
-        ? 'Product approved and activated. Users can now buy it on the marketplace.'
-        : 'Product approved. Click Activate to make it visible on the marketplace.',
+      message: 'Product approved and is now live on the marketplace.',
       product: product.toSafeObject(),
     })
   } catch (error) {
@@ -725,6 +765,26 @@ export const activateProduct = async (req, res) => {
       return res.status(404).json({ message: 'Product not found.' })
     }
 
+    // Permission check: admin or owner supplier
+    const isOwnerSupplier =
+      req.user &&
+      req.user.role === 'supplier' &&
+      (product.supplier?._id ? product.supplier._id.equals(req.user._id) : product.supplier.equals(req.user._id))
+
+    if (req.user.role !== 'admin' && !isOwnerSupplier) {
+      return res.status(403).json({ message: 'You can only activate your own products.' })
+    }
+
+    if (isOwnerSupplier && product.status === 'pending_approval') {
+      return res.status(400).json({ message: 'This product is pending admin approval and cannot be activated yet.' })
+    }
+    if (isOwnerSupplier && product.status === 'draft') {
+      return res.status(400).json({ message: 'Please submit this draft product for admin approval first.' })
+    }
+    if (isOwnerSupplier && product.status === 'rejected') {
+      return res.status(400).json({ message: 'This product was rejected by admin. Please edit and resubmit.' })
+    }
+
     if (!ACTIVATABLE_STATUSES.includes(product.status)) {
       return res.status(400).json({
         message: `Cannot activate a product with status "${product.status}".`,
@@ -735,16 +795,16 @@ export const activateProduct = async (req, res) => {
       product.isWmsVerified || product.inWarehouse || product.fulfillBy === 'warehouse',
     )
     if (!isWms && (!product.commission || Number(product.commission) <= 0)) {
-      return res.status(400).json({
-        message: 'Commission is required. You must set a commission greater than 0 before activating this product.',
-      })
+      // Auto-assign default marketplace fee if none set
+      const walletSetting = await WalletSetting.getOrCreate()
+      product.commission = Number(walletSetting.marketplaceFeePercent ?? 8)
     }
 
-    product.status = 'active'
+    product.status = 'approved'
     await product.save()
 
     return res.json({
-      message: 'Product activated. Users can now buy it on the marketplace.',
+      message: 'Product activated. It is now live on the marketplace.',
       product: product.toSafeObject(),
     })
   } catch (error) {
@@ -759,17 +819,27 @@ export const deactivateProduct = async (req, res) => {
       return res.status(404).json({ message: 'Product not found.' })
     }
 
+    // Permission check: admin or owner supplier
+    const isOwnerSupplier =
+      req.user &&
+      req.user.role === 'supplier' &&
+      (product.supplier?._id ? product.supplier._id.equals(req.user._id) : product.supplier.equals(req.user._id))
+
+    if (req.user.role !== 'admin' && !isOwnerSupplier) {
+      return res.status(403).json({ message: 'You can only deactivate your own products.' })
+    }
+
     if (!DEACTIVATABLE_STATUSES.includes(product.status)) {
       return res.status(400).json({
-        message: `Only active products can be deactivated. Current status: "${product.status}".`,
+        message: `Only active/approved products can be deactivated. Current status: "${product.status}".`,
       })
     }
 
-    product.status = 'approved'
+    product.status = 'inactive'
     await product.save()
 
     return res.json({
-      message: 'Product deactivated. It is no longer visible to buyers.',
+      message: 'Product deactivated. It is temporarily hidden from the marketplace.',
       product: product.toSafeObject(),
     })
   } catch (error) {

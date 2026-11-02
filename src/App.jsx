@@ -53,6 +53,7 @@ import UserWalletPage from './pages/user/WalletPage.jsx'
 import UserDisputesPage from './pages/user/DisputesPage.jsx'
 import UserBusinessReportingPage from './pages/user/BusinessReportingPage.jsx'
 import UserSkuReportingPage from './pages/user/SkuReportingPage.jsx'
+import TrackOrderPage from './pages/public/TrackOrderPage.jsx'
 
 function AdminRoute({ children }) {
   return <ProtectedRoute roles={['admin']}>{children}</ProtectedRoute>
@@ -82,6 +83,8 @@ function App() {
           )
         }
       />
+      <Route path="/track" element={<TrackOrderPage />} />
+      <Route path="/track/:trackingRef" element={<TrackOrderPage />} />
       <Route
         path="/login"
         element={
@@ -151,7 +154,7 @@ function App() {
       <Route path="/admin/supplier/disputes" element={<AdminRoute><SupplierDisputesPage /></AdminRoute>} />
       <Route path="/admin/users/complaines" element={<AdminRoute><UserComplaintsPage /></AdminRoute>} />
       <Route path="/admin/roles" element={<AdminRoute><RolesPage /></AdminRoute>} />
-      <Route path="/admin/users/roles" element={<AdminRoute><CreateUserPage /></AdminRoute>} />
+      <Route path="/admin/users/roles" element={<Navigate to="/admin/accounts" replace />} />
       <Route path="/admin/location" element={<AdminRoute><LocationPage /></AdminRoute>} />
       <Route path="/admin/country" element={<AdminRoute><CountryPage /></AdminRoute>} />
 
@@ -209,15 +212,24 @@ function App() {
       {/* Store removed from user panel - redirect to root */}
       <Route path="/user/store/:supplierId" element={<Navigate to="/" replace />} />
       <Route path="/user/store" element={<Navigate to="/" replace />} />
-      <Route path="/user/checkout/:productId" element={<UserRoute><UserCheckoutPage /></UserRoute>} />
       <Route
-        path="/user/orders/confirmation/:orderId"
-        element={
-          <UserRoute>
-            <UserOrderConfirmationPage />
-          </UserRoute>
-        }
+        path="/checkout"
+        element={isSupplier ? <Navigate to="/supplier/dashboard" replace /> : <UserCheckoutPage />}
       />
+      <Route
+        path="/checkout/:productId"
+        element={isSupplier ? <Navigate to="/supplier/dashboard" replace /> : <UserCheckoutPage />}
+      />
+      <Route
+        path="/user/checkout"
+        element={isSupplier ? <Navigate to="/supplier/dashboard" replace /> : <UserCheckoutPage />}
+      />
+      <Route
+        path="/user/checkout/:productId"
+        element={isSupplier ? <Navigate to="/supplier/dashboard" replace /> : <UserCheckoutPage />}
+      />
+      <Route path="/orders/confirmation/:orderId" element={<UserOrderConfirmationPage />} />
+      <Route path="/user/orders/confirmation/:orderId" element={<UserOrderConfirmationPage />} />
       <Route path="/user/inventory/sku-reporting" element={<UserRoute><UserSkuReportingPage /></UserRoute>} />
       <Route path="/user/products/sku-report" element={<UserRoute><UserSkuReportingPage /></UserRoute>} />
       <Route path="/user/inventory/my-reporting" element={<UserRoute><UserBusinessReportingPage /></UserRoute>} />

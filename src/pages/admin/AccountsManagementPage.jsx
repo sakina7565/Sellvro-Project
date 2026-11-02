@@ -1,22 +1,17 @@
 import { useEffect, useState } from 'react'
 import {
   Users,
-  Building2,
-  User,
+  ShieldCheck,
+  ShieldAlert,
+  UserCheck,
   Plus,
   Search,
-  LogIn,
   Pencil,
   Trash2,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
-  Clock,
-  ShieldCheck,
   RefreshCw,
-  MapPin,
-  DollarSign,
-  ShoppingBag,
+  KeyRound,
 } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
@@ -34,7 +29,7 @@ import DeleteAccountModal from '../../components/admin/DeleteAccountModal.jsx'
 import { adminApi, getErrorMessage } from '../../lib/api.js'
 
 function AccountsManagementPage() {
-  const [activeTab, setActiveTab] = useState('all') // 'all' | 'supplier' | 'user'
+  const [activeTab, setActiveTab] = useState('all') // 'all' | 'super_admin' | 'sub_admin'
   const [statusFilter, setStatusFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -43,15 +38,14 @@ function AccountsManagementPage() {
   const [accounts, setAccounts] = useState([])
   const [stats, setStats] = useState({
     totalAccounts: 0,
-    totalSuppliers: 0,
-    totalUsers: 0,
+    totalStaff: 0,
+    totalSuperAdmins: 0,
+    totalSubAdmins: 0,
     totalApproved: 0,
     totalSuspended: 0,
-    totalPending: 0,
   })
-  const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1 })
+  const [pagination, setPagination] = useState({ page: 1, limit: 25, total: 0, totalPages: 1 })
   const [loading, setLoading] = useState(true)
-  const [actionLoading, setActionLoading] = useState(false)
   const [error, setError] = useState('')
 
   // Modals state
@@ -84,16 +78,16 @@ function AccountsManagementPage() {
       setStats(
         res.stats || {
           totalAccounts: 0,
-          totalSuppliers: 0,
-          totalUsers: 0,
+          totalStaff: 0,
+          totalSuperAdmins: 0,
+          totalSubAdmins: 0,
           totalApproved: 0,
           totalSuspended: 0,
-          totalPending: 0,
         },
       )
       setPagination(res.pagination || { page: 1, limit: 25, total: 0, totalPages: 1 })
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load accounts.'))
+      setError(getErrorMessage(err, 'Failed to load staff accounts.'))
     } finally {
       setLoading(false)
     }
@@ -103,46 +97,33 @@ function AccountsManagementPage() {
     fetchAccounts()
   }, [activeTab, statusFilter, debouncedSearch, page])
 
-  // Impersonate / Login-As action
-  const handleImpersonate = async (account) => {
-    const roleTitle = account.role === 'supplier' ? 'Supplier' : 'Customer'
-    const confirmed = window.confirm(
-      `Login as "${account.fullName}" (${roleTitle})?\n\nYou will be redirected to their portal in Admin Impersonation Mode. You can return to Admin anytime via the banner at the top.`,
-    )
-    if (!confirmed) return
-
-    setActionLoading(true)
-    try {
-      const res = await adminApi.impersonate(account.id)
-      window.location.href = res.redirectUrl || (account.role === 'supplier' ? '/supplier/dashboard' : '/user/dashboard')
-    } catch (err) {
-      alert(getErrorMessage(err, 'Failed to initiate login.'))
-      setActionLoading(false)
-    }
-  }
-
   // Quick toggle status (Suspend / Activate)
   const handleToggleStatus = async (account) => {
     const nextStatus = account.status === 'suspended' ? 'approved' : 'suspended'
+    const actionName = nextStatus === 'suspended' ? 'suspend' : 'reinstate'
+    const confirmed = window.confirm(
+      `Are you sure you want to ${actionName} "${account.fullName}"?\n${
+        nextStatus === 'suspended'
+          ? 'They will be immediately blocked from logging into the administrative portal.'
+          : 'Their administrative portal access will be restored.'
+      }`,
+    )
+    if (!confirmed) return
+
     try {
       await adminApi.updateAccount(account.id, { status: nextStatus })
       fetchAccounts()
     } catch (err) {
-      alert(getErrorMessage(err, 'Failed to update status.'))
+      alert(getErrorMessage(err, 'Failed to update staff status.'))
     }
   }
 
   const getStatusBadge = (status) => {
     switch (status) {
       case 'approved':
-        return <Badge tone="success">Approved</Badge>
-      case 'pending_approval':
-      case 'pending_details':
-        return <Badge tone="warning">Pending</Badge>
+        return <Badge tone="success">Active</Badge>
       case 'suspended':
         return <Badge tone="danger">Suspended</Badge>
-      case 'rejected':
-        return <Badge tone="danger">Rejected</Badge>
       default:
         return <Badge tone="muted">{status}</Badge>
     }
@@ -153,8 +134,8 @@ function AccountsManagementPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
         <div>
           <PageHeader
-            title="User &amp; Supplier Management"
-            subtitle="Perform CRUD operations on customer and supplier accounts, manage status, and login directly as any user."
+            title="Staff Accounts Management"
+            subtitle="Manage internal administrators, sub-admins, and managers. Assign roles, manage permissions, and control access."
           />
         </div>
         <div className="flex items-center gap-2">
@@ -175,7 +156,7 @@ function AccountsManagementPage() {
             className="inline-flex items-center gap-1.5 shadow-sm"
           >
             <Plus className="h-4 w-4" />
-            <span>Add Account</span>
+            <span>Add Staff Account</span>
           </Button>
         </div>
       </div>
@@ -188,8 +169,20 @@ function AccountsManagementPage() {
               <Users className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-medium text-slate-500">Total Accounts</p>
-              <p className="text-xl font-bold text-slate-900">{stats.totalAccounts}</p>
+              <p className="text-xs font-medium text-slate-500">Total Staff</p>
+              <p className="text-xl font-bold text-slate-900">{stats.totalStaff ?? stats.totalAccounts ?? 0}</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-4 shadow-soft">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-slate-500">Super Admins</p>
+              <p className="text-xl font-bold text-purple-700">{stats.totalSuperAdmins ?? 0}</p>
             </div>
           </div>
         </Card>
@@ -197,11 +190,11 @@ function AccountsManagementPage() {
         <Card className="p-4 shadow-soft">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-              <Building2 className="h-5 w-5" />
+              <UserCheck className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-medium text-slate-500">Suppliers</p>
-              <p className="text-xl font-bold text-indigo-700">{stats.totalSuppliers}</p>
+              <p className="text-xs font-medium text-slate-500">Sub-Admins</p>
+              <p className="text-xl font-bold text-indigo-700">{stats.totalSubAdmins ?? 0}</p>
             </div>
           </div>
         </Card>
@@ -209,23 +202,11 @@ function AccountsManagementPage() {
         <Card className="p-4 shadow-soft">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-              <User className="h-5 w-5" />
+              <CheckCircle2 className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-medium text-slate-500">Customers</p>
-              <p className="text-xl font-bold text-emerald-700">{stats.totalUsers}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-4 shadow-soft">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
-              <Clock className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-slate-500">Pending</p>
-              <p className="text-xl font-bold text-amber-700">{stats.totalPending}</p>
+              <p className="text-xs font-medium text-slate-500">Active</p>
+              <p className="text-xl font-bold text-emerald-700">{stats.totalApproved ?? 0}</p>
             </div>
           </div>
         </Card>
@@ -233,11 +214,11 @@ function AccountsManagementPage() {
         <Card className="p-4 shadow-soft">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
-              <ShieldCheck className="h-5 w-5" />
+              <ShieldAlert className="h-5 w-5" />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-medium text-slate-500">Suspended</p>
-              <p className="text-xl font-bold text-rose-700">{stats.totalSuspended}</p>
+              <p className="text-xl font-bold text-rose-700">{stats.totalSuspended ?? 0}</p>
             </div>
           </div>
         </Card>
@@ -260,37 +241,37 @@ function AccountsManagementPage() {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              All Accounts ({stats.totalAccounts})
+              All Staff ({stats.totalStaff ?? stats.totalAccounts ?? 0})
             </button>
             <button
               type="button"
               onClick={() => {
-                setActiveTab('supplier')
+                setActiveTab('super_admin')
                 setPage(1)
               }}
               className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
-                activeTab === 'supplier'
+                activeTab === 'super_admin'
+                  ? 'bg-white text-purple-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              <span>Super Admins ({stats.totalSuperAdmins ?? 0})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('sub_admin')
+                setPage(1)
+              }}
+              className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                activeTab === 'sub_admin'
                   ? 'bg-white text-indigo-700 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Building2 className="h-3.5 w-3.5" />
-              <span>Suppliers ({stats.totalSuppliers})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('user')
-                setPage(1)
-              }}
-              className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all ${
-                activeTab === 'user'
-                  ? 'bg-white text-emerald-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <User className="h-3.5 w-3.5" />
-              <span>Customers ({stats.totalUsers})</span>
+              <UserCheck className="h-3.5 w-3.5" />
+              <span>Sub-Admins &amp; Managers ({stats.totalSubAdmins ?? 0})</span>
             </button>
           </div>
 
@@ -300,7 +281,7 @@ function AccountsManagementPage() {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
               <input
                 type="search"
-                placeholder="Search by name, email, city…"
+                placeholder="Search staff by name, email, or role…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-9 pr-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-primary focus:bg-white focus:outline-none"
@@ -316,10 +297,8 @@ function AccountsManagementPage() {
               className="h-9 rounded-xl border border-slate-200 bg-slate-50/50 px-3 text-xs text-slate-700 focus:border-primary focus:bg-white focus:outline-none"
             >
               <option value="all">All Statuses</option>
-              <option value="approved">Approved</option>
-              <option value="pending_approval">Pending Approval</option>
+              <option value="approved">Active</option>
               <option value="suspended">Suspended</option>
-              <option value="rejected">Rejected</option>
             </select>
           </div>
         </div>
@@ -332,34 +311,32 @@ function AccountsManagementPage() {
 
         {/* Desktop Data Table */}
         <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[900px] text-left text-sm">
+          <table className="w-full min-w-[850px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs font-semibold text-slate-400">
-                <th className="px-5 py-3">Account / Contact</th>
-                <th className="px-4 py-3">Role</th>
-                <th className="px-4 py-3">Business / Location</th>
-                <th className="px-4 py-3">Orders</th>
-                <th className="px-4 py-3">Wallet</th>
-                <th className="px-4 py-3">Joined</th>
+                <th className="px-5 py-3">Staff Member</th>
+                <th className="px-4 py-3">Assigned Role</th>
+                <th className="px-4 py-3">Privileges / Access</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Joined</th>
                 <th className="px-5 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-5 py-12 text-center text-xs text-slate-400">
+                  <td colSpan={6} className="px-5 py-12 text-center text-xs text-slate-400">
                     <RefreshCw className="mx-auto mb-2 h-5 w-5 animate-spin text-slate-300" />
-                    Loading accounts…
+                    Loading staff accounts…
                   </td>
                 </tr>
               ) : accounts.length === 0 ? (
                 <EmptyState
-                  message="No matching accounts found."
-                  colSpan={8}
+                  message="No matching staff accounts found."
+                  colSpan={6}
                   action={
                     <Button size="sm" variant="outline" onClick={() => setAddModalOpen(true)}>
-                      <Plus className="mr-1 h-3.5 w-3.5" /> Add First Account
+                      <Plus className="mr-1 h-3.5 w-3.5" /> Add Staff Member
                     </Button>
                   }
                 />
@@ -370,12 +347,12 @@ function AccountsManagementPage() {
                       <div className="flex items-center gap-3">
                         <div
                           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold ${
-                            acc.role === 'supplier'
-                              ? 'bg-indigo-100 text-indigo-700'
-                              : 'bg-emerald-100 text-emerald-700'
+                            acc.isSuperAdmin
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-indigo-100 text-indigo-700'
                           }`}
                         >
-                          {acc.fullName ? acc.fullName.charAt(0).toUpperCase() : 'U'}
+                          {acc.fullName ? acc.fullName.charAt(0).toUpperCase() : 'A'}
                         </div>
                         <div className="min-w-0">
                           <p className="font-semibold text-slate-900 truncate">{acc.fullName}</p>
@@ -385,58 +362,31 @@ function AccountsManagementPage() {
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3.5">
-                      {acc.role === 'supplier' ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 border border-indigo-100">
-                          <Building2 className="h-3 w-3" /> Supplier
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 border border-emerald-100">
-                          <User className="h-3 w-3" /> Customer
-                        </span>
-                      )}
+                      <Badge tone={acc.isSuperAdmin ? 'solid' : 'primary'}>
+                        {acc.roleLabel}
+                      </Badge>
                     </td>
 
                     <td className="px-4 py-3.5 text-xs text-slate-600">
-                      <p className="font-medium text-slate-800 truncate">
-                        {acc.businessProfile?.businessName || '—'}
+                      <p className="font-medium text-slate-800">
+                        {acc.isSuperAdmin
+                          ? 'Full Root Access (All Permissions)'
+                          : `${acc.permissionsCount ?? 0} Permissions Assigned`}
                       </p>
-                      <p className="text-slate-400 truncate">{acc.businessProfile?.location || '—'}</p>
+                      <p className="text-[11px] text-slate-400 truncate">{acc.roleDescription}</p>
                     </td>
-
-                    <td className="whitespace-nowrap px-4 py-3.5 text-xs font-medium text-slate-700">
-                      <span className="inline-flex items-center gap-1">
-                        <ShoppingBag className="h-3 w-3 text-slate-400" />
-                        {acc.ordersCount || 0}
-                      </span>
-                    </td>
-
-                    <td className="whitespace-nowrap px-4 py-3.5 text-xs font-bold text-slate-800">
-                      ${acc.walletBalance?.toFixed(2) ?? '0.00'}
-                    </td>
-
-                    <td className="whitespace-nowrap px-4 py-3.5 text-xs text-slate-400">{acc.joined}</td>
 
                     <td className="whitespace-nowrap px-4 py-3.5">{getStatusBadge(acc.status)}</td>
 
+                    <td className="whitespace-nowrap px-4 py-3.5 text-xs text-slate-400">{acc.joined}</td>
+
                     <td className="whitespace-nowrap px-5 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        {/* Prominent Login-As Impersonation Button */}
-                        <button
-                          type="button"
-                          disabled={actionLoading}
-                          onClick={() => handleImpersonate(acc)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-semibold text-primary transition-all hover:bg-primary hover:text-white disabled:opacity-50 cursor-pointer shadow-2xs"
-                          title={`Log in as ${acc.fullName}`}
-                        >
-                          <LogIn className="h-3.5 w-3.5" />
-                          <span>Login As</span>
-                        </button>
-
                         {/* Edit Button */}
                         <IconAction
                           icon={Pencil}
                           tone="primary"
-                          aria-label="Edit account"
+                          aria-label="Edit staff account"
                           onClick={() => {
                             setSelectedAccount(acc)
                             setEditModalOpen(true)
@@ -448,14 +398,14 @@ function AccountsManagementPage() {
                           <IconAction
                             icon={CheckCircle2}
                             tone="success"
-                            aria-label="Activate / Reinstate account"
+                            aria-label="Activate staff account"
                             onClick={() => handleToggleStatus(acc)}
                           />
                         ) : (
                           <IconAction
                             icon={XCircle}
                             tone="warning"
-                            aria-label="Suspend account"
+                            aria-label="Suspend staff account"
                             onClick={() => handleToggleStatus(acc)}
                           />
                         )}
@@ -464,7 +414,7 @@ function AccountsManagementPage() {
                         <IconAction
                           icon={Trash2}
                           tone="danger"
-                          aria-label="Delete account"
+                          aria-label="Delete staff account"
                           onClick={() => {
                             setSelectedAccount(acc)
                             setDeleteModalOpen(true)
@@ -482,9 +432,9 @@ function AccountsManagementPage() {
         {/* Mobile View */}
         <div className="divide-y divide-slate-100 md:hidden">
           {loading ? (
-            <p className="px-5 py-8 text-center text-xs text-slate-400">Loading accounts…</p>
+            <p className="px-5 py-8 text-center text-xs text-slate-400">Loading staff accounts…</p>
           ) : accounts.length === 0 ? (
-            <p className="px-5 py-8 text-center text-xs text-slate-400">No accounts found.</p>
+            <p className="px-5 py-8 text-center text-xs text-slate-400">No staff accounts found.</p>
           ) : (
             accounts.map((acc) => (
               <MobileCard
@@ -494,18 +444,10 @@ function AccountsManagementPage() {
                 badge={getStatusBadge(acc.status)}
                 actions={
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleImpersonate(acc)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-primary bg-primary px-2.5 py-1 text-xs font-bold text-white shadow-xs"
-                    >
-                      <LogIn className="h-3.5 w-3.5" />
-                      <span>Login As</span>
-                    </button>
                     <IconAction
                       icon={Pencil}
                       tone="primary"
-                      aria-label="Edit account"
+                      aria-label="Edit staff account"
                       onClick={() => {
                         setSelectedAccount(acc)
                         setEditModalOpen(true)
@@ -514,7 +456,7 @@ function AccountsManagementPage() {
                     <IconAction
                       icon={Trash2}
                       tone="danger"
-                      aria-label="Delete account"
+                      aria-label="Delete staff account"
                       onClick={() => {
                         setSelectedAccount(acc)
                         setDeleteModalOpen(true)
@@ -523,9 +465,11 @@ function AccountsManagementPage() {
                   </div>
                 }
               >
-                <DetailRow label="Role" value={acc.role === 'supplier' ? 'Supplier' : 'Customer'} />
-                <DetailRow label="Location" value={acc.businessProfile?.location || '—'} />
-                <DetailRow label="Balance" value={`$${acc.walletBalance?.toFixed(2) ?? '0.00'}`} />
+                <DetailRow label="Role" value={acc.roleLabel} />
+                <DetailRow
+                  label="Permissions"
+                  value={acc.isSuperAdmin ? 'Full Root Access' : `${acc.permissionsCount ?? 0} Permissions`}
+                />
                 <DetailRow label="Joined" value={acc.joined} />
               </MobileCard>
             ))
@@ -544,12 +488,12 @@ function AccountsManagementPage() {
         />
       </Card>
 
-      {/* Account Modals */}
+      {/* Staff Account Modals */}
       <AddAccountModal
         isOpen={addModalOpen}
         onClose={() => setAddModalOpen(false)}
         onSuccess={fetchAccounts}
-        initialRole={activeTab === 'supplier' ? 'supplier' : 'user'}
+        initialRole="admin"
       />
 
       <EditAccountModal

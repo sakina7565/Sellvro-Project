@@ -9,9 +9,16 @@ const TOKEN_KEY = 'sellvro_token'
 
 function readStoredUser() {
   try {
-    const raw = localStorage.getItem(USER_KEY)
-    return raw ? JSON.parse(raw) : null
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(USER_KEY) : null
+    if (!raw || raw === 'undefined' || raw === 'null') {
+      if (typeof window !== 'undefined') localStorage.removeItem(USER_KEY)
+      return null
+    }
+    return JSON.parse(raw)
   } catch {
+    try {
+      if (typeof window !== 'undefined') localStorage.removeItem(USER_KEY)
+    } catch {}
     return null
   }
 }
@@ -21,9 +28,17 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   const persistUser = useCallback((nextUser) => {
-    if (nextUser) localStorage.setItem(USER_KEY, JSON.stringify(nextUser))
-    else localStorage.removeItem(USER_KEY)
-    setUser(nextUser)
+    if (nextUser && typeof nextUser === 'object' && Object.keys(nextUser).length > 0) {
+      try {
+        localStorage.setItem(USER_KEY, JSON.stringify(nextUser))
+      } catch {}
+      setUser(nextUser)
+    } else {
+      try {
+        localStorage.removeItem(USER_KEY)
+      } catch {}
+      setUser(null)
+    }
   }, [])
 
   const logout = useCallback(async () => {

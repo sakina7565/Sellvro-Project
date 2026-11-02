@@ -131,6 +131,10 @@ function MarketplaceTopBar() {
           )}
 
           <span className="hidden text-slate-300 md:inline">|</span>
+          <Link to="/track" className="hidden text-blue-600 font-semibold hover:text-blue-700 md:inline flex items-center gap-1">
+            <span>Track Order</span>
+          </Link>
+          <span className="hidden text-slate-300 md:inline">|</span>
           <a href="/#deals" className="hidden text-slate-600 hover:text-blue-600 md:inline">
             Daily B2B Deals
           </a>

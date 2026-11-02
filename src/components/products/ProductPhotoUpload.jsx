@@ -17,7 +17,7 @@ function isVideo(file) {
   return false
 }
 
-function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 1, helperText, disabled = false }) {
+function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 6, helperText, disabled = false }) {
   const inputRefs = useRef([])
 
   useEffect(() => {
@@ -79,7 +79,7 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 1, hel
         <div className="flex items-center gap-2">
           <Film className="h-4 w-4 text-teal-600 shrink-0" />
           <span className="font-semibold text-teal-950">
-            {helperText || `Upload up to 10 Product Images & Videos (At least ${minPhotos} photos required)`}
+            {helperText || `Upload up to 10 Product Images & Videos (6 images mandatory out of 10)`}
           </span>
         </div>
         <span
@@ -89,7 +89,7 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 1, hel
               : 'bg-amber-200 text-amber-900'
           }`}
         >
-          {uploadedCount} / {MAX_PHOTOS} uploaded {isRequirementMet ? '✓' : `(min ${minPhotos})`}
+          {uploadedCount} / {MAX_PHOTOS} uploaded {isRequirementMet ? '✓' : `(min ${minPhotos} mandatory)`}
         </span>
       </div>
 

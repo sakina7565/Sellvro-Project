@@ -23,7 +23,7 @@ import BarcodeModal from '../../components/admin/BarcodeModal.jsx'
 import CreateDisputeModal from '../../components/admin/CreateDisputeModal.jsx'
 import { adminApi, getErrorMessage } from '../../lib/api.js'
 import {
-  PRODUCT_STATUS_FILTER_OPTIONS,
+  ADMIN_PRODUCT_STATUS_FILTER_OPTIONS,
   PRODUCT_STATUS_LABEL,
   PRODUCT_STATUS_TONE,
   statusFilterToValue,
@@ -34,7 +34,7 @@ const FILTERS = [
   { label: 'Category' },
   { label: 'Price' },
   { label: 'Location' },
-  { label: 'Product Status', options: PRODUCT_STATUS_FILTER_OPTIONS },
+  { label: 'Product Status', options: ADMIN_PRODUCT_STATUS_FILTER_OPTIONS },
 ]
 
 const TABLE_HEAD = [
@@ -42,7 +42,7 @@ const TABLE_HEAD = [
   'SKU',
   'Category',
   'Stock',
-  'Price & Cut',
+  'Price & Platform Fee',
   'Supplier',
   'Status',
   'Action',
@@ -72,7 +72,8 @@ function ProductsListPage() {
   const [products, setProducts] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState('All Statuses')
+  const [approvingId, setApprovingId] = useState(null)
+  const [statusFilter, setStatusFilter] = useState('All Listings')
   const [searchParams, setSearchParams] = useSearchParams()
   const searchQuery = (searchParams.get('q') || '').trim()
 
@@ -99,12 +100,45 @@ function ProductsListPage() {
     loadProducts()
   }, [])
 
+  const handleApproveProduct = async (product) => {
+    setApprovingId(product.id)
+    setError('')
+    try {
+      await adminApi.approveProduct(product.id, { activate: true })
+      setDisputeSuccessToast(`Product "${product.name}" approved successfully and is now live on marketplace!`)
+      setTimeout(() => setDisputeSuccessToast(''), 4500)
+      await loadProducts()
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to approve product.'))
+    } finally {
+      setApprovingId(null)
+    }
+  }
+
   const filteredProducts = useMemo(() => {
     const statusValue = statusFilterToValue(statusFilter)
     const qLower = searchQuery.toLowerCase()
 
     return products.filter((product) => {
-      if (statusValue && product.status !== statusValue) return false
+      // Drafts belong privately to suppliers and are NEVER visible to admin
+      if (product.status === 'draft') return false
+
+      if (statusValue) {
+        if (statusValue === 'pending_approval') {
+          if (product.status !== 'pending_approval') return false
+        } else if (statusValue === 'active_listing') {
+          const isApproved = product.status === 'approved' || product.status === 'active'
+          const inStock = Number(product.quantity || 0) > 0 && product.status !== 'out_of_stock'
+          if (!isApproved || !inStock) return false
+        } else if (statusValue === 'out_of_stock_listing') {
+          const isZeroStock = Number(product.quantity || 0) <= 0 || product.status === 'out_of_stock'
+          if (!isZeroStock) return false
+        } else if (statusValue === 'deactivated_listing') {
+          if (product.status !== 'inactive' && product.status !== 'deactivated') return false
+        } else if (product.status !== statusValue) {
+          return false
+        }
+      }
       if (qLower) {
         const nameMatch = product.name?.toLowerCase().includes(qLower)
         const skuMatch = product.sku?.toLowerCase().includes(qLower)
@@ -229,11 +263,11 @@ function ProductsListPage() {
                       {product.quantity ?? 0}
                     </td>
 
-                    {/* Price & Cut */}
+                    {/* Price & Platform Fee */}
                     <td className="whitespace-nowrap px-5 py-4">
                       <p className="font-bold text-slate-800">${Number(product.price || 0).toFixed(2)}</p>
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 bg-rose-50 border border-rose-100 rounded px-1.5 py-0.5 mt-0.5" title="Sellvro Marketplace Commission Cut">
-                        Cut: {product.commission || 0}%
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600 bg-rose-50 border border-rose-100 rounded px-1.5 py-0.5 mt-0.5" title="Sellvro Marketplace Platform Fee">
+                        Fee: {product.commission || 0}%
                       </span>
                     </td>
 
@@ -272,9 +306,24 @@ function ProductsListPage() {
                       </div>
                     </td>
 
-                    {/* Action with Edit, Barcode, Details, Disputes */}
+                    {/* Action with Approve (if pending), Edit, Barcode, Details, Disputes */}
                     <td className="whitespace-nowrap px-5 py-4 text-center">
-                      <div className="inline-flex items-center justify-center gap-2.5">
+                      <div className="inline-flex items-center justify-center gap-2">
+                        {/* Quick Approve Button for Pending Products */}
+                        {product.status === 'pending_approval' && (
+                          <button
+                            type="button"
+                            disabled={approvingId === product.id}
+                            onClick={() => handleApproveProduct(product)}
+                            title="Approve & make live on marketplace"
+                            aria-label="Approve product"
+                            className="inline-flex h-8 items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 text-xs font-bold text-emerald-700 shadow-xs transition-all hover:bg-emerald-600 hover:text-white active:scale-95 cursor-pointer disabled:opacity-50"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                            <span>{approvingId === product.id ? 'Approving…' : 'Approve'}</span>
+                          </button>
+                        )}
+
                         {/* 1. Edit */}
                         <Link
                           to={`/admin/product/edits/${product.id}`}
@@ -348,6 +397,18 @@ function ProductsListPage() {
                 }
                 actions={
                   <div className="flex items-center gap-2">
+                    {product.status === 'pending_approval' && (
+                      <button
+                        type="button"
+                        disabled={approvingId === product.id}
+                        onClick={() => handleApproveProduct(product)}
+                        className="inline-flex h-8 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+                        title="Approve & make live"
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        <span>{approvingId === product.id ? '…' : 'Approve'}</span>
+                      </button>
+                    )}
                     <Link
                       to={`/admin/product/edits/${product.id}`}
                       title="Edit"

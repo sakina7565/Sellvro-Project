@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Building2,
   CheckCircle2,
+  CreditCard,
   FileCheck,
   FileText,
   MapPin,
@@ -13,6 +14,7 @@ import {
   Printer,
   ShieldCheck,
   Tag,
+  Truck,
   UploadCloud,
   Warehouse,
   Wallet,
@@ -23,6 +25,9 @@ import PageHeader from '../../components/admin/PageHeader.jsx'
 import FormLabel from '../../components/products/FormLabel.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Button from '../../components/ui/Button.jsx'
+import MarketplaceTopBar from '../../components/marketplace/MarketplaceTopBar.jsx'
+import MarketplaceSearchHeader from '../../components/marketplace/MarketplaceSearchHeader.jsx'
+import MarketplaceFooter from '../../components/marketplace/MarketplaceFooter.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { mediaUrl, orderApi, productApi, walletApi, getErrorMessage } from '../../lib/api.js'
 
@@ -43,7 +48,7 @@ function UserCheckoutPage() {
   const { productId } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, updateUser } = useAuth()
+  const { user, updateUser, isAuthenticated } = useAuth()
 
   const [product, setProduct] = useState(() => {
     const raw = location.state?.product
@@ -55,24 +60,23 @@ function UserCheckoutPage() {
   })
   const [loadingProduct, setLoadingProduct] = useState(!location.state?.product)
   const [walletBalance, setWalletBalance] = useState(user?.walletBalance ?? 0)
+  // Exclusively wallet payment
+  const [paymentMethod] = useState('wallet')
   const [quantity, setQuantity] = useState(Number(location.state?.quantity) || 1)
   const [address, setAddress] = useState({
-    fullName: user?.fullName || 'Client Buyer',
-    phone: user?.phone || '03001234567',
-    addressLine: user?.address || 'House 14, Commercial Lane, Street 3',
-    city: user?.city || 'Lahore',
-    state: user?.state || 'Punjab',
-    postalCode: user?.postalCode || '54000',
-    country: user?.country || 'Pakistan',
+    fullName: '',
+    email: '',
+    phone: '',
+    addressLine: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    country: '',
   })
   // Packaging Label Details
-  const [orderLabelRef, setOrderLabelRef] = useState(
-    () => `LBL-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-  )
-  const [brandLabel, setBrandLabel] = useState(
-    () => user?.businessName || user?.storeName || (user?.fullName ? `${user.fullName}'s Store` : 'Sellvro Merchant'),
-  )
-  const [labelNotes, setLabelNotes] = useState('Standard Packaging - Handle with Care')
+  const [orderLabelRef, setOrderLabelRef] = useState('')
+  const [brandLabel, setBrandLabel] = useState('')
+  const [labelNotes, setLabelNotes] = useState('')
   const [shippingLabelFile, setShippingLabelFile] = useState(null)
 
   const [error, setError] = useState('')
@@ -90,8 +94,10 @@ function UserCheckoutPage() {
       if (user) {
         updateUser({ ...user, walletBalance: newBal })
       }
+      return newBal
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to credit test balance.'))
+      return null
     } finally {
       setCreditingWallet(false)
     }
@@ -118,9 +124,9 @@ function UserCheckoutPage() {
     let active = true
     setLoadingProduct(true)
 
-    // 1. First attempt direct lookup by single product endpoint
-    productApi
-      .get(productId)
+    // 1. First attempt direct lookup by single product endpoint (if productId provided)
+    const lookupPromise = productId ? productApi.get(productId) : Promise.reject(new Error('No ID'))
+    lookupPromise
       .then((res) => {
         if (!active) return
         const prod = res.product || res.data || res
@@ -138,9 +144,13 @@ function UserCheckoutPage() {
         // 2. Fallback to marketplace list
         return productApi.marketplace().then((data) => {
           if (!active) return
-          const found = (data.data || []).find(
+          let found = (data.data || []).find(
             (item) => String(item.id) === String(productId) || String(item._id) === String(productId),
           )
+          // Graceful fallback to first active product in catalogue
+          if (!found && Array.isArray(data.data) && data.data.length > 0) {
+            found = data.data[0]
+          }
           if (!found) {
             setError('Product not found or unavailable.')
             setProduct(null)
@@ -178,46 +188,56 @@ function UserCheckoutPage() {
     setQuantity((prev) => Math.min(maxQty, Math.max(1, prev + delta)))
   }
 
-  const handleSubmit = async (event) => {
-    event.preventDefault()
+  const executeOrderPlacement = async ({ customBalance, method } = {}) => {
     if (!product) return
     setError('')
 
-    // Verify token & authentication status before allowing order placement
-    const token = localStorage.getItem('token') || localStorage.getItem('auth_token')
-    if (!token || !user) {
-      navigate('/login', {
-        state: {
-          from: location.pathname,
-          message: 'Please sign in to your client account before placing an order.',
-        },
-      })
+    const token =
+      localStorage.getItem('sellvro_token') ||
+      localStorage.getItem('token') ||
+      localStorage.getItem('auth_token')
+    const effectiveMethod = 'wallet'
+    const effectiveBalance = typeof customBalance === 'number' ? customBalance : walletBalance
+
+    // Wallet payment requires being logged in with an active account
+    if (!user && !isAuthenticated && !token) {
+      setError('Please sign in to your client account to pay from your Sellvro Wallet.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
 
-    // Validate Essential Address fields
+    // Ensure wallet balance covers total
+    if (effectiveBalance < total) {
+      setError(
+        `Insufficient wallet balance. Total due is $${total.toFixed(2)}, but your wallet has $${Number(effectiveBalance || 0).toFixed(2)}. Please top up your wallet or use 1-Click Top-Up.`,
+      )
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+
+    // Validate recipient address fields
     if (!address.fullName?.trim()) {
-      setError('Recipient full name is required.')
+      setError('Please enter recipient full name.')
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
     if (!address.phone?.trim()) {
-      setError('Recipient phone number is required.')
+      setError('Please enter recipient phone number.')
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
     if (!address.addressLine?.trim()) {
-      setError('Recipient address line is required.')
+      setError('Please enter delivery street address.')
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
     if (!address.city?.trim()) {
-      setError('Recipient city is required.')
+      setError('Please enter delivery city.')
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
     if (!address.country?.trim()) {
-      setError('Recipient country is required.')
+      setError('Please enter delivery country.')
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
@@ -228,24 +248,12 @@ function UserCheckoutPage() {
       addressLine: address.addressLine.trim(),
       city: address.city.trim(),
       country: address.country.trim(),
-      state: address.state?.trim() || address.city.trim(),
-      postalCode: address.postalCode?.trim() || '00000',
+      state: address.state?.trim() || '',
+      postalCode: address.postalCode?.trim() || '',
     }
 
-    // Auto-generate reference and brand label if empty
-    const finalOrderLabelRef =
-      orderLabelRef?.trim() || `LBL-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
-    const finalBrandLabel =
-      brandLabel?.trim() || user?.businessName || user?.storeName || user?.fullName || 'Sellvro Customer'
-
-    // Check wallet balance
-    if ((walletBalance || 0) < total) {
-      setError(
-        `Insufficient wallet balance. Total due is $${total.toFixed(2)}, but your Sellvro Wallet currently has $${Number(walletBalance || 0).toFixed(2)}. Please deposit funds to proceed.`,
-      )
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
-    }
+    const finalOrderLabelRef = orderLabelRef.trim()
+    const finalBrandLabel = brandLabel.trim()
 
     const actualProductId = product?.id || product?._id || productId
 
@@ -255,6 +263,8 @@ function UserCheckoutPage() {
         {
           productId: actualProductId,
           quantity,
+          paymentMethod: effectiveMethod,
+          email: address.email?.trim() || user?.email || '',
           shippingAddress: cleanAddress,
           orderLabelRef: finalOrderLabelRef,
           brandLabel: finalBrandLabel,
@@ -262,11 +272,11 @@ function UserCheckoutPage() {
         },
         shippingLabelFile,
       )
-      if (typeof data.walletBalance === 'number') {
+      if (typeof data.walletBalance === 'number' && user) {
         updateUser({ ...user, walletBalance: data.walletBalance })
       }
       const confirmedId = data.order?.id || data.order?._id || data.orderNo || 'confirmed'
-      navigate(`/user/orders/confirmation/${confirmedId}`, {
+      navigate(`/orders/confirmation/${confirmedId}`, {
         replace: true,
         state: { order: data.order, message: data.message },
       })
@@ -276,7 +286,32 @@ function UserCheckoutPage() {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } finally {
       setSubmitting(false)
+      setCreditingWallet(false)
     }
+  }
+
+  // 1-Click Top-Up Deficit & Place Order
+  const handleQuickTopupAndPlace = async () => {
+    setCreditingWallet(true)
+    setError('')
+    try {
+      const needed = Math.max(500, Math.ceil(total - walletBalance + 50))
+      const res = await walletApi.quickCredit(needed)
+      const newBal = res.walletBalance ?? res.balance ?? (walletBalance + needed)
+      setWalletBalance(newBal)
+      if (user) {
+        updateUser({ ...user, walletBalance: newBal })
+      }
+      await executeOrderPlacement({ customBalance: newBal, method: 'wallet' })
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to credit test balance.'))
+      setCreditingWallet(false)
+    }
+  }
+
+  const handleSubmit = (event) => {
+    event.preventDefault()
+    executeOrderPlacement()
   }
 
   return (
@@ -411,57 +446,94 @@ function UserCheckoutPage() {
                     placeholder="Country"
                   />
                 </div>
+                <div>
+                  <FormLabel htmlFor="email">Email address (Optional — for delivery tracking)</FormLabel>
+                  <input
+                    id="email"
+                    type="email"
+                    value={address.email}
+                    onChange={(e) => setField('email', e.target.value)}
+                    className={FIELD}
+                    placeholder="name@example.com (Optional)"
+                  />
+                </div>
               </div>
             </Card>
 
-            {/* Card 2: Payment Method: Sellvro Prepaid Wallet */}
-            <Card className="border border-emerald-200 bg-gradient-to-b from-emerald-50/40 via-white to-white p-5 shadow-soft">
+            {/* Card 2: Payment Method Selection */}
+            <Card className="border border-slate-200 bg-white p-5 shadow-soft">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-2xs">
-                    <Wallet className="h-5 w-5" />
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs">
+                    <CreditCard className="h-5 w-5" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-base font-bold text-slate-900">Payment: Sellvro Prepaid Wallet</h2>
-                      <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-800">
-                        <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                        Prepaid Active
-                      </span>
-                    </div>
+                    <h2 className="text-base font-bold text-slate-900">Payment Method</h2>
                     <p className="text-xs text-slate-500">
-                      Aapka payment pehle se wallet mein mojood hai. Is order ki raqam direct aapke Sellvro Wallet se deduct hogi.
+                      Choose how you would like to pay for this order
                     </p>
                   </div>
                 </div>
-                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
                   Step 2: Payment
                 </span>
               </div>
 
-              {/* Wallet Live Deduction Breakdown */}
-              <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/30 p-4">
+              <div>
+                {/* Sellvro Prepaid Wallet */}
+                <div className="relative rounded-xl border-2 border-indigo-600 bg-indigo-50/40 p-4 shadow-sm ring-2 ring-indigo-500/20">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">
+                        <Wallet className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-bold text-slate-900">Sellvro Wallet</span>
+                          <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-800">
+                            Prepaid
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-xs text-slate-500">Instant debit from wallet balance</p>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 bg-white px-2 py-1 rounded-md border border-indigo-200">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-indigo-600" /> Active
+                    </span>
+                  </div>
+
+                  <div className="mt-3 border-t border-slate-200/80 pt-2 text-[11px] flex items-center justify-between">
+                    <span className="text-slate-600">Your Available Balance:</span>
+                    <span
+                      className={`font-bold ${
+                        walletBalance >= total ? 'text-emerald-700' : 'text-rose-600'
+                      }`}
+                    >
+                      ${Number(walletBalance || 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic Payment State Helper */}
+              <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3.5">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                      Your Available Wallet Balance
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      Available Balance
                     </span>
-                    <p className="mt-1 text-lg font-black text-slate-900">
+                    <p className="mt-0.5 text-base font-black text-slate-900">
                       ${Number(walletBalance || 0).toFixed(2)}
                     </p>
-                    <p className="mt-0.5 text-[10px] text-emerald-700 font-medium">Verified Prepaid Balance</p>
                   </div>
-
                   <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                      Order Deduction
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      Order Total
                     </span>
-                    <p className="mt-1 text-lg font-black text-rose-600">
+                    <p className="mt-0.5 text-base font-black text-rose-600">
                       -${total.toFixed(2)}
                     </p>
-                    <p className="mt-0.5 text-[10px] text-slate-500">{quantity}x item(s) + fulfillment</p>
                   </div>
-
                   <div
                     className={`rounded-lg border p-3 shadow-2xs ${
                       walletBalance >= total
@@ -469,18 +541,15 @@ function UserCheckoutPage() {
                         : 'border-rose-300 bg-rose-50/50'
                     }`}
                   >
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                      Remaining After Order
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      After Order
                     </span>
                     <p
-                      className={`mt-1 text-lg font-black ${
+                      className={`mt-0.5 text-base font-black ${
                         walletBalance >= total ? 'text-emerald-700' : 'text-rose-600'
                       }`}
                     >
                       ${Number(walletBalance - total).toFixed(2)}
-                    </p>
-                    <p className="mt-0.5 text-[10px] text-slate-500">
-                      {walletBalance >= total ? 'Sufficient balance' : 'Insufficient funds'}
                     </p>
                   </div>
                 </div>
@@ -490,7 +559,7 @@ function UserCheckoutPage() {
                     <div className="flex items-center gap-2">
                       <span className="text-base">⚠️</span>
                       <p>
-                        Aapke wallet mein <strong>${Number(walletBalance || 0).toFixed(2)}</strong> hain aur order total <strong>${total.toFixed(2)}</strong> hai. Mazeed <strong>${(total - Number(walletBalance || 0)).toFixed(2)}</strong> deposit karein.
+                        Wallet balance short by <strong>${(total - Number(walletBalance || 0)).toFixed(2)}</strong>. Aap 1-Click top-up kar sakte hain ya deposit page se funds add karein.
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -504,16 +573,16 @@ function UserCheckoutPage() {
                       </button>
                       <Link
                         to="/user/wallet"
-                        className="inline-flex items-center gap-1 font-semibold text-indigo-700 hover:text-indigo-900 underline text-xs"
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 transition"
                       >
-                        Wallet &rarr;
+                        Deposit Funds &rarr;
                       </Link>
                     </div>
                   </div>
                 ) : (
                   <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-emerald-800">
                     <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                    <span>Aapka wallet balance verified hai. Order place karte hi payment foran deduct ho jayegi.</span>
+                    <span>Sufficient wallet balance. Amount will be deducted upon order confirmation.</span>
                   </div>
                 )}
               </div>
@@ -840,22 +909,31 @@ function UserCheckoutPage() {
                   <span>${total.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-slate-500">
-                  <span>Wallet balance</span>
-                  <span>${Number(walletBalance || 0).toFixed(2)}</span>
+                  <span>Payment Method</span>
+                  <span className="font-semibold text-slate-800">
+                    Sellvro Wallet
+                  </span>
                 </div>
-                <div className="flex justify-between text-base font-bold text-slate-900">
+                <div className="flex justify-between text-slate-500">
+                  <span>Wallet balance</span>
+                  <span className={walletBalance >= total ? 'text-emerald-700 font-semibold' : 'text-rose-600 font-semibold'}>
+                    ${Number(walletBalance || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-base font-bold text-slate-900 pt-1 border-t border-slate-100">
                   <span>Total due</span>
-                  <span>${total.toFixed(2)}</span>
+                  <span className="text-primary-700 font-black text-lg">${total.toFixed(2)}</span>
                 </div>
               </div>
 
-              <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-2.5 text-xs text-emerald-900">
-                <p className="font-bold flex items-center gap-1.5 text-emerald-800">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                  Prepaid Order Payment
+              {/* Informative Payment Tone */}
+              <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50/70 p-2.5 text-xs text-indigo-900">
+                <p className="font-bold flex items-center gap-1.5 text-indigo-800">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-indigo-600" />
+                  Prepaid Wallet Payment
                 </p>
-                <p className="mt-0.5 text-[11px] text-emerald-700">
-                  Total due will be deducted directly from your verified Sellvro Wallet.
+                <p className="mt-0.5 text-[11px] text-indigo-700">
+                  Order total (${total.toFixed(2)}) aapke verified Sellvro Wallet se deduct hoga.
                 </p>
               </div>
 
@@ -866,25 +944,41 @@ function UserCheckoutPage() {
                 </div>
               )}
 
-              {/* Insufficient wallet balance alert with direct top-up link */}
+              {/* Insufficient wallet balance alert if wallet method selected */}
               {walletBalance < total && (
                 <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
                   <p className="font-bold text-amber-900">⚠️ Insufficient Wallet Balance</p>
                   <p className="mt-1 text-[11px] text-amber-800 leading-relaxed">
-                    Total due is <strong>${total.toFixed(2)}</strong>, but your wallet has <strong>${Number(walletBalance || 0).toFixed(2)}</strong>. You are short by <strong>${(total - Number(walletBalance || 0)).toFixed(2)}</strong>.
+                    Total due is <strong>${total.toFixed(2)}</strong>, but your wallet has <strong>${Number(walletBalance || 0).toFixed(2)}</strong>. Please use 1-Click Top-Up or deposit funds in your wallet.
                   </p>
                 </div>
               )}
 
-              {walletBalance < total ? (
+              {/* Primary Action Buttons */}
+              {walletBalance >= total ? (
+                <Button
+                  type="submit"
+                  fullWidth
+                  className="mt-4 font-bold py-3 text-sm shadow-md"
+                  disabled={submitting}
+                >
+                  {submitting
+                    ? 'Processing Prepaid Order…'
+                    : `Pay from Wallet & Place Order — $${total.toFixed(2)}`}
+                </Button>
+              ) : (
                 <div className="mt-4 space-y-2">
                   <button
                     type="button"
-                    onClick={handleQuickTopup}
-                    disabled={creditingWallet}
+                    onClick={handleQuickTopupAndPlace}
+                    disabled={creditingWallet || submitting}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-md hover:bg-emerald-500 active:scale-[0.99] transition disabled:opacity-50"
                   >
-                    <span>{creditingWallet ? 'Adding Balance…' : '⚡ Top-Up Wallet ($500 Credit)'}</span>
+                    <span>
+                      {creditingWallet || submitting
+                        ? 'Funding & Placing Order…'
+                        : `⚡ 1-Click Top-Up & Place Order ($${total.toFixed(2)})`}
+                    </span>
                   </button>
                   <Button
                     as={Link}
@@ -896,17 +990,6 @@ function UserCheckoutPage() {
                     Go to Wallet Deposit Page &rarr;
                   </Button>
                 </div>
-              ) : (
-                <Button
-                  type="submit"
-                  fullWidth
-                  className="mt-4"
-                  disabled={submitting}
-                >
-                  {submitting
-                    ? 'Processing Prepaid Order…'
-                    : `Pay from Wallet & Place Order ($${total.toFixed(2)})`}
-                </Button>
               )}
             </Card>
           </div>

@@ -178,8 +178,11 @@ export const productApi = {
   },
   verifyWms: (id) => apiRequest(`/products/${id}/verify-wms`, { method: 'POST' }),
   syncWmsStock: (id) => apiRequest(`/products/${id}/sync-wms-stock`, { method: 'POST' }),
+  activate: (id) => apiRequest(`/products/${id}/activate`, { method: 'PATCH' }),
+  deactivate: (id) => apiRequest(`/products/${id}/deactivate`, { method: 'PATCH' }),
   watch: (id) => apiRequest(`/products/${id}/watch`, { method: 'POST' }),
   store: (supplierId) => apiRequest(`/products/store/${supplierId}`),
+  reviews: (id) => apiRequest(`/products/${id}/reviews`),
 }
 
 export const categoryApi = {
@@ -220,8 +223,12 @@ export const orderApi = {
     const query = new URLSearchParams(params).toString()
     return apiRequest(`/orders/wms/live-list${query ? `?${query}` : ''}`)
   },
+  publicTrack: (ref) => apiRequest(`/orders/public-track/${encodeURIComponent(ref)}`),
   dashboardStats: (period = 'all') =>
     apiRequest(`/orders/dashboard/stats?period=${encodeURIComponent(period)}`),
+  submitReview: (id, payload) =>
+    apiRequest(`/orders/${id}/review`, { method: 'POST', body: payload }),
+  pendingReviews: () => apiRequest('/orders/pending-review'),
 }
 
 export const walletApi = {
@@ -390,5 +397,11 @@ export const adminApi = {
   locations: () => apiRequest('/admin/locations'),
   createLocation: (payload) => apiRequest('/admin/locations', { method: 'POST', body: payload }),
   deleteLocation: (id) => apiRequest(`/admin/locations/${id}`, { method: 'DELETE' }),
+  warnSupplier: (id, payload) =>
+    apiRequest(`/admin/suppliers/${id}/warn`, { method: 'POST', body: payload }),
+  suspendSupplier: (id, payload) =>
+    apiRequest(`/admin/suppliers/${id}/suspend`, { method: 'POST', body: payload }),
+  reinstateSupplier: (id) =>
+    apiRequest(`/admin/suppliers/${id}/reinstate`, { method: 'POST' }),
 }
 

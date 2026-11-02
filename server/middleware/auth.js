@@ -38,6 +38,21 @@ export const protect = async (req, res, next) => {
   }
 }
 
+export const optionalProtect = async (req, _res, next) => {
+  try {
+    const token = readAuthToken(req)
+    if (!token) return next()
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
+    const user = await User.findById(decoded.id)
+    if (user && user.status !== 'suspended') {
+      req.user = user
+    }
+    return next()
+  } catch {
+    return next()
+  }
+}
+
 export const authorize =
   (...roles) =>
   (req, res, next) => {
@@ -49,9 +64,13 @@ export const authorize =
 
 export const requireApproved = (req, res, next) => {
   if (req.user.role !== 'admin' && req.user.status !== 'approved') {
+    const isSuspended = req.user.status === 'suspended'
     return res.status(403).json({
-      message: 'Your account is not approved yet.',
+      message: isSuspended
+        ? `Your supplier account has been suspended: ${req.user.suspensionReason || 'Performance policy violation'}. Product creation and marketplace actions are restricted.`
+        : 'Your account is not approved yet.',
       status: req.user.status,
+      suspensionReason: req.user.suspensionReason || null,
     })
   }
   return next()

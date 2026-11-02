@@ -63,6 +63,11 @@ const orderSchema = new mongoose.Schema(
       trim: true,
       default: 'At Supplier Warehouse',
     },
+    paymentMethod: {
+      type: String,
+      enum: ['wallet', 'cod'],
+      default: 'wallet',
+    },
     payoutStatus: {
       type: String,
       enum: ['pending', 'processed'],
@@ -167,6 +172,15 @@ const orderSchema = new mongoose.Schema(
       type: Object,
       default: {},
     },
+    isReviewed: {
+      type: Boolean,
+      default: false,
+    },
+    review: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Review',
+      default: null,
+    },
   },
   { timestamps: true },
 )
@@ -232,6 +246,7 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
           : this.warehouseLocation === 'delivered'
             ? 'Delivered to Customer'
             : 'At Supplier Warehouse'),
+    paymentMethod: this.paymentMethod || 'wallet',
     payoutStatus: this.payoutStatus,
     payoutTid: this.payoutTid || '',
     payoutId: this.payoutId?.toString?.() || '',
@@ -272,6 +287,8 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
     isDispatched: Boolean(this.isDispatched),
     dispatchedAt: this.dispatchedAt || null,
     wmsPushedAt: this.wmsPushedAt || null,
+    isReviewed: Boolean(this.isReviewed),
+    reviewId: this.review?.toString?.() || '',
     date: this.createdAt
       ? new Date(this.createdAt).toLocaleDateString('en-US', {
           month: 'short',

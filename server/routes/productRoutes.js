@@ -12,8 +12,10 @@ import {
   attachWmsProductMedia,
   verifyProductWithWms,
   syncWmsStock,
+  activateProduct,
+  deactivateProduct,
 } from '../controllers/productController.js'
-import { protect, authorize, requireApproved } from '../middleware/auth.js'
+import { protect, optionalProtect, authorize, requireApproved } from '../middleware/auth.js'
 import { productUpload } from '../middleware/upload.js'
 
 const router = Router()
@@ -34,11 +36,18 @@ router.post('/wms/attach-media/:id', protect, authorize('supplier'), requireAppr
 router.post('/:id/verify-wms', protect, authorize('supplier', 'admin'), requireApproved, verifyProductWithWms)
 router.post('/:id/sync-wms-stock', protect, authorize('supplier', 'admin'), requireApproved, syncWmsStock)
 
-// Public marketplace catalog (active products)
+// Deactivate / Activate routes for suppliers and admin
+router.patch('/:id/deactivate', protect, authorize('supplier', 'admin'), requireApproved, deactivateProduct)
+router.patch('/:id/activate', protect, authorize('supplier', 'admin'), requireApproved, activateProduct)
+
+import { getProductReviews } from '../controllers/reviewController.js'
+
+// Public marketplace catalog (active / approved products)
 router.get('/', listApprovedProducts)
 router.get('/mine', protect, authorize('supplier'), requireApproved, listMyProducts)
 router.get('/store/:supplierId', protect, getStoreDetails)
-router.get('/:id', protect, getProductById)
+router.get('/:id/reviews', getProductReviews)
+router.get('/:id', optionalProtect, getProductById)
 router.post('/:id/watch', protect, toggleWatchProduct)
 router.post('/', protect, authorize('supplier'), requireApproved, handlePhotos, createProduct)
 router.patch('/:id', protect, authorize('supplier'), requireApproved, handlePhotos, updateMyProduct)

@@ -28,6 +28,10 @@ export const createCategory = async (req, res) => {
       return res.status(400).json({ message: 'Category name is required.' })
     }
 
+    if (!subcategories || subcategories.length === 0) {
+      return res.status(400).json({ message: 'At least one subcategory is required to create a category.' })
+    }
+
     const existing = await Category.findOne({ name: new RegExp(`^${escapeRegex(name)}$`, 'i') })
     if (existing) {
       return res.status(400).json({ message: 'A category with this name already exists.' })
@@ -75,7 +79,11 @@ export const updateCategory = async (req, res) => {
     category.name = name
     category.description = description
     if (req.body.subcategories !== undefined) {
-      category.subcategories = parseSubcategories(req.body.subcategories)
+      const parsed = parseSubcategories(req.body.subcategories)
+      if (parsed.length === 0) {
+        return res.status(400).json({ message: 'At least one subcategory is required.' })
+      }
+      category.subcategories = parsed
     }
     await category.save()
 

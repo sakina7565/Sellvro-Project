@@ -81,6 +81,30 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    // Supplier Performance Warnings & Suspension Tracking
+    warningsCount: {
+      type: Number,
+      default: 0,
+    },
+    warnings: [
+      {
+        warningNumber: { type: Number, default: 1 },
+        reason: { type: String, default: '' },
+        details: { type: String, default: '' },
+        averageRating: { type: Number, default: 0 },
+        onTimeDeliveryPercent: { type: Number, default: 100 },
+        warnedAt: { type: Date, default: Date.now },
+        warnedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      },
+    ],
+    suspensionReason: {
+      type: String,
+      default: '',
+    },
+    suspendedAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true },
 )
@@ -107,6 +131,10 @@ userSchema.methods.toSafeObject = function toSafeObject(options = {}) {
     isWmsRegistered: Boolean(this.isWmsRegistered),
     wmsClientId: this.wmsClientId || '',
     wmsStatus: this.wmsStatus || '',
+    warningsCount: this.warningsCount ?? (this.warnings?.length || 0),
+    warnings: this.warnings || [],
+    suspensionReason: this.suspensionReason || '',
+    suspendedAt: this.suspendedAt || null,
     createdAt: this.createdAt,
   }
 

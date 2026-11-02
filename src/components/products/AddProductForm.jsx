@@ -6,16 +6,29 @@ import {
   Boxes,
   Building2,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock,
   FileText,
+  Globe,
+  Hash,
+  Info,
+  Layers,
   LayoutGrid,
   Lock,
   PackagePlus,
+  Palette,
+  Pencil,
   Plus,
   Save,
   Send,
+  ShieldCheck,
   Sparkles,
   Tag,
+  Truck,
   Warehouse,
+  X,
+  Zap,
 } from 'lucide-react'
 import PageHeader from '../admin/PageHeader.jsx'
 import AddProductSection from './AddProductSection.jsx'
@@ -38,6 +51,73 @@ const TEXTAREA_CLASS =
 
 const DISABLED_TEXTAREA_CLASS =
   'w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500 cursor-not-allowed select-none shadow-none focus:outline-none'
+
+function detectCategoryFromTitle(title, categoriesList) {
+  if (!title || !title.trim() || !Array.isArray(categoriesList) || categoriesList.length === 0) {
+    return null
+  }
+  const clean = title.toLowerCase()
+  let best = null
+  let maxScore = 0
+
+  for (const cat of categoriesList) {
+    const catLower = (cat.name || '').toLowerCase()
+    const subList = Array.isArray(cat.subcategories) ? cat.subcategories : []
+
+    for (const sub of subList) {
+      const subLower = (sub || '').toLowerCase()
+      if (clean.includes(subLower)) {
+        const score = subLower.length * 3
+        if (score > maxScore) {
+          maxScore = score
+          best = { category: cat.name, subcategory: sub }
+        }
+      }
+    }
+
+    if (clean.includes(catLower)) {
+      const score = catLower.length
+      if (score > maxScore) {
+        maxScore = score
+        best = { category: cat.name, subcategory: subList[0] || '' }
+      }
+    }
+  }
+
+  // Keyword mapping fallback for standard eBay items
+  if (!best) {
+    const kwMap = [
+      { kw: ['ball', 'soccer', 'football', 'fifa', 'sport', 'basketball', 'tennis'], cat: 'Sporting Goods', sub: 'Balls' },
+      { kw: ['laptop', 'macbook', 'notebook', 'pc', 'thinkpad', 'chromebook'], cat: 'Electronics', sub: 'Computers, Tablets & Laptops' },
+      { kw: ['phone', 'iphone', 'samsung', 'mobile', 'smartphone', 'pixel'], cat: 'Electronics', sub: 'Smartphones & Cell Phones' },
+      { kw: ['headphone', 'earbuds', 'earphone', 'airpods', 'audio', 'speaker'], cat: 'Electronics', sub: 'Headphones & Portable Audio' },
+      { kw: ['camera', 'dslr', 'lens', 'gopro', 'drone'], cat: 'Electronics', sub: 'Cameras & Photo' },
+      { kw: ['shoe', 'sneaker', 'boots', 'air jordan', 'nike', 'adidas', 'footwear'], cat: 'Clothing, Shoes & Accessories', sub: "Men's Shoes & Sneakers" },
+      { kw: ['watch', 'rolex', 'timepiece', 'chronograph', 'casio'], cat: 'Clothing, Shoes & Accessories', sub: 'Watches, Parts & Accessories' },
+      { kw: ['shirt', 't-shirt', 'hoodie', 'jacket', 'coat', 'pants', 'jeans'], cat: 'Clothing, Shoes & Accessories', sub: "Men's Clothing" },
+      { kw: ['perfume', 'fragrance', 'cologne', 'skincare', 'lotion', 'serum'], cat: 'Health & Beauty', sub: 'Fragrances & Perfumes' },
+      { kw: ['pan', 'pot', 'knife', 'kitchen', 'blender', 'air fryer'], cat: 'Home & Garden', sub: 'Kitchen & Dining' },
+      { kw: ['tire', 'wheel', 'brake', 'engine', 'car', 'motorcycle'], cat: 'Motors & Automotive', sub: 'Car & Truck Parts' },
+      { kw: ['card', 'pokemon', 'charizard', 'memorabilia', 'comic', 'figure'], cat: 'Collectibles & Art', sub: 'Sports Memorabilia & Cards' },
+    ]
+
+    for (const mapping of kwMap) {
+      if (mapping.kw.some((w) => clean.includes(w))) {
+        const foundCat = categoriesList.find((c) => c.name.toLowerCase() === mapping.cat.toLowerCase())
+        if (foundCat) {
+          const matchedSub =
+            (foundCat.subcategories || []).find((s) => s.toLowerCase().includes(mapping.sub.toLowerCase())) ||
+            foundCat.subcategories?.[0] ||
+            mapping.sub
+          best = { category: foundCat.name, subcategory: matchedSub }
+          break
+        }
+      }
+    }
+  }
+
+  return best
+}
 
 function StatusBadge({ panel, publishActive, isWmsExisting }) {
   if (panel === 'admin' && publishActive) {
@@ -80,11 +160,15 @@ function makeSku() {
 const EMPTY_FORM = {
   name: '',
   category: '',
+  subcategory: '',
   brand: '',
+  condition: 'Brand New',
   description: '',
   sku: '',
   price: '',
   fulfillBy: 'warehouse',
+  handlingTime: '1 business day',
+  deliveryTime: '1 Day (WMS Express Delivery)',
   quantity: '',
   weight: '',
   weightUnit: 'gm',
@@ -97,6 +181,13 @@ const EMPTY_FORM = {
   barcode: '',
   commission: '',
   country: '',
+  color: '',
+  material: '',
+  mpn: '',
+  itemType: '',
+  numItemsInSet: '1',
+  itemSpecifics: {},
+  variations: [],
 }
 
 function AddProductForm({
@@ -125,6 +216,15 @@ function AddProductForm({
   const [submitting, setSubmitting] = useState(false)
   const [marketplaceFee, setMarketplaceFee] = useState(8)
   const [wmsFee, setWmsFee] = useState(0)
+
+  // eBay-style item category & specifics states
+  const [isEditingCategory, setIsEditingCategory] = useState(false)
+  const [autoDetectedCategory, setAutoDetectedCategory] = useState(null)
+  const [userManuallyEditedCategory, setUserManuallyEditedCategory] = useState(false)
+  const [showMoreSpecifics, setShowMoreSpecifics] = useState(false)
+  const [showVariations, setShowVariations] = useState(false)
+  const [newVarName, setNewVarName] = useState('')
+  const [newVarValues, setNewVarValues] = useState('')
 
   // Load Admin-Configured Marketplace Platform Fee & WMS Policy Fee
   useEffect(() => {
@@ -235,6 +335,86 @@ function AddProductForm({
     loadSupplierWmsProducts()
   }, [loadSupplierWmsProducts])
 
+  // Auto-detection of category from product title
+  const handleNameChange = (e) => {
+    if (isFormLocked) return
+    const newName = e.target.value
+    setForm((prev) => {
+      const next = { ...prev, name: newName }
+      if (!userManuallyEditedCategory && newName.trim().length >= 3 && categories.length > 0) {
+        const detected = detectCategoryFromTitle(newName, categories)
+        if (detected) {
+          next.category = detected.category
+          next.subcategory = detected.subcategory
+          setAutoDetectedCategory(detected)
+        }
+      }
+      return next
+    })
+  }
+
+  const handleCategorySelect = (e) => {
+    const selectedCat = e.target.value
+    setUserManuallyEditedCategory(true)
+    const catObj = categories.find((c) => c.name === selectedCat)
+    const subList = Array.isArray(catObj?.subcategories) ? catObj.subcategories : []
+    setForm((prev) => ({
+      ...prev,
+      category: selectedCat,
+      subcategory: subList[0] || '',
+    }))
+  }
+
+  const handleSubcategorySelect = (e) => {
+    const selectedSub = e.target.value
+    setUserManuallyEditedCategory(true)
+    setForm((prev) => ({
+      ...prev,
+      subcategory: selectedSub,
+    }))
+  }
+
+  const handleReDetectCategory = () => {
+    setUserManuallyEditedCategory(false)
+    if (form.name.trim() && categories.length > 0) {
+      const detected = detectCategoryFromTitle(form.name, categories)
+      if (detected) {
+        setForm((prev) => ({
+          ...prev,
+          category: detected.category,
+          subcategory: detected.subcategory,
+        }))
+        setAutoDetectedCategory(detected)
+      }
+    }
+  }
+
+  const handleAddVariation = () => {
+    if (!newVarName.trim() || !newVarValues.trim()) return
+    const options = newVarValues
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (options.length === 0) return
+
+    setForm((prev) => ({
+      ...prev,
+      variations: [
+        ...(Array.isArray(prev.variations) ? prev.variations : []),
+        { name: newVarName.trim(), options },
+      ],
+    }))
+    setNewVarName('')
+    setNewVarValues('')
+  }
+
+  const handleRemoveVariation = (index) => {
+    setForm((prev) => ({
+      ...prev,
+      variations: (prev.variations || []).filter((_, i) => i !== index),
+    }))
+  }
+
   // Handle switching Storage & Fulfillment Option (WMS vs Supplier Direct)
   const handleFulfillmentChange = (e) => {
     const val = e.target.value
@@ -247,6 +427,7 @@ function AddProductForm({
       setForm({
         ...EMPTY_FORM,
         fulfillBy: 'warehouse',
+        deliveryTime: '1 Day (WMS Express Delivery)',
         sku: '',
       })
       setPhotos([])
@@ -256,6 +437,7 @@ function AddProductForm({
       setForm({
         ...EMPTY_FORM,
         fulfillBy: 'self',
+        deliveryTime: '2 - 3 business days',
         sku: makeSku(),
       })
       setPhotos([])
@@ -345,11 +527,18 @@ function AddProductForm({
   const buildPayload = (status) => ({
     name: form.name,
     category: form.category,
+    subcategory: form.subcategory,
     brand: form.brand,
+    condition: form.condition || 'Brand New',
     description: form.description,
     sku: form.sku,
     price: form.price,
     fulfillBy: form.fulfillBy,
+    handlingTime: form.handlingTime || '1 business day',
+    deliveryTime:
+      form.fulfillBy === 'warehouse'
+        ? '1 Day (WMS Express Delivery)'
+        : form.deliveryTime || '2 - 3 business days',
     quantity: form.quantity,
     weight: form.weight,
     weightUnit: form.weightUnit,
@@ -361,6 +550,13 @@ function AddProductForm({
     barcode: form.barcode,
     commission: panel === 'supplier' ? effectiveFee : form.commission,
     country: form.country,
+    color: form.color,
+    material: form.material,
+    mpn: form.mpn,
+    itemType: form.itemType,
+    numItemsInSet: form.numItemsInSet,
+    itemSpecifics: form.itemSpecifics,
+    variations: form.variations,
     status,
     supplier: form.supplierAssign,
     publishActive: publishActive ? 'true' : 'false',
@@ -438,6 +634,10 @@ function AddProductForm({
       setError('Product name and category are required.')
       return
     }
+    if (!form.subcategory) {
+      setError('Product subcategory is required. Please select or confirm a subcategory.')
+      return
+    }
     if (form.price === '' || Number(form.price) <= 0) {
       setError('A valid positive price greater than 0 is required.')
       return
@@ -456,13 +656,14 @@ function AddProductForm({
     }
 
     const files = photos.filter(Boolean).map((item) => item.file)
-    if (panel === 'supplier' && files.length < 2) {
-      setError(
-        files.length === 0
-          ? 'Please upload at least 2 images for the product. Multiple images are required.'
-          : 'Please upload at least 2 images. You cannot submit a product with only 1 image.',
-      )
-      return
+    // 6 images mandatory out of 10 for all non-draft product listings
+    if (status !== 'draft') {
+      if (files.length < 6) {
+        setError(
+          `At least 6 product photos are mandatory (out of 10) to list this item. You have currently uploaded ${files.length} photo(s).`,
+        )
+        return
+      }
     }
 
     setSubmitting(true)
@@ -710,13 +911,13 @@ function AddProductForm({
             photos={photos}
             onChange={setPhotos}
             onError={setError}
-            minPhotos={panel === 'supplier' && !isWmsExisting ? 2 : 1}
+            minPhotos={isWmsExisting ? 1 : 6}
             helperText={
               isWmsExisting
                 ? selectedWmsProduct
                   ? 'Existing photos are displayed below. Click any empty slot to upload additional photos or videos.'
                   : 'Select a WMS product above to view its existing media and upload additional photos.'
-                : undefined
+                : 'Upload 6 to 10 product images or videos. At least 6 images are mandatory.'
             }
           />
         </AddProductSection>
@@ -736,12 +937,12 @@ function AddProductForm({
             </div>
           }
         >
-          <div className="flex flex-col gap-4">
-            {/* Product Name */}
+          <div className="flex flex-col gap-5">
+            {/* 1. Product Title (with Auto-detect) */}
             <div>
               <div className="flex items-center justify-between">
                 <FormLabel icon={Tag} htmlFor="productName" required={!isFormLocked}>
-                  Product name
+                  Item Title / Product Name
                 </FormLabel>
                 {isFormLocked && (
                   <span className="text-[11px] font-medium text-slate-400">Locked in WMS</span>
@@ -752,68 +953,487 @@ function AddProductForm({
                 type="text"
                 disabled={isFormLocked}
                 value={form.name}
-                onChange={updateField('name')}
-                placeholder={isFormLocked ? 'Select a WMS product above' : 'e.g. Sony WH-1000XM5 Wireless Headphones'}
+                onChange={handleNameChange}
+                placeholder={isFormLocked ? 'Select a WMS product above' : 'e.g. FIFA Match Pro Official Soccer Ball (Size 5)'}
                 className={isFormLocked ? DISABLED_FIELD_CLASS : FIELD_CLASS}
               />
+              {autoDetectedCategory && !userManuallyEditedCategory && !isFormLocked && (
+                <div className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-emerald-800 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200">
+                  <Sparkles className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  <span>
+                    Auto-detected category: <strong>{autoDetectedCategory.category}</strong>
+                    {autoDetectedCategory.subcategory && (
+                      <> &gt; <strong>{autoDetectedCategory.subcategory}</strong></>
+                    )}
+                  </span>
+                </div>
+              )}
             </div>
 
-            {/* Category & Brand */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <div className="flex items-center justify-between">
-                  <FormLabel icon={LayoutGrid} htmlFor="category" required={!isFormLocked}>
-                    Category
-                  </FormLabel>
-                  {isFormLocked && (
-                    <span className="text-[11px] font-medium text-slate-400">Locked</span>
-                  )}
-                </div>
-                <select
-                  id="category"
-                  disabled={isFormLocked}
-                  className={isFormLocked ? DISABLED_FIELD_CLASS : FIELD_CLASS}
-                  value={form.category}
-                  onChange={updateField('category')}
-                >
-                  <option value="" disabled>
-                    {isFormLocked ? 'Locked in WMS' : 'Select category'}
-                  </option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.name}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-                {!isFormLocked && categories.length === 0 && (
-                  <p className="mt-1 text-xs text-amber-600">
-                    No categories yet. Ask an admin to create categories first.
-                  </p>
+            {/* 2. ITEM CATEGORY Card (eBay style matching Screenshot 1) */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <span className="text-xs font-bold tracking-wider uppercase text-slate-800">
+                  ITEM CATEGORY
+                </span>
+                {!isFormLocked && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingCategory((v) => !v)}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 hover:text-primary transition-colors cursor-pointer"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    <span>{isEditingCategory ? 'Done' : 'Edit'}</span>
+                  </button>
                 )}
               </div>
 
-              <div>
-                <div className="flex items-center justify-between">
-                  <FormLabel icon={Building2} htmlFor="brand">
-                    Brand
-                  </FormLabel>
-                  {isFormLocked && (
-                    <span className="text-[11px] font-medium text-slate-400">Locked</span>
+              {/* Display view */}
+              <div className="pt-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-base font-bold text-slate-900">
+                    {form.subcategory || form.category || 'No category selected yet'}
+                  </span>
+                  {autoDetectedCategory && !userManuallyEditedCategory && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-200">
+                      <Sparkles className="h-3 w-3 text-blue-600" />
+                      Auto-detected
+                    </span>
                   )}
                 </div>
-                <input
-                  id="brand"
-                  type="text"
-                  disabled={isFormLocked}
-                  value={form.brand}
-                  onChange={updateField('brand')}
-                  placeholder={isFormLocked ? 'Locked in WMS' : 'e.g. Sony'}
-                  className={isFormLocked ? DISABLED_FIELD_CLASS : FIELD_CLASS}
-                />
+                <p className="mt-1 text-xs text-slate-500">
+                  in <strong className="text-slate-800">{form.category || 'Select Category'}</strong>
+                  {form.subcategory && (
+                    <>
+                      {' > '}
+                      <strong className="text-slate-800">{form.subcategory}</strong>
+                    </>
+                  )}
+                </p>
+
+                {/* Edit View */}
+                {isEditingCategory && !isFormLocked && (
+                  <div className="mt-4 rounded-xl border border-primary-200 bg-slate-50/70 p-4 space-y-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-xs font-bold text-slate-700">
+                          Main Category *
+                        </label>
+                        <select
+                          value={form.category}
+                          onChange={handleCategorySelect}
+                          className={FIELD_CLASS}
+                        >
+                          <option value="" disabled>Select category</option>
+                          {categories.map((c) => (
+                            <option key={c.id || c.name} value={c.name}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-xs font-bold text-slate-700">
+                          Subcategory *
+                        </label>
+                        {(() => {
+                          const catObj = categories.find((c) => c.name === form.category)
+                          const subs = Array.isArray(catObj?.subcategories) ? catObj.subcategories : []
+                          return subs.length > 0 ? (
+                            <select
+                              value={form.subcategory}
+                              onChange={handleSubcategorySelect}
+                              className={FIELD_CLASS}
+                            >
+                              <option value="" disabled>Select subcategory</option>
+                              {subs.map((s) => (
+                                <option key={s} value={s}>
+                                  {s}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              value={form.subcategory}
+                              onChange={updateField('subcategory')}
+                              placeholder="Enter subcategory"
+                              className={FIELD_CLASS}
+                            />
+                          )
+                        })()}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <button
+                        type="button"
+                        onClick={handleReDetectCategory}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline cursor-pointer"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        <span>Re-detect from Title</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingCategory(false)}
+                        className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700 transition-colors cursor-pointer"
+                      >
+                        Save &amp; Close
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Description */}
+            {/* 3. VARIATIONS Card (eBay style matching Screenshot 1) */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold tracking-wider uppercase text-slate-800">
+                  VARIATIONS
+                </span>
+                {!isFormLocked && (
+                  <button
+                    type="button"
+                    onClick={() => setShowVariations((v) => !v)}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 hover:text-primary transition-colors cursor-pointer"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    <span>{showVariations ? 'Done' : form.variations?.length > 0 ? 'Edit' : '+ Add'}</span>
+                  </button>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+                Save time and money by listing multiple variations of your item in one multi-quantity, fixed price listing.
+              </p>
+
+              {/* Active Variations Pills */}
+              {Array.isArray(form.variations) && form.variations.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {form.variations.map((v, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-800"
+                    >
+                      <span className="font-bold text-slate-900">{v.name}:</span>
+                      <span>{(v.options || []).join(', ')}</span>
+                      {!isFormLocked && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveVariation(idx)}
+                          className="text-slate-400 hover:text-rose-600 cursor-pointer"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Add Variation Form */}
+              {showVariations && !isFormLocked && (
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-bold text-slate-700">
+                        Variation Name (e.g. Size, Color, Style)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Size"
+                        value={newVarName}
+                        onChange={(e) => setNewVarName(e.target.value)}
+                        className={FIELD_CLASS}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-bold text-slate-700">
+                        Options (comma-separated)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Size 4, Size 5 (or S, M, L)"
+                        value={newVarValues}
+                        onChange={(e) => setNewVarValues(e.target.value)}
+                        className={FIELD_CLASS}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleAddVariation}
+                      className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700 cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Add Variation</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 4. ITEM SPECIFICS Card (eBay style matching Screenshot 1 & 2) */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-4">
+              <div>
+                <span className="text-xs font-bold tracking-wider uppercase text-slate-800">
+                  ITEM SPECIFICS
+                </span>
+                <div className="mt-2">
+                  <h4 className="text-sm font-bold text-slate-900">Required</h4>
+                  <p className="text-xs text-slate-500">Buyers need these details to find your item.</p>
+                </div>
+              </div>
+
+              {/* Required fields: Brand & Condition */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <FormLabel icon={Building2} htmlFor="brand" required={!isFormLocked}>
+                      Brand
+                    </FormLabel>
+                    {isFormLocked && <span className="text-[11px] font-medium text-slate-400">Locked</span>}
+                  </div>
+                  <input
+                    id="brand"
+                    type="text"
+                    disabled={isFormLocked}
+                    value={form.brand}
+                    onChange={updateField('brand')}
+                    placeholder={isFormLocked ? 'Locked in WMS' : 'e.g. Nike, Adidas, Sony, Apple, Unbranded'}
+                    className={isFormLocked ? DISABLED_FIELD_CLASS : FIELD_CLASS}
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <FormLabel icon={ShieldCheck} htmlFor="condition" required={!isFormLocked}>
+                      Condition
+                    </FormLabel>
+                    {isFormLocked && <span className="text-[11px] font-medium text-slate-400">Locked</span>}
+                  </div>
+                  <select
+                    id="condition"
+                    disabled={isFormLocked}
+                    value={form.condition}
+                    onChange={updateField('condition')}
+                    className={isFormLocked ? DISABLED_FIELD_CLASS : FIELD_CLASS}
+                  >
+                    <option value="Brand New">Brand New (Unopened with original tags)</option>
+                    <option value="New (Other)">New (Other) — Open box or unused</option>
+                    <option value="Like New">Like New — Excellent condition</option>
+                    <option value="Very Good">Very Good — Minor cosmetic wear</option>
+                    <option value="Good">Good — Fully functional</option>
+                    <option value="For parts or not working">For parts or not working</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Additional (optional) collapsible matching Screenshot 2 */}
+              <div className="border-t border-slate-100 pt-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">Additional (optional)</h4>
+                    <p className="text-xs text-slate-500">Buyers also search for these details.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowMoreSpecifics((v) => !v)}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-700 cursor-pointer"
+                  >
+                    <span>{showMoreSpecifics ? 'Show less' : 'Show more'}</span>
+                    {showMoreSpecifics ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </button>
+                </div>
+
+                {showMoreSpecifics && (
+                  <div className="mt-4 space-y-3">
+                    {/* Sport / Activity — 49.1K searches */}
+                    <div className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2">
+                      <div className="sm:col-span-5 text-xs font-medium text-slate-700">
+                        <span className="font-semibold text-slate-900">Sport / Activity</span>
+                        <span className="text-slate-400 ml-1.5 text-[11px]">— 49.1K searches</span>
+                      </div>
+                      <div className="sm:col-span-7">
+                        <input
+                          type="text"
+                          value={form.itemType}
+                          disabled={isFormLocked}
+                          onChange={updateField('itemType')}
+                          placeholder="e.g. Soccer, Basketball, Fitness, Running"
+                          className={isFormLocked ? DISABLED_FIELD_CLASS : FIELD_CLASS}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Ball Type / Specific Item Type — 44.6K searches */}
+                    <div className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2">
+                      <div className="sm:col-span-5 text-xs font-medium text-slate-700">
+                        <span className="font-semibold text-slate-900">Ball Type / Item Type</span>
+                        <span className="text-slate-400 ml-1.5 text-[11px]">— 44.6K searches</span>
+                      </div>
+                      <div className="sm:col-span-7">
+                        <input
+                          type="text"
+                          value={form.itemSpecifics?.ballType || ''}
+                          disabled={isFormLocked}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              itemSpecifics: { ...prev.itemSpecifics, ballType: e.target.value },
+                            }))
+                          }
+                          placeholder="e.g. Soccer Ball, Match Ball, Training Ball"
+                          className={isFormLocked ? DISABLED_FIELD_CLASS : FIELD_CLASS}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Ball Size / Item Size — 21.3K searches */}
+                    <div className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2">
+                      <div className="sm:col-span-5 text-xs font-medium text-slate-700">
+                        <span className="font-semibold text-slate-900">Ball Size / Item Size</span>
+                        <span className="text-slate-400 ml-1.5 text-[11px]">— 21.3K searches</span>
+                      </div>
+                      <div className="sm:col-span-7">
+                        <input
+                          type="text"
+                          value={form.itemSpecifics?.size || ''}
+                          disabled={isFormLocked}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              itemSpecifics: { ...prev.itemSpecifics, size: e.target.value },
+                            }))
+                          }
+                          placeholder="e.g. Size 5 (Official), Size 4, Standard"
+                          className={isFormLocked ? DISABLED_FIELD_CLASS : FIELD_CLASS}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Suitable For — 19.3K searches */}
+                    <div className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2">
+                      <div className="sm:col-span-5 text-xs font-medium text-slate-700">
+                        <span className="font-semibold text-slate-900">Suitable For</span>
+                        <span className="text-slate-400 ml-1.5 text-[11px]">— 19.3K searches</span>
+                      </div>
+                      <div className="sm:col-span-7">
+                        <input
+                          type="text"
+                          value={form.itemSpecifics?.suitableFor || ''}
+                          disabled={isFormLocked}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              itemSpecifics: { ...prev.itemSpecifics, suitableFor: e.target.value },
+                            }))
+                          }
+                          placeholder="e.g. Match, Training, Indoor, Outdoor"
+                          className={isFormLocked ? DISABLED_FIELD_CLASS : FIELD_CLASS}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Number of Items in Set — 19K searches */}
+                    <div className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2">
+                      <div className="sm:col-span-5 text-xs font-medium text-slate-700">
+                        <span className="font-semibold text-slate-900">Number of Items in Set</span>
+                        <span className="text-slate-400 ml-1.5 text-[11px]">— 19K searches</span>
+                      </div>
+                      <div className="sm:col-span-7">
+                        <input
+                          type="number"
+                          min="1"
+                          value={form.numItemsInSet || '1'}
+                          disabled={isFormLocked}
+                          onChange={updateField('numItemsInSet')}
+                          placeholder="1"
+                          className={isFormLocked ? DISABLED_FIELD_CLASS : FIELD_CLASS}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Color — 2.7K searches */}
+                    <div className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2">
+                      <div className="sm:col-span-5 text-xs font-medium text-slate-700">
+                        <span className="font-semibold text-slate-900">Color</span>
+                        <span className="text-slate-400 ml-1.5 text-[11px]">— 2.7K searches</span>
+                      </div>
+                      <div className="sm:col-span-7">
+                        <input
+                          type="text"
+                          value={form.color}
+                          disabled={isFormLocked}
+                          onChange={updateField('color')}
+                          placeholder="e.g. White, Multi-Color, Black, Blue"
+                          className={isFormLocked ? DISABLED_FIELD_CLASS : FIELD_CLASS}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Country of Origin — 2.5K searches */}
+                    <div className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2">
+                      <div className="sm:col-span-5 text-xs font-medium text-slate-700">
+                        <span className="font-semibold text-slate-900">Country/Region of Origin</span>
+                        <span className="text-slate-400 ml-1.5 text-[11px]">— 2.5K searches</span>
+                      </div>
+                      <div className="sm:col-span-7">
+                        <input
+                          type="text"
+                          value={form.country}
+                          disabled={isFormLocked}
+                          onChange={updateField('country')}
+                          placeholder="e.g. Pakistan, United States, Vietnam, China"
+                          className={isFormLocked ? DISABLED_FIELD_CLASS : FIELD_CLASS}
+                        />
+                      </div>
+                    </div>
+
+                    {/* MPN */}
+                    <div className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2">
+                      <div className="sm:col-span-5 text-xs font-medium text-slate-700">
+                        <span className="font-semibold text-slate-900">MPN</span>
+                        <span className="text-slate-400 ml-1.5 text-[11px]">(Manufacturer Part Number)</span>
+                      </div>
+                      <div className="sm:col-span-7">
+                        <input
+                          type="text"
+                          value={form.mpn}
+                          disabled={isFormLocked}
+                          onChange={updateField('mpn')}
+                          placeholder="e.g. NK-PRO-2026, Does Not Apply"
+                          className={isFormLocked ? DISABLED_FIELD_CLASS : FIELD_CLASS}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Material — 361 searches */}
+                    <div className="grid grid-cols-1 sm:grid-cols-12 items-center gap-2">
+                      <div className="sm:col-span-5 text-xs font-medium text-slate-700">
+                        <span className="font-semibold text-slate-900">Material</span>
+                        <span className="text-slate-400 ml-1.5 text-[11px]">— 361 searches</span>
+                      </div>
+                      <div className="sm:col-span-7">
+                        <input
+                          type="text"
+                          value={form.material}
+                          disabled={isFormLocked}
+                          onChange={updateField('material')}
+                          placeholder="e.g. PU Leather, Synthetic, Rubber, Polyester"
+                          className={isFormLocked ? DISABLED_FIELD_CLASS : FIELD_CLASS}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 5. Description */}
             <div>
               <div className="flex items-center justify-between">
                 <FormLabel icon={FileText} htmlFor="description">
@@ -834,7 +1454,7 @@ function AddProductForm({
               />
             </div>
 
-            {/* SKU Field (Editable in Self / Locked in WMS) */}
+            {/* 6. SKU Field (Editable in Self / Locked in WMS) */}
             <div>
               <div className="flex items-center justify-between">
                 <FormLabel icon={Barcode} htmlFor="sku" required={!isFormLocked}>
@@ -869,25 +1489,9 @@ function AddProductForm({
               </div>
             </div>
 
-            {/* Admin Panel Fields */}
+            {/* 7. Admin Panel Specific Assignment Fields */}
             {panel === 'admin' && (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Input
-                  id="price"
-                  label="Price (USD) *"
-                  type="number"
-                  placeholder="0.00"
-                  value={form.price}
-                  onChange={updateField('price')}
-                />
-                <Input
-                  id="quantity"
-                  label="Quantity"
-                  type="number"
-                  placeholder="Enter quantity"
-                  value={form.quantity}
-                  onChange={updateField('quantity')}
-                />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Select
                   id="supplier"
                   label="Assign to Supplier *"
@@ -909,7 +1513,6 @@ function AddProductForm({
                   value={form.fulfillBy}
                   onChange={updateField('fulfillBy')}
                 >
-                  <option value="">Select Fulfillment</option>
                   <option value="warehouse">Sellvro Inventory (WMS)</option>
                   <option value="self">With Supplier (Self)</option>
                 </Select>
@@ -921,99 +1524,171 @@ function AddProductForm({
               </div>
             )}
 
-            {/* Supplier Panel Pricing & Quantity */}
-            {panel === 'supplier' && (
-              <div className="flex flex-col gap-4">
-                {/* WMS RESTOCK QUANTITY SECTION */}
-                {isWmsExisting ? (
-                  <div className="rounded-xl border border-primary-200 bg-primary-50/50 p-4">
-                    <h4 className="flex items-center gap-2 text-sm font-bold text-slate-900">
-                      <PackagePlus className="h-4 w-4 text-primary" />
-                      <span>WMS Inventory Stock &amp; Pricing</span>
-                    </h4>
+            {/* 8. Pricing, Handling & Customer Delivery Logistics */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-4">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                <Truck className="h-4 w-4 text-primary" />
+                <span className="text-xs font-bold tracking-wider uppercase text-slate-800">
+                  PRICING, HANDLING &amp; DELIVERY LOGISTICS
+                </span>
+              </div>
 
-                    <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                      <div>
-                        <label className="mb-1 block text-xs font-semibold text-slate-600">
-                          Unit Price (USD) <span className="text-slate-400 font-normal">[Locked]</span>
-                        </label>
-                        <input
-                          type="text"
-                          disabled
-                          value={`$${form.price || '0.00'}`}
-                          className={DISABLED_FIELD_CLASS}
-                        />
-                      </div>
+              {/* WMS RESTOCK QUANTITY SECTION (When restocking existing WMS SKU) */}
+              {isWmsExisting ? (
+                <div className="rounded-xl border border-primary-200 bg-primary-50/50 p-4">
+                  <h4 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                    <PackagePlus className="h-4 w-4 text-primary" />
+                    <span>WMS Inventory Stock &amp; Pricing</span>
+                  </h4>
 
-                      <div>
-                        <label className="mb-1 block text-xs font-semibold text-slate-600">
-                          Current Warehouse Stock <span className="text-slate-400 font-normal">[In WMS]</span>
-                        </label>
-                        <input
-                          type="text"
-                          disabled
-                          value={`${form.quantity || 0} units`}
-                          className={DISABLED_FIELD_CLASS}
-                        />
-                      </div>
-
-                      <div>
-                        <label
-                          htmlFor="additionalQtyInput"
-                          className="mb-1 block text-xs font-bold text-primary-900"
-                        >
-                          + Add Inbound Stock (Quantity) *
-                        </label>
-                        <div className="relative">
-                          <input
-                            id="additionalQtyInput"
-                            type="number"
-                            min="0"
-                            placeholder="e.g. 20"
-                            value={additionalQty}
-                            onChange={(e) => setAdditionalQty(e.target.value.replace(/-/g, ''))}
-                            className="h-11 w-full rounded-lg border-2 border-primary-400 bg-white px-3 pr-8 text-sm font-bold text-slate-900 shadow-xs focus:border-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-200"
-                          />
-                          <Plus className="absolute right-2.5 top-3.5 h-4 w-4 text-primary-600 pointer-events-none" />
-                        </div>
-                      </div>
+                  <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-600">
+                        Unit Price (USD) <span className="text-slate-400 font-normal">[Locked]</span>
+                      </label>
+                      <input
+                        type="text"
+                        disabled
+                        value={`$${form.price || '0.00'}`}
+                        className={DISABLED_FIELD_CLASS}
+                      />
                     </div>
 
-                    {Number(additionalQty) > 0 && (
-                      <div className="mt-3 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 border border-emerald-200">
-                        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                        <span>
-                          New Total Stock will be: <strong>{Number(form.quantity || 0)}</strong> + <strong>{Number(additionalQty)}</strong> = <strong className="text-emerald-950 underline decoration-emerald-500 underline-offset-2">{Number(form.quantity || 0) + Number(additionalQty)} units</strong>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-600">
+                        Current Warehouse Stock <span className="text-slate-400 font-normal">[In WMS]</span>
+                      </label>
+                      <input
+                        type="text"
+                        disabled
+                        value={`${form.quantity || 0} units`}
+                        className={DISABLED_FIELD_CLASS}
+                      />
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="additionalQtyInput"
+                        className="mb-1 block text-xs font-bold text-primary-900"
+                      >
+                        + Add Inbound Stock (Quantity) *
+                      </label>
+                      <div className="relative">
+                        <input
+                          id="additionalQtyInput"
+                          type="number"
+                          min="0"
+                          placeholder="e.g. 20"
+                          value={additionalQty}
+                          onChange={(e) => setAdditionalQty(e.target.value.replace(/-/g, ''))}
+                          className="h-11 w-full rounded-lg border-2 border-primary-400 bg-white px-3 pr-8 text-sm font-bold text-slate-900 shadow-xs focus:border-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-200"
+                        />
+                        <Plus className="absolute right-2.5 top-3.5 h-4 w-4 text-primary-600 pointer-events-none" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {Number(additionalQty) > 0 && (
+                    <div className="mt-3 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 border border-emerald-200">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                      <span>
+                        New Total Stock will be: <strong>{Number(form.quantity || 0)}</strong> + <strong>{Number(additionalQty)}</strong> = <strong className="text-emerald-950 underline decoration-emerald-500 underline-offset-2">{Number(form.quantity || 0) + Number(additionalQty)} units</strong>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Input
+                    id="price"
+                    label="Price (USD) *"
+                    type="number"
+                    placeholder="0.00"
+                    value={form.price}
+                    onChange={updateField('price')}
+                  />
+                  <Input
+                    id="quantity"
+                    label={
+                      isWmsMode
+                        ? 'WMS Stock Quantity (Physical Warehouse Intake) *'
+                        : 'Initial Stock Quantity *'
+                    }
+                    type="number"
+                    placeholder="Enter quantity"
+                    value={form.quantity}
+                    onChange={updateField('quantity')}
+                  />
+                </div>
+              )}
+
+              {/* Handling Time & Customer Delivery Window */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 pt-2 border-t border-slate-100">
+                {/* Handling Time */}
+                <div>
+                  <FormLabel icon={Clock} htmlFor="handlingTime" required>
+                    Handling Time
+                  </FormLabel>
+                  <select
+                    id="handlingTime"
+                    disabled={isFormLocked}
+                    value={form.handlingTime}
+                    onChange={updateField('handlingTime')}
+                    className={isFormLocked ? DISABLED_FIELD_CLASS : FIELD_CLASS}
+                  >
+                    <option value="Same business day">Same business day (Fast Dispatch)</option>
+                    <option value="1 business day">1 business day</option>
+                    <option value="2 business days">2 business days</option>
+                    <option value="3 business days">3 business days</option>
+                    <option value="4-5 business days">4-5 business days</option>
+                  </select>
+                  <span className="mt-1 block text-[11px] text-slate-500">
+                    Time taken by seller/warehouse to process &amp; hand over package.
+                  </span>
+                </div>
+
+                {/* Customer Delivery Window (1 Day for WMS / Seller choice for Direct) */}
+                <div>
+                  <FormLabel icon={Truck} htmlFor="deliveryTime" required>
+                    Customer Delivery Window
+                  </FormLabel>
+                  {isWmsMode || form.fulfillBy === 'warehouse' ? (
+                    <div>
+                      <div className="flex h-11 w-full items-center justify-between rounded-lg border border-emerald-300 bg-emerald-50/80 px-3 text-sm font-bold text-emerald-900">
+                        <span className="flex items-center gap-1.5">
+                          <Zap className="h-4 w-4 fill-emerald-500 text-emerald-600" />
+                          1 Day (WMS Express Delivery)
+                        </span>
+                        <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
+                          Locked by WMS
                         </span>
                       </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <Input
-                        id="price"
-                        label="Price (USD) *"
-                        type="number"
-                        placeholder="0.00"
-                        value={form.price}
-                        onChange={updateField('price')}
-                      />
-                      <Input
-                        id="quantity"
-                        label={
-                          isWmsMode
-                            ? 'WMS Stock Quantity (Physical Warehouse Intake) *'
-                            : 'Initial Stock Quantity *'
-                        }
-                        type="number"
-                        placeholder="Enter quantity"
-                        value={form.quantity}
-                        onChange={updateField('quantity')}
-                      />
+                      <span className="mt-1 block text-[11px] font-medium text-emerald-700">
+                        ⚡ Sellvro Central Warehouse delivers within 1 day (same-day dispatch guarantee).
+                      </span>
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <div>
+                      <select
+                        id="deliveryTime"
+                        value={form.deliveryTime}
+                        onChange={updateField('deliveryTime')}
+                        className={FIELD_CLASS}
+                      >
+                        <option value="1 - 2 business days">1 - 2 business days</option>
+                        <option value="2 - 3 business days">2 - 3 business days</option>
+                        <option value="3 - 5 business days">3 - 5 business days</option>
+                        <option value="5 - 7 business days">5 - 7 business days</option>
+                        <option value="7 - 10 business days">7 - 10 business days</option>
+                      </select>
+                      <span className="mt-1 block text-[11px] text-slate-500">
+                        As a direct supplier, you decide how many days it takes for your courier to deliver.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
 
                 {/* Platform Fee Card for Supplier - dynamically switches between WMS Policy and Self-Fulfillment */}
                 {panel === 'supplier' && (
@@ -1120,8 +1795,6 @@ function AddProductForm({
                     )}
                   </div>
                 )}
-              </div>
-            )}
           </div>
         </AddProductSection>
 

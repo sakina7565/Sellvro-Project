@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 import Role from '../models/Role.js'
 import BusinessProfile from '../models/BusinessProfile.js'
+import Review from '../models/Review.js'
 import { signToken } from '../middleware/auth.js'
 import {
   clearAuthCookie,
@@ -138,23 +139,30 @@ export const login = async (req, res) => {
     const cleanEmail = email.toLowerCase().trim()
     let user = await User.findOne({ email: cleanEmail }).select('+password')
 
-    // ── Check WMS Supplier Status via Live WMS API ──
+    // ── Check WMS Supplier Status via Live WMS API (only for suppliers or new accounts) ──
     let wmsAuthResult = null
-    try {
-      const wmsRes = await fetch('https://wmsbysellvro.com/api/supplier/login', {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email: cleanEmail, password }),
-      })
-      const wmsData = await wmsRes.json().catch(() => null)
-      if (wmsRes.ok && wmsData?.status && wmsData?.token && wmsData?.supplier) {
-        wmsAuthResult = wmsData
+    const shouldCheckWms = !user || user.role === 'supplier'
+    if (shouldCheckWms) {
+      try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 3500)
+        const wmsRes = await fetch('https://wmsbysellvro.com/api/supplier/login', {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email: cleanEmail, password }),
+          signal: controller.signal,
+        })
+        clearTimeout(timeout)
+        const wmsData = await wmsRes.json().catch(() => null)
+        if (wmsRes.ok && wmsData?.status && wmsData?.token && wmsData?.supplier) {
+          wmsAuthResult = wmsData
+        }
+      } catch (wmsErr) {
+        console.warn('WMS login check skipped/timed out:', wmsErr.message)
       }
-    } catch (wmsErr) {
-      console.warn('WMS login check skipped/failed:', wmsErr.message)
     }
 
     // If user does not exist locally on marketplace, but authenticated on WMS as a supplier:
@@ -237,7 +245,7 @@ export const login = async (req, res) => {
           },
         )
       }
-    } else if (user.role === 'supplier') {
+    } else if (user.role === 'supplier' && (user.isWmsRegistered || user.wmsToken)) {
       // User is supplier on marketplace, but WMS login did not succeed (not registered on WMS)
       user.isWmsRegistered = false
       user.wmsToken = ''
@@ -281,9 +289,51 @@ export const getMe = async (req, res) => {
     }
   }
 
+  let ratings = null
+  if (req.user.role === 'supplier') {
+    try {
+      const reviewStats = await Review.aggregate([
+        { $match: { supplier: req.user._id } },
+        {
+          $group: {
+            _id: '$supplier',
+            reviewsCount: { $sum: 1 },
+            averageRating: { $avg: '$rating' },
+            deliveryRatingAverage: { $avg: '$deliveryRating' },
+            onTimeDeliveryPercent: {
+              $avg: { $cond: [{ $eq: ['$deliveryOnTime', true] }, 100, 0] },
+            },
+            badRatingsCount: {
+              $sum: { $cond: [{ $lte: ['$rating', 2] }, 1, 0] },
+            },
+          },
+        },
+      ])
+      const r = reviewStats[0] || {}
+      const avg = Number((r.averageRating || 0).toFixed(1))
+      const onTime =
+        r.onTimeDeliveryPercent !== undefined && r.onTimeDeliveryPercent !== null
+          ? Math.round(r.onTimeDeliveryPercent)
+          : null
+      const reviewsCount = r.reviewsCount || 0
+      const badRatingsCount = r.badRatingsCount || 0
+      ratings = {
+        reviewsCount,
+        averageRating: avg,
+        deliveryRatingAverage: Number((r.deliveryRatingAverage || 0).toFixed(1)),
+        onTimeDeliveryPercent: onTime,
+        badRatingsCount,
+        isLowPerformance: reviewsCount >= 2 && (avg < 3.0 || (onTime !== null && onTime < 60) || badRatingsCount >= 2),
+      }
+    } catch {
+      ratings = null
+    }
+  }
+
   return res.json({
     user: {
       ...safeUser,
+      ratings,
       impersonatedBy,
     },
     redirectTo: getHomePath(safeUser),

@@ -3,10 +3,14 @@ import Role from '../models/Role.js'
 import BusinessProfile from '../models/BusinessProfile.js'
 import AdminNotification from '../models/AdminNotification.js'
 import Order from '../models/Order.js'
+import Product from '../models/Product.js'
+import Review from '../models/Review.js'
 import Country from '../models/Country.js'
 import Location from '../models/Location.js'
 import { signToken } from '../middleware/auth.js'
 import { setAuthCookie, setImpersonatorCookie, readAuthToken } from '../utils/authCookie.js'
+import { createNotification } from '../utils/notifications.js'
+import { sendSupplierWarningEmail, sendSupplierSuspensionEmail } from '../utils/emailService.js'
 
 const formatJoined = (date) =>
   new Date(date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
@@ -407,12 +411,215 @@ export const listAllAccounts = async (req, res) => {
   try {
     const { role = 'all', status = 'all', search = '', page = 1, limit = 50 } = req.query
 
-    const query = {}
-
+    // Case 1: Specific Supplier or Customer query from their dedicated pages / reporting widgets
     if (role === 'supplier' || role === 'user') {
-      query.role = role
-    } else {
-      query.role = { $in: ['supplier', 'user'] }
+      const query = { role }
+
+      if (status && status !== 'all') {
+        query.status = status
+      }
+
+      if (search?.trim()) {
+        const regex = new RegExp(search.trim(), 'i')
+        const matchingProfiles = await BusinessProfile.find({
+          $or: [
+            { businessName: regex },
+            { city: regex },
+            { country: regex },
+            { businessPhone: regex },
+          ],
+        }).select('user')
+
+        const profileUserIds = matchingProfiles.map((p) => p.user)
+
+        query.$or = [
+          { fullName: regex },
+          { email: regex },
+          { _id: { $in: profileUserIds } },
+        ]
+      }
+
+      const pageNum = Math.max(1, parseInt(page, 10) || 1)
+      const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50))
+      const skip = (pageNum - 1) * limitNum
+
+      const [users, total] = await Promise.all([
+        User.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
+        User.countDocuments(query),
+      ])
+
+      const userIds = users.map((u) => u._id)
+      const [profiles, orderCounts, reviewStats] = await Promise.all([
+        BusinessProfile.find({ user: { $in: userIds } }),
+        Order.aggregate([
+          {
+            $match: {
+              $or: [{ supplier: { $in: userIds } }, { user: { $in: userIds } }],
+              status: { $ne: 'cancelled' },
+            },
+          },
+          {
+            $group: {
+              _id: {
+                $cond: [{ $in: ['$supplier', userIds] }, '$supplier', '$user'],
+              },
+              count: { $sum: 1 },
+              totalSpent: { $sum: '$total' },
+              totalEarnings: { $sum: { $subtract: ['$total', '$commission'] } },
+            },
+          },
+        ]),
+        Review.aggregate([
+          { $match: { supplier: { $in: userIds } } },
+          {
+            $group: {
+              _id: '$supplier',
+              count: { $sum: 1 },
+              totalProductRating: { $sum: '$productRating' },
+              totalDeliveryRating: { $sum: '$deliveryRating' },
+              onTimeCount: { $sum: { $cond: ['$deliveredOnTime', 1, 0] } },
+              badRatingsCount: {
+                $sum: {
+                  $cond: [
+                    {
+                      $or: [
+                        { $lte: ['$productRating', 2] },
+                        { $lte: ['$deliveryRating', 2] },
+                        { $eq: ['$deliveredOnTime', false] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
+              },
+            },
+          },
+        ]),
+      ])
+
+      const profileMap = new Map(profiles.map((p) => [p.user.toString(), p]))
+      const orderMap = new Map(orderCounts.map((o) => [o._id.toString(), o]))
+      const reviewMap = new Map(reviewStats.map((r) => [r._id.toString(), r]))
+
+      const [totalSuppliers, totalUsers, totalApproved, totalSuspended, totalPending, totalWmsSuppliers, totalWithWarnings] = await Promise.all([
+        User.countDocuments({ role: 'supplier' }),
+        User.countDocuments({ role: 'user' }),
+        User.countDocuments({ role: { $in: ['supplier', 'user'] }, status: 'approved' }),
+        User.countDocuments({ role: { $in: ['supplier', 'user'] }, status: 'suspended' }),
+        User.countDocuments({ role: { $in: ['supplier', 'user'] }, status: { $in: ['pending_approval', 'pending_details'] } }),
+        User.countDocuments({
+          role: 'supplier',
+          $or: [
+            { isWmsRegistered: true },
+            { wmsClientId: { $exists: true, $ne: '' } },
+            { wmsSupplierId: { $exists: true, $ne: null } },
+            { wmsToken: { $exists: true, $ne: '' } },
+          ],
+        }),
+        User.countDocuments({ role: 'supplier', warningsCount: { $gt: 0 } }),
+      ])
+
+      const totalMarketplaceSuppliers = Math.max(0, totalSuppliers - totalWmsSuppliers)
+
+      const data = users.map((user) => {
+        const profile = profileMap.get(user._id.toString())
+        const stats = orderMap.get(user._id.toString())
+        const rev = reviewMap.get(user._id.toString())
+
+        const ordersCount = stats?.count || 0
+        const revenue = user.role === 'supplier' ? (stats?.totalEarnings || 0) : (stats?.totalSpent || 0)
+        const isWms = Boolean(
+          user.isWmsRegistered ||
+          user.wmsClientId ||
+          user.wmsToken ||
+          user.wmsSupplierId
+        )
+
+        const reviewsCount = rev?.count || 0
+        const avgRating = reviewsCount > 0 ? Number((rev.totalProductRating / reviewsCount).toFixed(1)) : 0
+        const avgDelivery = reviewsCount > 0 ? Number((rev.totalDeliveryRating / reviewsCount).toFixed(1)) : 0
+        const onTimePct = reviewsCount > 0 ? Math.round((rev.onTimeCount / reviewsCount) * 100) : 100
+        const badCount = rev?.badRatingsCount || 0
+        const warningsCount = user.warningsCount ?? (user.warnings?.length || 0)
+        const isLowPerformance = (reviewsCount >= 1 && (avgRating < 3.0 || onTimePct < 70)) || badCount >= 1
+
+        return {
+          id: user._id.toString(),
+          fullName: user.fullName,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+          walletBalance: user.walletBalance ?? 0,
+          joined: formatJoined(user.createdAt),
+          createdAt: user.createdAt,
+          ordersCount,
+          revenue: Math.round(revenue * 100) / 100,
+          revenueLabel: `$${revenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          isWmsRegistered: isWms,
+          wmsClientId: user.wmsClientId || '',
+          wmsSupplierId: user.wmsSupplierId || null,
+          wmsStatus: user.wmsStatus || '',
+          supplierType: isWms ? 'wms' : 'marketplace_only',
+          originLabel: isWms ? 'WMS Warehouse (3PL)' : 'Marketplace Only',
+          ratings: {
+            reviewsCount,
+            averageRating: avgRating,
+            deliveryRatingAverage: avgDelivery,
+            onTimeDeliveryPercent: onTimePct,
+            badRatingsCount: badCount,
+            isLowPerformance,
+          },
+          warningsCount,
+          warnings: user.warnings || [],
+          suspensionReason: user.suspensionReason || '',
+          suspendedAt: user.suspendedAt || null,
+          canSuspend: warningsCount >= 3 || user.status === 'suspended',
+          businessProfile: profile
+            ? {
+                businessName: profile.businessName || '',
+                businessCategory: profile.businessCategory || '',
+                businessPhone: profile.businessPhone || '',
+                city: profile.city || '',
+                country: profile.country || '',
+                location: [profile.city, profile.country].filter(Boolean).join(', ') || '—',
+                paymentProvider: profile.paymentProvider || 'Not set',
+                payoutSchedule: profile.payoutSchedule || 'Weekly',
+              }
+            : null,
+        }
+      })
+
+      return res.json({
+        data,
+        stats: {
+          totalAccounts: totalSuppliers + totalUsers,
+          totalSuppliers,
+          totalWithWarnings,
+          totalUsers,
+          totalApproved,
+          totalSuspended,
+          totalPending,
+          totalWmsSuppliers,
+          totalMarketplaceSuppliers,
+        },
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum) || 1,
+        },
+      })
+    }
+
+    // Case 2: Settings -> Accounts Management
+    // Exclude Suppliers and Users! Display internal Staff, Administrators, Sub-admins and Managers.
+    const query = { role: 'admin' }
+
+    if (role === 'super_admin') {
+      query.adminRoleId = null
+    } else if (role === 'sub_admin') {
+      query.adminRoleId = { $ne: null }
     }
 
     if (status && status !== 'all') {
@@ -421,21 +628,13 @@ export const listAllAccounts = async (req, res) => {
 
     if (search?.trim()) {
       const regex = new RegExp(search.trim(), 'i')
-      const matchingProfiles = await BusinessProfile.find({
-        $or: [
-          { businessName: regex },
-          { city: regex },
-          { country: regex },
-          { businessPhone: regex },
-        ],
-      }).select('user')
-
-      const profileUserIds = matchingProfiles.map((p) => p.user)
+      const matchingRoles = await Role.find({ name: regex }).select('_id')
+      const matchingRoleIds = matchingRoles.map((r) => r._id)
 
       query.$or = [
         { fullName: regex },
         { email: regex },
-        { _id: { $in: profileUserIds } },
+        { adminRoleId: { $in: matchingRoleIds } },
       ]
     }
 
@@ -443,87 +642,52 @@ export const listAllAccounts = async (req, res) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50))
     const skip = (pageNum - 1) * limitNum
 
-    const [users, total] = await Promise.all([
+    const [users, total, allRoles, totalStaff, totalSuperAdmins, totalSubAdmins, totalApproved, totalSuspended] = await Promise.all([
       User.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
       User.countDocuments(query),
+      Role.find({}),
+      User.countDocuments({ role: 'admin' }),
+      User.countDocuments({ role: 'admin', adminRoleId: null }),
+      User.countDocuments({ role: 'admin', adminRoleId: { $ne: null } }),
+      User.countDocuments({ role: 'admin', status: 'approved' }),
+      User.countDocuments({ role: 'admin', status: 'suspended' }),
     ])
 
-    const userIds = users.map((u) => u._id)
-    const [profiles, orderCounts] = await Promise.all([
-      BusinessProfile.find({ user: { $in: userIds } }),
-      Order.aggregate([
-        {
-          $match: {
-            $or: [{ supplier: { $in: userIds } }, { user: { $in: userIds } }],
-            status: { $ne: 'cancelled' },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              $cond: [{ $in: ['$supplier', userIds] }, '$supplier', '$user'],
-            },
-            count: { $sum: 1 },
-            totalSpent: { $sum: '$total' },
-            totalEarnings: { $sum: { $subtract: ['$total', '$commission'] } },
-          },
-        },
-      ]),
-    ])
-
-    const profileMap = new Map(profiles.map((p) => [p.user.toString(), p]))
-    const orderMap = new Map(orderCounts.map((o) => [o._id.toString(), o]))
-
-    const [totalSuppliers, totalUsers, totalApproved, totalSuspended, totalPending] = await Promise.all([
-      User.countDocuments({ role: 'supplier' }),
-      User.countDocuments({ role: 'user' }),
-      User.countDocuments({ role: { $in: ['supplier', 'user'] }, status: 'approved' }),
-      User.countDocuments({ role: { $in: ['supplier', 'user'] }, status: 'suspended' }),
-      User.countDocuments({ role: { $in: ['supplier', 'user'] }, status: { $in: ['pending_approval', 'pending_details'] } }),
-    ])
+    const roleMap = new Map(allRoles.map((r) => [r._id.toString(), r]))
 
     const data = users.map((user) => {
-      const profile = profileMap.get(user._id.toString())
-      const stats = orderMap.get(user._id.toString())
-      const ordersCount = stats?.count || 0
-      const revenue = user.role === 'supplier' ? (stats?.totalEarnings || 0) : (stats?.totalSpent || 0)
+      const assignedRole = user.adminRoleId ? roleMap.get(user.adminRoleId.toString()) : null
+      const isSuper = !user.adminRoleId
+      const roleLabel = isSuper ? 'Super Admin' : (assignedRole?.name || 'Sub-Admin')
+      const permissionsCount = isSuper ? null : (assignedRole?.permissions?.length ?? 0)
 
       return {
         id: user._id.toString(),
         fullName: user.fullName,
         email: user.email,
-        role: user.role,
-        status: user.status,
-        walletBalance: user.walletBalance ?? 0,
+        role: 'admin',
+        adminRoleId: user.adminRoleId?.toString() || null,
+        roleLabel,
+        roleDescription: isSuper
+          ? 'Full root access with all administrative privileges'
+          : (assignedRole?.description || 'Custom role permissions'),
+        permissionsCount,
+        status: user.status || 'approved',
+        isSuperAdmin: isSuper,
         joined: formatJoined(user.createdAt),
         createdAt: user.createdAt,
-        ordersCount,
-        revenue: Math.round(revenue * 100) / 100,
-        revenueLabel: `$${revenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-        businessProfile: profile
-          ? {
-              businessName: profile.businessName || '',
-              businessCategory: profile.businessCategory || '',
-              businessPhone: profile.businessPhone || '',
-              city: profile.city || '',
-              country: profile.country || '',
-              location: [profile.city, profile.country].filter(Boolean).join(', ') || '—',
-              paymentProvider: profile.paymentProvider || 'Not set',
-              payoutSchedule: profile.payoutSchedule || 'Weekly',
-            }
-          : null,
       }
     })
 
     return res.json({
       data,
       stats: {
-        totalAccounts: totalSuppliers + totalUsers,
-        totalSuppliers,
-        totalUsers,
+        totalAccounts: totalStaff,
+        totalStaff,
+        totalSuperAdmins,
+        totalSubAdmins,
         totalApproved,
         totalSuspended,
-        totalPending,
       },
       pagination: {
         page: pageNum,
@@ -544,8 +708,9 @@ export const createAccount = async (req, res) => {
       fullName,
       email,
       password,
-      role,
+      role = 'admin',
       status = 'approved',
+      adminRoleId,
       businessName,
       businessCategory,
       businessPhone,
@@ -558,8 +723,8 @@ export const createAccount = async (req, res) => {
       return res.status(400).json({ message: 'Full name, email, and password are required.' })
     }
 
-    if (!['supplier', 'user'].includes(role)) {
-      return res.status(400).json({ message: 'Role must be either "supplier" or "user".' })
+    if (!['supplier', 'user', 'admin', 'staff'].includes(role)) {
+      return res.status(400).json({ message: 'Invalid role specified.' })
     }
 
     if (password.length < 6) {
@@ -574,6 +739,49 @@ export const createAccount = async (req, res) => {
     const allowedStatuses = ['approved', 'pending_approval', 'pending_details', 'suspended', 'rejected']
     const finalStatus = allowedStatuses.includes(status) ? status : 'approved'
 
+    // Admin / Staff creation
+    if (role === 'admin' || role === 'staff') {
+      const roleId = adminRoleId && adminRoleId !== 'super_admin' ? adminRoleId : null
+
+      if (req.user?.adminRoleId && !roleId) {
+        return res.status(403).json({ message: 'Only super administrators can create super admin accounts.' })
+      }
+
+      let roleName = null
+      if (roleId) {
+        const roleDoc = await Role.findById(roleId)
+        if (!roleDoc) {
+          return res.status(400).json({ message: 'Selected role not found.' })
+        }
+        roleName = roleDoc.name
+      }
+
+      const user = await User.create({
+        fullName: fullName.trim(),
+        email: email.toLowerCase().trim(),
+        password,
+        role: 'admin',
+        status: finalStatus,
+        adminRoleId: roleId,
+      })
+
+      return res.status(201).json({
+        message: 'Staff account created successfully.',
+        user: {
+          id: user._id.toString(),
+          fullName: user.fullName,
+          email: user.email,
+          role: 'admin',
+          adminRoleId: user.adminRoleId?.toString() || null,
+          roleLabel: roleName || 'Super Admin',
+          status: user.status,
+          joined: formatJoined(user.createdAt),
+        },
+      })
+    }
+
+    // Supplier / User creation
+    const isWms = Boolean(req.body.isWmsRegistered || req.body.wmsClientId)
     const user = await User.create({
       fullName: fullName.trim(),
       email: email.toLowerCase().trim(),
@@ -581,6 +789,9 @@ export const createAccount = async (req, res) => {
       role,
       status: finalStatus,
       walletBalance: Math.max(0, Number(walletBalance) || 0),
+      isWmsRegistered: isWms,
+      wmsClientId: isWms ? String(req.body.wmsClientId || '').trim() : '',
+      wmsStatus: isWms ? 'approved' : '',
     })
 
     await BusinessProfile.create({
@@ -616,6 +827,7 @@ export const updateAccount = async (req, res) => {
       email,
       role,
       status,
+      adminRoleId,
       businessName,
       businessCategory,
       businessPhone,
@@ -630,12 +842,6 @@ export const updateAccount = async (req, res) => {
       return res.status(404).json({ message: 'Account not found.' })
     }
 
-    if (user.role === 'admin') {
-      return res.status(400).json({ message: 'Cannot modify administrator accounts via this endpoint.' })
-    }
-
-    if (fullName?.trim()) user.fullName = fullName.trim()
-
     if (email?.trim() && email.toLowerCase().trim() !== user.email) {
       const conflict = await User.findOne({ email: email.toLowerCase().trim(), _id: { $ne: user._id } })
       if (conflict) {
@@ -644,6 +850,64 @@ export const updateAccount = async (req, res) => {
       user.email = email.toLowerCase().trim()
     }
 
+    if (fullName?.trim()) user.fullName = fullName.trim()
+
+    if (password) {
+      if (password.length < 6) {
+        return res.status(400).json({ message: 'Password must be at least 6 characters.' })
+      }
+      user.password = password
+    }
+
+    // Handle Staff / Admin account update
+    if (user.role === 'admin') {
+      if (status && ['approved', 'suspended'].includes(status)) {
+        if (user._id.toString() === req.user._id.toString() && status === 'suspended') {
+          return res.status(400).json({ message: 'You cannot suspend your own account.' })
+        }
+        user.status = status
+      }
+
+      if (adminRoleId !== undefined) {
+        const isSuper = adminRoleId === 'super_admin' || adminRoleId === '' || adminRoleId === null
+        if (isSuper) {
+          if (req.user?.adminRoleId) {
+            return res.status(403).json({ message: 'Only super administrators can assign Super Admin role.' })
+          }
+          user.adminRoleId = null
+        } else {
+          const roleDoc = await Role.findById(adminRoleId)
+          if (!roleDoc) {
+            return res.status(400).json({ message: 'Selected role not found.' })
+          }
+          user.adminRoleId = roleDoc._id
+        }
+      }
+
+      await user.save()
+
+      let roleLabel = 'Super Admin'
+      if (user.adminRoleId) {
+        const roleDoc = await Role.findById(user.adminRoleId)
+        roleLabel = roleDoc?.name || 'Sub-Admin'
+      }
+
+      return res.json({
+        message: 'Staff account updated successfully.',
+        user: {
+          id: user._id.toString(),
+          fullName: user.fullName,
+          email: user.email,
+          role: 'admin',
+          status: user.status,
+          adminRoleId: user.adminRoleId?.toString() || null,
+          roleLabel,
+          joined: formatJoined(user.createdAt),
+        },
+      })
+    }
+
+    // Regular User / Supplier update
     if (role && ['supplier', 'user'].includes(role)) {
       user.role = role
     }
@@ -656,11 +920,17 @@ export const updateAccount = async (req, res) => {
       user.walletBalance = Math.max(0, Number(walletBalance))
     }
 
-    if (password) {
-      if (password.length < 6) {
-        return res.status(400).json({ message: 'Password must be at least 6 characters.' })
-      }
-      user.password = password
+    if (typeof req.body.isWmsRegistered === 'boolean') {
+      user.isWmsRegistered = req.body.isWmsRegistered
+    }
+    if (req.body.wmsClientId !== undefined) {
+      user.wmsClientId = String(req.body.wmsClientId || '').trim()
+    }
+    if (req.body.wmsSupplierId !== undefined) {
+      user.wmsSupplierId = req.body.wmsSupplierId ? Number(req.body.wmsSupplierId) : null
+    }
+    if (req.body.wmsStatus !== undefined) {
+      user.wmsStatus = String(req.body.wmsStatus || '').trim()
     }
 
     await user.save()
@@ -706,7 +976,19 @@ export const deleteAccount = async (req, res) => {
     }
 
     if (user.role === 'admin') {
-      return res.status(403).json({ message: 'Cannot delete administrator accounts.' })
+      if (user._id.toString() === req.user._id.toString()) {
+        return res.status(400).json({ message: 'You cannot delete your own account.' })
+      }
+
+      if (!user.adminRoleId) {
+        const superAdminCount = await User.countDocuments({ role: 'admin', adminRoleId: null })
+        if (superAdminCount <= 1) {
+          return res.status(400).json({ message: 'Cannot delete the only Super Administrator account.' })
+        }
+      }
+
+      await User.findByIdAndDelete(user._id)
+      return res.json({ message: 'Staff account deleted successfully.' })
     }
 
     await BusinessProfile.deleteMany({ user: user._id })
@@ -833,6 +1115,205 @@ export const deleteLocation = async (req, res) => {
     return res.status(500).json({ message: error.message || 'Failed to delete location.' })
   }
 }
+
+/**
+ * Issue official performance warning to supplier due to bad ratings / delivery delays
+ * POST /api/admin/suppliers/:id/warn
+ */
+export const warnSupplierAccount = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { reason, details } = req.body
+
+    const supplier = await User.findById(id)
+    if (!supplier || supplier.role !== 'supplier') {
+      return res.status(404).json({ message: 'Supplier account not found.' })
+    }
+
+    // Calculate current performance from Review collection
+    const reviews = await Review.find({ supplier: supplier._id })
+    const count = reviews.length
+    let sumProduct = 0
+    let onTimeCount = 0
+    reviews.forEach((r) => {
+      sumProduct += r.productRating || 0
+      if (r.deliveredOnTime) onTimeCount += 1
+    })
+    const avgRating = count > 0 ? Number((sumProduct / count).toFixed(1)) : 0
+    const onTimePct = count > 0 ? Math.round((onTimeCount / count) * 100) : 100
+
+    const nextWarningNumber = (supplier.warningsCount || 0) + 1
+    const warningRecord = {
+      warningNumber: nextWarningNumber,
+      reason: reason?.trim() || 'Poor Product Quality & Bad Customer Ratings',
+      details: details?.trim() || '',
+      averageRating: avgRating,
+      onTimeDeliveryPercent: onTimePct,
+      warnedAt: new Date(),
+      warnedBy: req.user?._id,
+    }
+
+    supplier.warningsCount = nextWarningNumber
+    if (!supplier.warnings) supplier.warnings = []
+    supplier.warnings.push(warningRecord)
+    await supplier.save()
+
+    // Create In-App Notification
+    try {
+      await createNotification({
+        userId: supplier._id,
+        title: `⚠️ Performance Warning #${nextWarningNumber}`,
+        message: `Admin has issued official warning #${nextWarningNumber} (Max: 3): ${warningRecord.reason}`,
+        type: 'account',
+      })
+    } catch {}
+
+    // Send Official Warning Email
+    try {
+      await sendSupplierWarningEmail(supplier.email, {
+        supplierName: supplier.fullName,
+        warningNumber: nextWarningNumber,
+        maxWarnings: 3,
+        reason: warningRecord.reason,
+        details: warningRecord.details,
+        averageRating: avgRating,
+        onTimeDeliveryPercent: onTimePct,
+      })
+    } catch (mailErr) {
+      console.error('Failed to dispatch warning email:', mailErr)
+    }
+
+    return res.json({
+      success: true,
+      message: `Warning #${nextWarningNumber} of 3 issued successfully to ${supplier.fullName}. Warning email has been sent.`,
+      warningsCount: supplier.warningsCount,
+      isLimitReached: supplier.warningsCount >= 3,
+      warning: warningRecord,
+    })
+  } catch (error) {
+    console.error('Warn supplier error:', error)
+    return res.status(500).json({ message: error.message || 'Failed to issue warning.' })
+  }
+}
+
+/**
+ * Suspend supplier account (after 3 warnings or admin enforcement)
+ * POST /api/admin/suppliers/:id/suspend
+ */
+export const suspendSupplierAccount = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { reason, forceOverride = false } = req.body
+
+    const supplier = await User.findById(id)
+    if (!supplier || supplier.role !== 'supplier') {
+      return res.status(404).json({ message: 'Supplier account not found.' })
+    }
+
+    // Policy check: "3 bar sy ziyada warn k bad usse suspende kr sake"
+    if ((supplier.warningsCount || 0) < 3 && !forceOverride) {
+      return res.status(400).json({
+        message: `Supplier has received ${supplier.warningsCount || 0} warning(s). Standard policy requires 3 warnings before suspension.`,
+        requireOverride: true,
+        currentWarnings: supplier.warningsCount || 0,
+      })
+    }
+
+    // Performance snapshot for suspension record
+    const reviews = await Review.find({ supplier: supplier._id })
+    const count = reviews.length
+    let sumProduct = 0
+    let onTimeCount = 0
+    reviews.forEach((r) => {
+      sumProduct += r.productRating || 0
+      if (r.deliveredOnTime) onTimeCount += 1
+    })
+    const avgRating = count > 0 ? Number((sumProduct / count).toFixed(1)) : 0
+    const onTimePct = count > 0 ? Math.round((onTimeCount / count) * 100) : 100
+
+    supplier.status = 'suspended'
+    supplier.suspensionReason =
+      reason?.trim() ||
+      `Account suspended due to repeated low customer ratings, delivery SLA breach, and exceeding the threshold of 3 performance warnings.`
+    supplier.suspendedAt = new Date()
+    await supplier.save()
+
+    // Deactivate active products from marketplace
+    await Product.updateMany(
+      { supplier: supplier._id, status: 'active' },
+      { status: 'inactive' },
+    )
+
+    // In-App Notification
+    try {
+      await createNotification({
+        userId: supplier._id,
+        title: '🚫 Supplier Account Suspended',
+        message: supplier.suspensionReason,
+        type: 'account',
+      })
+    } catch {}
+
+    // Send Suspension Email
+    try {
+      await sendSupplierSuspensionEmail(supplier.email, {
+        supplierName: supplier.fullName,
+        reason: supplier.suspensionReason,
+        totalWarnings: supplier.warningsCount || 3,
+        averageRating: avgRating,
+        onTimeDeliveryPercent: onTimePct,
+      })
+    } catch (mailErr) {
+      console.error('Failed to dispatch suspension email:', mailErr)
+    }
+
+    return res.json({
+      success: true,
+      message: `Supplier ${supplier.fullName} has been suspended. Listings deactivated and formal suspension email dispatched.`,
+      supplier: supplier.toSafeObject(),
+    })
+  } catch (error) {
+    console.error('Suspend supplier error:', error)
+    return res.status(500).json({ message: error.message || 'Failed to suspend supplier.' })
+  }
+}
+
+/**
+ * Reinstate suspended supplier account
+ * POST /api/admin/suppliers/:id/reinstate
+ */
+export const reinstateSupplierAccount = async (req, res) => {
+  try {
+    const { id } = req.params
+    const supplier = await User.findById(id)
+    if (!supplier || supplier.role !== 'supplier') {
+      return res.status(404).json({ message: 'Supplier account not found.' })
+    }
+
+    supplier.status = 'approved'
+    supplier.suspensionReason = ''
+    supplier.suspendedAt = null
+    await supplier.save()
+
+    try {
+      await createNotification({
+        userId: supplier._id,
+        title: '✅ Supplier Account Reinstated',
+        message: 'Your supplier account has been reinstated. You may now reactivate your product listings in the portal.',
+        type: 'account',
+      })
+    } catch {}
+
+    return res.json({
+      success: true,
+      message: `Supplier ${supplier.fullName} has been reinstated successfully.`,
+      supplier: supplier.toSafeObject(),
+    })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to reinstate supplier.' })
+  }
+}
+
 
 
 
