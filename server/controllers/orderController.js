@@ -570,47 +570,47 @@ export const createOrder = async (req, res) => {
     const commissionPercent = Number(product.commission || 0)
     const commission = Number(((total * commissionPercent) / 100).toFixed(2))
 
+    const rawPayment = String(req.body.paymentMethod || 'wallet').trim().toLowerCase()
+    const paymentMethod =
+      rawPayment === 'cod' || rawPayment === 'cash_on_delivery' ? 'cod' : 'wallet'
+
     let buyer = null
     if (req.user?._id) {
       buyer = await User.findById(req.user._id)
     }
 
     if (!buyer) {
+      // Guests can only pay cash on delivery; a wallet can only be spent by its logged-in owner.
+      if (paymentMethod === 'wallet') {
+        return res.status(401).json({ message: 'Please sign in to pay with your Sellvro Wallet, or choose Cash on Delivery.' })
+      }
+
       const guestPhone = shippingAddress.phone || '03001234567'
       const guestEmail =
         String(req.body.email || req.body.userEmail || '').trim().toLowerCase() ||
         `${guestPhone.replace(/[^0-9]/g, '') || Date.now()}@customer.sellvro.local`
 
       buyer = await User.findOne({ email: guestEmail })
-      if (!buyer) {
-        buyer = await User.create({
-          fullName: shippingAddress.fullName || 'Client Customer',
-          email: guestEmail,
-          phone: guestPhone,
-          role: 'user',
-          status: 'approved',
-          walletBalance: 0,
-          password: Math.random().toString(36),
-        })
+      if (buyer) {
+        // Never attach an anonymous order to someone else's existing account.
+        return res.status(409).json({ message: 'An account with this email already exists. Please sign in to place this order.' })
       }
+      buyer = await User.create({
+        fullName: shippingAddress.fullName || 'Client Customer',
+        email: guestEmail,
+        phone: guestPhone,
+        role: 'user',
+        status: 'approved',
+        walletBalance: 0,
+        password: Math.random().toString(36),
+      })
     }
-
-    const rawPayment = String(req.body.paymentMethod || 'wallet').trim().toLowerCase()
-    const paymentMethod =
-      rawPayment === 'cod' || rawPayment === 'cash_on_delivery' ? 'cod' : 'wallet'
-    const autoTopup = Boolean(req.body.autoTopup || req.body.autoFund)
 
     if (paymentMethod === 'wallet') {
       if ((buyer.walletBalance || 0) < total) {
-        if (autoTopup) {
-          // Instant 1-click test balance topup so order placement never fails
-          const needed = Math.max(500, Math.ceil(total - (buyer.walletBalance || 0) + 50))
-          buyer.walletBalance = Number(((buyer.walletBalance || 0) + needed).toFixed(2))
-        } else {
-          return res.status(400).json({
-            message: `Insufficient wallet balance. Total due is $${total.toFixed(2)}, but you currently have $${Number(buyer.walletBalance || 0).toFixed(2)}. Choose Cash on Delivery (COD) or click Quick Top-Up.`,
-          })
-        }
+        return res.status(400).json({
+          message: `Insufficient wallet balance. Total due is $${total.toFixed(2)}, but you currently have $${Number(buyer.walletBalance || 0).toFixed(2)}. Choose Cash on Delivery (COD) or deposit funds from your Wallet page.`,
+        })
       }
       buyer.walletBalance = Number((buyer.walletBalance - total).toFixed(2))
     }

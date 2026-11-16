@@ -17,3 +17,6 @@ build/
 *.njsproj
 *.sln
 *.sw?
+
+# Archives can contain .env files and customer uploads
+*.zip

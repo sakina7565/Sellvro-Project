@@ -14,6 +14,7 @@
     "start": "node app.cjs",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "node --test server/tests/critical-fixes.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

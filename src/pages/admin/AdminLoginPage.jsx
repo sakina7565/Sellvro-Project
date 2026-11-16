@@ -97,10 +97,7 @@ function AdminLoginPage() {
 
       <div className="mt-6 space-y-3 border-t border-slate-100 pt-4 text-center text-sm">
         <p className="text-slate-600">
-          Need an administrator account?{' '}
-          <Link to="/admin/register" className="font-semibold text-primary hover:text-primary-700">
-            Register as Admin / Staff
-          </Link>
+          Need an administrator account? Ask your Super Admin to create one.
         </p>
         <p>
           <Link

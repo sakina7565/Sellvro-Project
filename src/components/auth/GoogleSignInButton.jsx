@@ -92,6 +92,8 @@ export default function GoogleSignInButton({
               googleId: profile.sub,
               picture: profile.picture || '',
               role: defaultRole || 'user',
+              // The server verifies this token with Google; it ignores the email above.
+              accessToken: tokenResponse.access_token,
             }
 
             // If a custom handler is provided (e.g. on Registration page to auto-fill details)
