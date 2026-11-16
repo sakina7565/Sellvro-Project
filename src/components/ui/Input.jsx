@@ -1,6 +1,9 @@
+import { AlertCircle } from 'lucide-react'
+
 /**
  * Labeled text input with a leading icon, shared across the entire app.
  * Automatically disallows negative numbers when type is "number" unless allowNegative is explicitly true.
+ * Supports error prop with red highlight and inline error message.
  */
 function Input({
   label,
@@ -11,6 +14,8 @@ function Input({
   allowNegative = false,
   className = '',
   containerClassName = '',
+  error,
+  helperText,
   onKeyDown,
   onChange,
   onPaste,
@@ -56,13 +61,13 @@ function Input({
   return (
     <div className={containerClassName}>
       {label && (
-        <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-slate-700">
+        <label htmlFor={id} className={`mb-1.5 block text-sm font-medium ${error ? 'text-rose-700' : 'text-slate-700'}`}>
           {label}
         </label>
       )}
       <div className="relative">
         {Icon && (
-          <Icon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Icon className={`pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 ${error ? 'text-rose-400' : 'text-slate-400'}`} />
         )}
         <input
           id={id}
@@ -71,12 +76,23 @@ function Input({
           onKeyDown={handleKeyDown}
           onChange={handleChange}
           onPaste={handlePaste}
-          className={`h-11 w-full rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-800 placeholder:text-slate-400 transition-colors focus:border-primary-300 focus:bg-primary-50/40 focus:outline-none focus:ring-2 focus:ring-primary-100 ${
-            Icon ? 'pl-10 pr-3' : 'px-3'
-          } ${className}`}
+          className={`h-11 w-full rounded-lg border text-sm text-slate-800 placeholder:text-slate-400 transition-colors focus:outline-none focus:ring-2 ${
+            error
+              ? 'border-rose-400 bg-rose-50/40 text-rose-950 focus:border-rose-500 focus:ring-rose-100'
+              : 'border-slate-200 bg-slate-50 focus:border-primary-300 focus:bg-primary-50/40 focus:ring-primary-100'
+          } ${Icon ? 'pl-10 pr-3' : 'px-3'} ${className}`}
           {...props}
         />
       </div>
+      {error && (
+        <p className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-rose-600 animate-fadeIn">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+          <span>{error}</span>
+        </p>
+      )}
+      {!error && helperText && (
+        <p className="mt-1 text-xs text-slate-400">{helperText}</p>
+      )}
     </div>
   )
 }

@@ -4,7 +4,7 @@ import { Search, ChevronDown, SlidersHorizontal, Check, User, LayoutDashboard, L
 import Logo from '../ui/Logo.jsx'
 import { MARKETPLACE_CATEGORIES } from './marketplaceData.js'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { getRedirectForUser } from '../../lib/authRedirect.js'
+import { getDashboardPathForUser } from '../../lib/authRedirect.js'
 
 function MarketplaceSearchHeader({
   onSearch,
@@ -14,7 +14,7 @@ function MarketplaceSearchHeader({
 }) {
   const navigate = useNavigate()
   const { user, isAuthenticated } = useAuth()
-  const dashboardPath = getRedirectForUser(user) || '/login'
+  const dashboardPath = getDashboardPathForUser(user) || '/user/dashboard'
 
   const [query, setQuery] = useState(initialQuery)
   const [category, setCategory] = useState(initialCategory)
@@ -202,6 +202,7 @@ function MarketplaceSearchHeader({
           {isAuthenticated ? (
             <Link
               to={dashboardPath}
+              onClick={() => { if (user?.role === "admin") sessionStorage.removeItem("sellvro_admin_preview") }}
               className="flex items-center gap-1.5 sm:gap-2 rounded-full border border-slate-300 bg-slate-50 px-2.5 sm:px-3.5 py-1.5 text-xs font-bold text-slate-800 hover:bg-white hover:border-blue-500 shadow-2xs transition"
               title="Open My Workspace"
             >

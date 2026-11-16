@@ -4,6 +4,7 @@ import Payout from '../models/Payout.js'
 import User from '../models/User.js'
 import BusinessProfile from '../models/BusinessProfile.js'
 import { createNotification } from '../utils/notifications.js'
+import { getNextPayoutNo } from '../services/sequenceService.js'
 
 /**
  * Build admin payout rows: one pending row per supplier with unpaid order earnings,
@@ -126,7 +127,9 @@ export const processSupplierPayout = async (req, res) => {
       ? `****${String(profile.accNumber).slice(-4)}`
       : 'Not Set'
 
+    const payoutNo = await getNextPayoutNo()
     const payout = await Payout.create({
+      payoutNo,
       supplier: supplierId,
       amount,
       held: 0,
@@ -209,7 +212,7 @@ export const getSupplierFinance = async (req, res) => {
       ...payouts.map((payout, index) => ({
         id: payout._id.toString(),
         no: pendingOrders.length + index + 1,
-        transactionId: `PAY-${payout._id.toString().slice(-8).toUpperCase()}`,
+        transactionId: payout.payoutNo || (payout.toSafeObject ? payout.toSafeObject().payoutNo : `26-P-${String(10001 + (parseInt(payout._id.toString().slice(-4), 16) % 89999)).slice(-5)}`),
         status: payout.status === 'processed' ? 'Processed' : 'Pending',
         total: payout.amount,
         grossTotal: payout.amount,
@@ -253,11 +256,54 @@ function formatMonthLabel(date) {
   return d.toLocaleString('en-US', { month: 'long', year: 'numeric' })
 }
 
+/**
+ * Calculates the exact Saturday release date following the 7-day holding period.
+ * 
+ * Rules:
+ * - Minimum 7 days holding period
+ * - Released strictly on Saturdays
+ * 
+ * Examples:
+ * Sunday    -> Next Saturday (+13 days)
+ * Monday    -> Next Saturday (+12 days)
+ * Tuesday   -> Next Saturday (+11 days)
+ * Wednesday -> Next Saturday (+10 days)
+ * Thursday  -> Next Saturday (+9 days)
+ * Friday    -> Agle Saturday (+8 days)
+ * Saturday  -> Agle Saturday (+7 days)
+ */
+export function getSaturdayReleaseDate(date) {
+  const d = new Date(date)
+  // Minimum 7 days holding period
+  const eligibleDate = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
+
+  // Find next Saturday on or after eligibleDate (0 = Sun, 6 = Sat)
+  const dayOfWeek = eligibleDate.getDay()
+  const daysUntilSaturday = (6 - dayOfWeek + 7) % 7
+
+  const releaseSaturday = new Date(eligibleDate)
+  releaseSaturday.setDate(eligibleDate.getDate() + daysUntilSaturday)
+  releaseSaturday.setHours(23, 59, 59, 999)
+  return releaseSaturday
+}
+
+/**
+ * Checks whether an order has matured its 7-day holding period post-delivery
+ * and is eligible for Saturday release.
+ */
 export function isOrderMature(order) {
   if (!order) return false
+  if (order.status === 'cancelled' || order.payoutStatus === 'cancelled') return false
   const status = String(order.status || '').toLowerCase()
   const tracking = String(order.trackingStatus || '').toLowerCase()
-  return status === 'delivered' || tracking === 'delivered'
+  const loc = String(order.warehouseLocation || '').toLowerCase()
+  const isDelivered = status === 'delivered' || tracking === 'delivered' || loc === 'delivered'
+  if (!isDelivered) return false
+
+  // Base date is delivery timestamp (or updatedAt / createdAt if delivery timestamp not tracked)
+  const baseDate = order.deliveredAt || order.updatedAt || order.createdAt
+  const releaseSaturday = getSaturdayReleaseDate(baseDate)
+  return new Date() >= releaseSaturday
 }
 
 export function getWeekOfMonthInfo(date) {
@@ -295,11 +341,9 @@ export function getWeekOfMonthInfo(date) {
     endDay = lastDay
   }
 
-  // Saturday release cycle (the Saturday closing or following this weekly bracket)
+  // Saturday release cycle (the Saturday on or after the 7-day holding period for this bracket)
   const bracketEndDate = new Date(year, month, endDay)
-  const dayOfWeek = bracketEndDate.getDay() // 0 = Sun, 6 = Sat
-  const daysUntilSaturday = (6 - dayOfWeek + 7) % 7
-  const saturdayDate = new Date(year, month, endDay + daysUntilSaturday)
+  const saturdayDate = getSaturdayReleaseDate(bracketEndDate)
   const saturdayRelease = saturdayDate.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -350,7 +394,10 @@ export const getPendingWeeklyPayouts = async (_req, res) => {
       if (!weekGroups[groupKey]) {
         const sup = supplierMap[sId]
         const prof = profileMap[sId]
-        const sDisplayId = sup.clientId || `SUP-${sId.slice(-6).toUpperCase()}`
+        const sDisplayId =
+          sup?.displayId ||
+          (sup?.clientId && /^SPAK-\d+$/i.test(sup.clientId) ? sup.clientId : '') ||
+          `SPAK-${1001 + (parseInt(sId.slice(-4), 16) % 8999)}`
 
         weekGroups[groupKey] = {
           id: groupKey,
@@ -525,7 +572,9 @@ export const getSuppliersFinancialOverview = async (_req, res) => {
       const netEarnings = grossSales - commissionTotal
 
       const supplierDisplayId =
-        sup.clientId || `SUP-${sId.slice(-6).toUpperCase()}`
+        sup?.displayId ||
+        (sup?.clientId && /^SPAK-\d+$/i.test(sup.clientId) ? sup.clientId : '') ||
+        `SPAK-${1001 + (parseInt(sId.slice(-4), 16) % 8999)}`
 
       return {
         id: sId,
@@ -777,7 +826,9 @@ export const getSupplierMonthlyHistory = async (req, res) => {
     months.sort((a, b) => b.monthKey.localeCompare(a.monthKey))
 
     const supplierDisplayId =
-      supplier.clientId || `SUP-${supplier._id.toString().slice(-6).toUpperCase()}`
+      supplier.displayId ||
+      (supplier.clientId && /^SPAK-\d+$/i.test(supplier.clientId) ? supplier.clientId : '') ||
+      `SPAK-${1001 + (parseInt(supplier._id.toString().slice(-4), 16) % 8999)}`
 
     return res.json({
       supplier: {
@@ -870,7 +921,9 @@ export const getSupplierMonthOrders = async (req, res) => {
     })
 
     const supplierDisplayId =
-      supplier.clientId || `SUP-${supplier._id.toString().slice(-6).toUpperCase()}`
+      supplier.displayId ||
+      (supplier.clientId && /^SPAK-\d+$/i.test(supplier.clientId) ? supplier.clientId : '') ||
+      `SPAK-${1001 + (parseInt(supplier._id.toString().slice(-4), 16) % 8999)}`
 
     return res.json({
       monthKey,
@@ -991,7 +1044,9 @@ export const executeSupplierPayout = async (req, res) => {
       return res.status(400).json({ message: 'Payout amount must be greater than zero.' })
     }
 
+    const payoutNo = await getNextPayoutNo()
     const payout = await Payout.create({
+      payoutNo,
       supplier: supplierId,
       amount: payoutAmount,
       tid: String(tid).trim(),

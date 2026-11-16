@@ -11,14 +11,15 @@ const PRESET_REASONS = [
   'Failure to Dispatch within Promised SLA',
 ]
 
-export default function WarnSupplierModal({ supplier, open, onClose, onSuccess }) {
+export default function WarnSupplierModal({ supplier, open, isOpen, onClose, onSuccess }) {
   const [selectedPreset, setSelectedPreset] = useState(PRESET_REASONS[0])
   const [customReason, setCustomReason] = useState('')
   const [details, setDetails] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
-  if (!open || !supplier) return null
+  const isModalOpen = open !== undefined ? open : isOpen
+  if (!isModalOpen || !supplier) return null
 
   const currentWarnings = supplier.warningsCount || 0
   const nextWarningNumber = currentWarnings + 1
@@ -118,8 +119,8 @@ export default function WarnSupplierModal({ supplier, open, onClose, onSuccess }
           </div>
 
           {isFinalWarning && (
-            <p className="mt-2.5 text-[11px] font-bold text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200">
-              ⚠️ Note: Ye supplier ki 3rd aur FINAL warning hai. 3 warnings ke baad admin supplier ko suspend kar sakta hai.
+            <p className="mt-2.5 text-[11px] font-bold text-rose-800 bg-rose-50 p-2.5 rounded-lg border border-rose-200">
+              ⚠️ Note: Ye supplier ki 3rd aur FINAL warning hai. 3rd warning issue hote hi policy ke mutabiq supplier ka account AUTOMATICALLY SUSPEND ho jayega aur products deactivate ho jayengi.
             </p>
           )}
 

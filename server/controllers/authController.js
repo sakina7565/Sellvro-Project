@@ -1,3 +1,9 @@
+import {
+  findWmsUserByEmail,
+  registerWmsSupplier,
+  verifyWmsSupplierCredentials,
+} from '../services/wmsSqlService.js'
+import mongoose from 'mongoose'
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 import Role from '../models/Role.js'
@@ -37,6 +43,13 @@ const getHomePath = (user) => {
   return '/'
 }
 
+const formatDbError = (error, fallback = 'Operation failed.') => {
+  if (error?.message?.includes('buffering timed out') || error?.name === 'MongooseError') {
+    return 'Database connection timed out. Please check your internet connection and verify MongoDB Atlas IP Whitelist (0.0.0.0/0).'
+  }
+  return error?.message || fallback
+}
+
 async function buildSafeUser(user) {
   if (user.role !== 'admin') {
     return user.toSafeObject()
@@ -57,11 +70,31 @@ async function buildSafeUser(user) {
 
 export const register = async (req, res) => {
   try {
-    const { fullName, email, password, confirmPassword, role } = req.body
+    const {
+      fullName,
+      email,
+      password,
+      confirmPassword,
+      role,
+      companyName,
+      companyEmail,
+      companyPhone,
+      companyAddress,
+      registrationEntity,
+      registrationNo,
+      businessCategory,
+      ownerName,
+      ownerEmail,
+      ownerPhone,
+      ownerAddress,
+      idCardNumber,
+      bankName,
+      accountHolderName,
+      accountNumberOrIban,
+      googleId,
+    } = req.body
 
-    if (!fullName || !email || !password || !role) {
-      return res.status(400).json({ message: 'All fields are required.' })
-    }
+    const idCardUrl = req.file ? `/uploads/${req.file.filename}` : (req.body.idCardUrl || req.body.idCard || '')
 
     if (role === 'admin') {
       return res.status(400).json({
@@ -73,6 +106,10 @@ export const register = async (req, res) => {
       return res.status(400).json({ message: 'Invalid role selected. Only Supplier and User are permitted.' })
     }
 
+    if (!password || !confirmPassword) {
+      return res.status(400).json({ message: 'Password and confirm password are required.' })
+    }
+
     if (password !== confirmPassword) {
       return res.status(400).json({ message: 'Passwords do not match.' })
     }
@@ -81,20 +118,175 @@ export const register = async (req, res) => {
       return res.status(400).json({ message: 'Password must be at least 6 characters.' })
     }
 
-    const existing = await User.findOne({ email: email.toLowerCase().trim() })
+    // Resolve effective name & login email
+    const effectiveName = (ownerName || fullName || companyName)?.trim()
+    const effectiveEmail = (ownerEmail || email || companyEmail)?.toLowerCase()?.trim()
+
+    if (!effectiveName) {
+      return res.status(400).json({ message: 'Owner Name is required.' })
+    }
+
+    if (!effectiveEmail) {
+      return res.status(400).json({ message: 'Email address is required.' })
+    }
+
+    // Company & Owner validations for both Supplier and User
+    if (!companyName?.trim()) {
+      return res.status(400).json({ message: 'Name of Company is required.' })
+    }
+    if (!companyEmail?.trim()) {
+      return res.status(400).json({ message: 'Email of Company is required.' })
+    }
+    if (!companyPhone?.trim()) {
+      return res.status(400).json({ message: 'Official Phone Number is required.' })
+    }
+    if (!companyAddress?.trim()) {
+      return res.status(400).json({ message: 'Address of Company is required.' })
+    }
+    if (!ownerPhone?.trim()) {
+      return res.status(400).json({ message: 'Owner Phone is required.' })
+    }
+    if (!ownerAddress?.trim()) {
+      return res.status(400).json({ message: 'Owner Address is required.' })
+    }
+    if (!bankName?.trim()) {
+      return res.status(400).json({ message: 'Bank Name is required.' })
+    }
+    if (!accountHolderName?.trim()) {
+      return res.status(400).json({ message: 'Account Holder Name is required.' })
+    }
+    if (!accountNumberOrIban?.trim()) {
+      return res.status(400).json({ message: 'Account Number or IBAN is required.' })
+    }
+    if (!idCardUrl) {
+      return res.status(400).json({ message: 'Please upload an ID Card for verification.' })
+    }
+
+    // ── CNIC Format & Duplicate Check ──
+    if (idCardNumber) {
+      const digits = String(idCardNumber).replace(/\D+/g, '')
+      if (digits.length !== 13) {
+        return res.status(400).json({
+          message: 'Valid 13-digit Pakistani CNIC number (format: XXXXX-XXXXXXX-X) is required.',
+        })
+      }
+      const province = parseInt(digits[0], 10)
+      if (province < 1 || province > 7) {
+        return res.status(400).json({
+          message: 'Invalid CNIC province code. Pakistani CNIC must begin with 1 through 7.',
+        })
+      }
+      const formattedCnic = `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12)}`
+      const existingCnic = await User.findOne({ idCardNumber: { $in: [formattedCnic, digits] } })
+      if (existingCnic) {
+        return res.status(400).json({
+          message: `Ye CNIC number (${formattedCnic}) pehle se ek doosre account k sath registered hai. Ek CNIC se sirf ek hi account register ho sakta hai.`,
+          isDuplicateCnic: true,
+        })
+      }
+    }
+
+    const existing = await User.findOne({ email: effectiveEmail })
     if (existing) {
       return res.status(400).json({ message: 'An account with this email already exists.' })
     }
 
-    const status = role === 'admin' ? 'approved' : 'pending_details'
+    // ── Unified Supplier Registration in Master WMS MySQL ──
+    let wmsSupplier = null
+    if (role === 'supplier') {
+      try {
+        const existingWmsUser = await findWmsUserByEmail(effectiveEmail)
+        if (existingWmsUser) {
+          wmsSupplier = existingWmsUser
+        } else {
+          wmsSupplier = await registerWmsSupplier({
+            name: effectiveName,
+            email: effectiveEmail,
+            password,
+            companyName: companyName?.trim() || effectiveName,
+            companyEmail: (companyEmail || effectiveEmail)?.toLowerCase()?.trim(),
+            companyPhone: companyPhone?.trim() || '',
+            companyAddress: companyAddress?.trim() || '',
+            registrationEntity: registrationEntity?.trim() || '',
+            registrationNo: registrationNo?.trim() || '',
+            ownerName: (ownerName || effectiveName)?.trim(),
+            ownerEmail: (ownerEmail || effectiveEmail)?.toLowerCase()?.trim(),
+            ownerPhone: ownerPhone?.trim() || '',
+            ownerAddress: ownerAddress?.trim() || '',
+            idCardUrl: idCardUrl || '',
+          })
+        }
+      } catch (wmsErr) {
+        console.warn('[Register] WMS MySQL registration notice:', wmsErr.message)
+      }
+    }
+
+    // Both Suppliers and Users submit complete verification details upfront, so status is pending_approval
+    const status = role === 'admin' ? 'approved' : 'pending_approval'
 
     const user = await User.create({
-      fullName: fullName.trim(),
-      email: email.toLowerCase().trim(),
+      fullName: effectiveName,
+      email: effectiveEmail,
       password,
       role,
       status,
+      companyName: companyName?.trim() || '',
+      companyEmail: (companyEmail || effectiveEmail)?.toLowerCase()?.trim() || '',
+      companyPhone: companyPhone?.trim() || '',
+      companyAddress: companyAddress?.trim() || '',
+      businessCategory: businessCategory?.trim() || '',
+      registrationEntity: registrationEntity?.trim() || '',
+      registrationNo: registrationNo?.trim() || '',
+      ownerName: (ownerName || effectiveName)?.trim() || '',
+      ownerEmail: (ownerEmail || effectiveEmail)?.toLowerCase()?.trim() || '',
+      ownerPhone: ownerPhone?.trim() || '',
+      ownerAddress: ownerAddress?.trim() || '',
+      idCardUrl: idCardUrl || '',
+      idCardNumber: idCardNumber?.trim() || '',
+      bankName: bankName?.trim() || '',
+      accountHolderName: accountHolderName?.trim() || '',
+      accountNumberOrIban: accountNumberOrIban?.trim() || '',
+      googleId: googleId?.trim() || undefined,
+      isWmsRegistered: Boolean(wmsSupplier),
+      wmsSupplierId: wmsSupplier?.id || null,
+      wmsClientId: wmsSupplier?.user_unique_name || '',
+      wmsStatus: wmsSupplier?.status || 'pending',
     })
+
+    // Upsert BusinessProfile with complete details for both suppliers and users
+    try {
+      await BusinessProfile.findOneAndUpdate(
+        { user: user._id },
+        {
+          user: user._id,
+          profileType: role,
+          businessName: companyName?.trim() || effectiveName,
+          businessEmail: (companyEmail || effectiveEmail)?.toLowerCase()?.trim(),
+          businessPhone: companyPhone?.trim() || '',
+          businessAddress: companyAddress?.trim() || '',
+          registrationEntity: registrationEntity?.trim() || '',
+          registrationNo: registrationNo?.trim() || '',
+          businessCategory: businessCategory?.trim() || 'General Wholesale & Retail',
+          ownerName: (ownerName || effectiveName)?.trim(),
+          ownerEmail: (ownerEmail || effectiveEmail)?.toLowerCase()?.trim(),
+          ownerPhone: ownerPhone?.trim() || '',
+          ownerAddress: ownerAddress?.trim() || '',
+          idCardUrl: idCardUrl || '',
+          idCardNumber: idCardNumber?.trim() || '',
+          bankName: bankName?.trim() || '',
+          accountHolderName: accountHolderName?.trim() || '',
+          accountNumberOrIban: accountNumberOrIban?.trim() || '',
+          accNumber: accountNumberOrIban?.trim() || '',
+          paymentProvider: bankName?.trim() || 'Bank Transfer',
+          country: 'Pakistan',
+          orderType: role === 'supplier' ? 'B2B Wholesale' : 'Wholesale / Retail',
+          status: 'pending',
+        },
+        { upsert: true, new: true }
+      )
+    } catch (bpErr) {
+      console.warn('[Register] BusinessProfile sync notice:', bpErr.message)
+    }
 
     const token = signToken(user._id)
     setAuthCookie(res, token)
@@ -136,13 +328,63 @@ export const login = async (req, res) => {
       return res.status(400).json({ message: 'Email and password are required.' })
     }
 
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        message:
+          'Database offline: MongoDB connection failed. Please ensure your IP address is whitelisted in MongoDB Atlas Network Access (0.0.0.0/0) and internet is connected.',
+      })
+    }
+
     const cleanEmail = email.toLowerCase().trim()
     let user = await User.findOne({ email: cleanEmail }).select('+password')
 
-    // ── Check WMS Supplier Status via Live WMS API (only for suppliers or new accounts) ──
-    let wmsAuthResult = null
+    // ── Check Master WMS MySQL first (Single Master Database) ──
+    let wmsSqlUser = null
     const shouldCheckWms = !user || user.role === 'supplier'
     if (shouldCheckWms) {
+      try {
+        wmsSqlUser = await verifyWmsSupplierCredentials(cleanEmail, password)
+      } catch (wmsSqlErr) {
+        console.warn('[Login] WMS MySQL verification notice:', wmsSqlErr.message)
+      }
+    }
+
+    if (wmsSqlUser) {
+      if (!user) {
+        user = await User.create({
+          fullName: wmsSqlUser.name || 'WMS Supplier',
+          email: cleanEmail,
+          password,
+          role: 'supplier',
+          status: wmsSqlUser.status === 'approved' ? 'approved' : 'pending_approval',
+          isWmsRegistered: true,
+          wmsClientId: wmsSqlUser.user_unique_name || '',
+          wmsSupplierId: wmsSqlUser.id,
+          wmsStatus: wmsSqlUser.status || 'approved',
+        })
+
+        await BusinessProfile.findOneAndUpdate(
+          { user: user._id },
+          {
+            user: user._id,
+            profileType: 'supplier',
+            businessName: wmsSqlUser.name ? `${wmsSqlUser.name}'s Store` : 'Supplier Store',
+            status: 'approved',
+          },
+          { upsert: true, new: true },
+        )
+      } else {
+        user.isWmsRegistered = true
+        user.wmsSupplierId = wmsSqlUser.id
+        user.wmsClientId = wmsSqlUser.user_unique_name || user.wmsClientId
+        user.wmsStatus = wmsSqlUser.status || user.wmsStatus
+        await user.save()
+      }
+    }
+
+    // ── Check WMS Supplier Status via Live WMS API (fallback for external token) ──
+    let wmsAuthResult = null
+    if (shouldCheckWms && !wmsSqlUser) {
       try {
         const controller = new AbortController()
         const timeout = setTimeout(() => controller.abort(), 3500)
@@ -202,7 +444,7 @@ export const login = async (req, res) => {
     // Verify local password or WMS synced password
     const isPasswordMatch = await user.matchPassword(password)
     if (!isPasswordMatch) {
-      if (wmsAuthResult) {
+      if (wmsSqlUser || wmsAuthResult) {
         user.password = password
         await user.save()
       } else {
@@ -264,7 +506,8 @@ export const login = async (req, res) => {
     })
   } catch (error) {
     console.error('Login error:', error)
-    return res.status(500).json({ message: error.message || 'Login failed.' })
+    const status = error?.message?.includes('buffering timed out') ? 503 : 500
+    return res.status(status).json({ message: formatDbError(error, 'Login failed.') })
   }
 }
 
@@ -469,7 +712,8 @@ export const adminLogin = async (req, res) => {
     })
   } catch (error) {
     console.error('Admin login error:', error)
-    return res.status(500).json({ message: error.message || 'Login failed.' })
+    const status = error?.message?.includes('buffering timed out') ? 503 : 500
+    return res.status(status).json({ message: formatDbError(error, 'Login failed.') })
   }
 }
 
@@ -682,38 +926,29 @@ export const googleAuth = async (req, res) => {
         user.googleId = userGoogleId
         await user.save()
       }
-    } else {
-      const selectedRole = ['supplier', 'user'].includes(role) ? role : 'user'
-      const status = selectedRole === 'supplier' ? 'pending_details' : 'approved'
 
-      const randomPassword = 'G_' + Math.random().toString(36).slice(2) + '!9X'
-      user = await User.create({
-        fullName: userName || userEmail.split('@')[0],
-        email: userEmail,
-        password: randomPassword,
-        role: selectedRole,
-        status,
-        googleId: userGoogleId || undefined,
-      })
+      const token = signToken(user._id)
+      setAuthCookie(res, token)
+      const safeUser = await buildSafeUser(user)
 
-      await BusinessProfile.create({
-        user: user._id,
-        profileType: selectedRole,
-        businessName: user.fullName,
-        businessEmail: userEmail,
-        status: status === 'approved' ? 'approved' : 'pending',
+      return res.json({
+        message: 'Logged in with Google successfully.',
+        token,
+        user: safeUser,
+        redirectTo: getHomePath(safeUser),
       })
     }
 
-    const token = signToken(user._id)
-    setAuthCookie(res, token)
-    const safeUser = await buildSafeUser(user)
-
+    // If account does not exist yet, return Google profile so client can complete business registration
     return res.json({
-      message: 'Logged in with Google successfully.',
-      token,
-      user: safeUser,
-      redirectTo: getHomePath(safeUser),
+      isNewUser: true,
+      message: 'Google account verified. Please complete your registration details.',
+      googleUser: {
+        email: userEmail,
+        name: userName || userEmail.split('@')[0],
+        googleId: userGoogleId || '',
+        picture: picture || '',
+      },
     })
   } catch (error) {
     console.error('Google auth error:', error)

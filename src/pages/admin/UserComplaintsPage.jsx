@@ -37,14 +37,12 @@ import {
 import { formatPartySummary, getDisputeStatusMeta } from '../../lib/disputeHelpers.js'
 
 import { adminApi, getErrorMessage } from '../../lib/api.js'
-
 import { useDisputeList } from '../../hooks/useDisputeList.js'
-
-
+import { formatDisputeId } from '../../lib/idFormatters.js'
 
 const FILTERS = [{ label: 'All Status', options: ['Open', 'Resolved'] }]
 
-const TABLE_HEAD = ['Raised By', 'Against', 'Order', 'Product', 'Latest reply', 'Date', 'Status', 'Actions']
+const TABLE_HEAD = ['Dispute ID', 'Raised By', 'Against', 'Order', 'Product', 'Latest reply', 'Date', 'Status', 'Actions']
 
 
 
@@ -191,13 +189,15 @@ function UserComplaintsPage() {
                     key={complaint.id}
 
                     className={`border-b border-slate-50 last:border-0 ${complaint.hasUnread ? 'bg-primary-50/40' : ''}`}
-
                   >
+                    <td className="whitespace-nowrap px-5 py-4">
+                      <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                        {formatDisputeId(complaint)}
+                      </span>
+                    </td>
 
                     <td className="whitespace-nowrap px-5 py-4">
-
                       <DisputeRaisedByCell dispute={complaint} />
-
                     </td>
 
                     <td className="whitespace-nowrap px-5 py-4">

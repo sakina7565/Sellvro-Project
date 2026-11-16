@@ -184,6 +184,11 @@ function SupplierProductsPage() {
         return Boolean(nameMatch || skuMatch || catMatch || descMatch)
       }
       return true
+    }).sort((a, b) => {
+      const numA = parseInt(String(a.sku).replace(/\D+/g, ''), 10) || 0
+      const numB = parseInt(String(b.sku).replace(/\D+/g, ''), 10) || 0
+      if (numA !== numB) return numA - numB
+      return String(a.sku).localeCompare(String(b.sku))
     })
   }, [products, statusFilter, searchQuery])
 

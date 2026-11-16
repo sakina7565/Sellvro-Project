@@ -1,5 +1,15 @@
+import {
+  generateNextWmsSku,
+  checkWmsSkuExists,
+  createWmsProduct,
+  getWmsApprovedProducts,
+  getWmsLiveStockBySku,
+  findWmsUserByEmail,
+} from '../services/wmsSqlService.js'
+import { getNextSku } from '../services/sequenceService.js'
 import mongoose from 'mongoose'
 import Product from '../models/Product.js'
+import Category from '../models/Category.js'
 import Order from '../models/Order.js'
 import User from '../models/User.js'
 import BusinessProfile from '../models/BusinessProfile.js'
@@ -21,26 +31,19 @@ function generateSku() {
 
 async function uniqueSku(preferred, excludeId = null) {
   const candidate = preferred?.trim().toUpperCase()
-  if (candidate) {
-    const exists = await Product.findOne({
+  if (candidate && /^SVRO-\d+$/i.test(candidate)) {
+    const existsInMongo = await Product.findOne({
       sku: candidate,
       ...(excludeId ? { _id: { $ne: excludeId } } : {}),
     })
-    if (exists) {
-      const error = new Error('This SKU is already in use. Generate a new one.')
-      error.status = 400
-      throw error
+    const existsInWms = await checkWmsSkuExists(candidate).catch(() => false)
+    if (!existsInMongo && !existsInWms) {
+      return candidate
     }
-    return candidate
   }
 
-  for (let i = 0; i < 8; i += 1) {
-    const sku = generateSku()
-    const exists = await Product.findOne({ sku })
-    if (!exists) return sku
-  }
-
-  throw new Error('Could not generate a unique SKU. Please try again.')
+  // Predefined Serial SKU Pattern: SVRO-0001, SVRO-0002, etc.
+  return await getNextSku()
 }
 
 function readProductFields(body) {
@@ -149,9 +152,13 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ message: 'Quantity cannot be negative.' })
     }
 
-    // Apply admin-configured marketplace platform fee for direct/self fulfillment or WMS fulfillment policy
+    // Auto-apply category-defined commission rate
+    const categoryDoc = await Category.findOne({ name: new RegExp(`^${fields.category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') })
     const walletSetting = await WalletSetting.getOrCreate()
-    const adminMarketplaceFee = Number(walletSetting.marketplaceFeePercent ?? 8)
+    const categoryCommission =
+      categoryDoc?.commissionRate !== undefined && categoryDoc?.commissionRate !== null
+        ? Number(categoryDoc.commissionRate)
+        : Number(walletSetting.marketplaceFeePercent ?? 8)
     const wmsFee = Number(walletSetting.wmsFeePercent ?? 0)
 
     if (fields.fulfillBy === 'warehouse' || fields.inWarehouse) {
@@ -159,11 +166,9 @@ export const createProduct = async (req, res) => {
       fields.isWmsVerified = true
       fields.wmsVerifiedAt = new Date()
       fields.deliveryTime = '1 Day (WMS Express Delivery)'
-    } else if (fields.fulfillBy === 'self' || req.user.role === 'supplier') {
-      fields.commission = adminMarketplaceFee
+    } else {
+      fields.commission = categoryCommission
       fields.isWmsVerified = false
-    } else if (fields.commission < 0) {
-      return res.status(400).json({ message: 'Commission cannot be negative.' })
     }
 
     const uploaded = Array.isArray(req.files)
@@ -188,6 +193,43 @@ export const createProduct = async (req, res) => {
     const sku = await uniqueSku(fields.sku)
     const status = asDraft ? 'draft' : 'pending_approval'
 
+    // ── Register Master Product in WMS MySQL ──
+    let wmsCreated = null
+    try {
+      let supplierWmsId = req.user.wmsSupplierId
+      if (!supplierWmsId && req.user.email) {
+        const wUser = await findWmsUserByEmail(req.user.email).catch(() => null)
+        if (wUser) {
+          supplierWmsId = wUser.id
+          req.user.wmsSupplierId = supplierWmsId
+          req.user.wmsClientId = wUser.user_unique_name || ''
+          await req.user.save()
+        }
+      }
+
+      if (supplierWmsId) {
+        wmsCreated = await createWmsProduct({
+          supplierId: supplierWmsId,
+          name: fields.name,
+          sku,
+          image,
+          description: fields.description,
+          weight: Number(fields.weight || 0),
+          weightUnit: fields.weightUnit || 'gm',
+          length: Number(fields.length || 0),
+          width: Number(fields.width || 0),
+          height: Number(fields.height || 0),
+          dimensionUnit: fields.dimensionUnit || 'cm',
+          brand: fields.brand,
+          inWarehouse: fields.inWarehouse,
+          fulfillBy: fields.fulfillBy === 'warehouse' ? 'wms' : 'client',
+          status: asDraft ? 'pending' : 'pending',
+        })
+      }
+    } catch (wmsProdErr) {
+      console.warn('[Create Product] WMS MySQL creation notice:', wmsProdErr.message)
+    }
+
     const product = await Product.create({
       ...fields,
       sku,
@@ -195,6 +237,7 @@ export const createProduct = async (req, res) => {
       images,
       supplier: req.user._id,
       status,
+      wmsProductId: wmsCreated?.id || null,
     })
 
     if (!asDraft) {
@@ -473,13 +516,23 @@ async function enrichProductsWithSupplier(products) {
 
     return safeObj
   })
+
+  // Ensure products are in strictly serial SKU order
+  enriched.sort((a, b) => {
+    const numA = parseInt(String(a.sku).replace(/\D+/g, ''), 10) || 0
+    const numB = parseInt(String(b.sku).replace(/\D+/g, ''), 10) || 0
+    if (numA !== numB) return numA - numB
+    return String(a.sku).localeCompare(String(b.sku))
+  })
+
+  return enriched
 }
 
 export const listMyProducts = async (req, res) => {
   try {
     const products = await Product.find({ supplier: req.user._id })
       .populate('supplier', 'fullName email phone clientId')
-      .sort({ createdAt: -1 })
+      .sort({ sku: 1, createdAt: -1 })
 
     const enriched = await enrichProductsWithSupplier(products)
     return res.json({ data: enriched })
@@ -506,7 +559,7 @@ export const listAllProducts = async (_req, res) => {
     // Drafts are private to the supplier and never show in admin product list
     const products = await Product.find({ status: { $ne: 'draft' } })
       .populate('supplier', 'fullName email phone clientId')
-      .sort({ createdAt: -1 })
+      .sort({ sku: 1, createdAt: -1 })
 
     const enriched = await enrichProductsWithSupplier(products)
     return res.json({ data: enriched })
@@ -714,23 +767,16 @@ export const approveProduct = async (req, res) => {
       })
     }
 
-    let effectiveCommission = product.commission
-    if (req.body.commission !== undefined && req.body.commission !== '') {
-      const commission = Number(req.body.commission)
-      if (Number.isNaN(commission) || commission <= 0) {
-        return res.status(400).json({ message: 'Commission must be a valid number greater than 0.' })
-      }
-      product.commission = commission
-      effectiveCommission = commission
-    }
-
-    const isWms = Boolean(
-      product.isWmsVerified || product.inWarehouse || product.fulfillBy === 'warehouse',
-    )
-    if (!isWms && (!effectiveCommission || Number(effectiveCommission) <= 0)) {
-      return res.status(400).json({
-        message: 'Commission is required. You must set a commission greater than 0 before approving or activating this product.',
+    // Ensure product has category commission assigned if not already set
+    if (!product.commission || Number(product.commission) <= 0) {
+      const categoryDoc = await Category.findOne({
+        name: new RegExp(`^${(product.category || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
       })
+      const walletSetting = await WalletSetting.getOrCreate()
+      product.commission =
+        categoryDoc?.commissionRate !== undefined && categoryDoc?.commissionRate !== null
+          ? Number(categoryDoc.commissionRate)
+          : Number(walletSetting.marketplaceFeePercent ?? 8)
     }
 
     // Direct approval makes the product approved and live on marketplace immediately!
@@ -898,8 +944,22 @@ export const createAdminProduct = async (req, res) => {
     if (fields.quantity < 0) {
       return res.status(400).json({ message: 'Quantity cannot be negative.' })
     }
-    if (fields.commission < 0) {
-      return res.status(400).json({ message: 'Commission cannot be negative.' })
+
+    // Automatically assign category commission rate
+    const categoryDoc = await Category.findOne({
+      name: new RegExp(`^${fields.category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+    })
+    const walletSetting = await WalletSetting.getOrCreate()
+    const categoryCommission =
+      categoryDoc?.commissionRate !== undefined && categoryDoc?.commissionRate !== null
+        ? Number(categoryDoc.commissionRate)
+        : Number(walletSetting.marketplaceFeePercent ?? 8)
+    const wmsFee = Number(walletSetting.wmsFeePercent ?? 0)
+
+    if (fields.fulfillBy === 'warehouse' || fields.inWarehouse) {
+      fields.commission = wmsFee
+    } else {
+      fields.commission = categoryCommission
     }
 
     const uploaded = Array.isArray(req.files)
@@ -979,6 +1039,11 @@ export const updateAdminProduct = async (req, res) => {
       name,
       sku,
       category,
+      subcategory,
+      condition,
+      handlingTime,
+      deliveryTime,
+      stockAlert,
       brand,
       supplier,
       client,
@@ -1003,7 +1068,18 @@ export const updateAdminProduct = async (req, res) => {
     if (category !== undefined) {
       const categoryName = await resolveCategoryName(category)
       product.category = categoryName || category
+      const categoryDoc = await Category.findOne({
+        name: new RegExp(`^${product.category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+      })
+      if (categoryDoc?.commissionRate !== undefined && categoryDoc?.commissionRate !== null) {
+        product.commission = Number(categoryDoc.commissionRate)
+      }
     }
+    if (subcategory !== undefined) product.subcategory = String(subcategory).trim()
+    if (condition !== undefined) product.condition = String(condition).trim()
+    if (handlingTime !== undefined) product.handlingTime = String(handlingTime).trim()
+    if (deliveryTime !== undefined) product.deliveryTime = String(deliveryTime).trim()
+    if (stockAlert !== undefined && stockAlert !== '') product.stockAlert = Number(stockAlert) || 0
     if (sku !== undefined && sku.trim().toUpperCase() !== product.sku) {
       product.sku = await uniqueSku(sku, product._id)
     }
@@ -1160,6 +1236,13 @@ export const getMyWmsSkus = async (req, res) => {
       } else {
         mergedList.push(localProd)
       }
+    })
+
+    mergedList.sort((a, b) => {
+      const numA = parseInt(String(a.sku).replace(/\D+/g, ''), 10) || 0
+      const numB = parseInt(String(b.sku).replace(/\D+/g, ''), 10) || 0
+      if (numA !== numB) return numA - numB
+      return String(a.sku).localeCompare(String(b.sku))
     })
 
     return res.json({
@@ -1481,11 +1564,41 @@ export const syncWmsStock = async (req, res) => {
       return res.status(403).json({ message: 'You can only sync your own products.' })
     }
 
+    const sku = String(product.sku || '').trim().toUpperCase()
+
+    // 1. Check live stock directly from WMS MySQL inventories
+    let liveStock = null
+    try {
+      const q = await getWmsLiveStockBySku(sku)
+      if (typeof q === 'number') {
+        liveStock = q
+      }
+    } catch (sqlErr) {
+      console.warn('[Sync Stock] WMS MySQL stock check notice:', sqlErr.message)
+    }
+
+    if (liveStock !== null) {
+      product.quantity = liveStock
+      product.isWmsVerified = true
+      product.wmsVerifiedAt = new Date()
+
+      const walletSetting = await WalletSetting.getOrCreate()
+      product.commission = Number(walletSetting.wmsFeePercent ?? 0)
+
+      await product.save()
+      const [enriched] = await enrichProductsWithSupplier([product])
+
+      return res.json({
+        success: true,
+        message: `Stock updated to ${liveStock} units directly from Master Sellvro WMS.`,
+        product: enriched,
+      })
+    }
+
     if (!req.user.wmsToken) {
       return res.status(400).json({ message: 'Supplier account is not connected to Sellvro WMS.' })
     }
 
-    const sku = String(product.sku || '').trim().toUpperCase()
     const wmsRes = await fetch(
       `https://wmsbysellvro.com/api/supplier/products/${encodeURIComponent(sku)}`,
       {

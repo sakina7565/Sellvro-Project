@@ -27,17 +27,21 @@ function EditAccountModal({ isOpen, onClose, onSuccess, account }) {
 
   useEffect(() => {
     if (account) {
-      setFullName(account.fullName || '')
-      setEmail(account.email || '')
+      setFullName(account.fullName || account.supplier || '')
+      setEmail(account.email || account.businessEmail || '')
       setRole(account.role || 'user')
-      setStatus(account.status || 'approved')
+
+      const rawStatus = account.status || 'pending_approval'
+      const normalizedStatus = rawStatus.toLowerCase() === 'pending' ? 'pending_approval' : rawStatus
+      setStatus(normalizedStatus)
+
       setAdminRoleId(account.adminRoleId || 'super_admin')
       setWalletBalance(String(account.walletBalance ?? 0))
-      setPhone(account.businessProfile?.businessPhone || '')
-      setBusinessName(account.businessProfile?.businessName || '')
-      setBusinessCategory(account.businessProfile?.businessCategory || '')
-      setCity(account.businessProfile?.city || '')
-      setCountry(account.businessProfile?.country || '')
+      setPhone(account.businessProfile?.businessPhone || account.businessPhone || account.companyPhone || account.phone || '')
+      setBusinessName(account.businessProfile?.businessName || account.businessName || account.companyName || '')
+      setBusinessCategory(account.businessProfile?.businessCategory || account.businessCategory || account.category || '')
+      setCity(account.businessProfile?.city || account.city || '')
+      setCountry(account.businessProfile?.country || account.country || '')
       setIsWmsRegistered(Boolean(account.isWmsRegistered || account.wmsClientId || account.supplierType === 'wms'))
       setWmsClientId(account.wmsClientId || '')
       setNewPassword('')

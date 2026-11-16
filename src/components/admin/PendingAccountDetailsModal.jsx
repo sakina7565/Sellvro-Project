@@ -16,9 +16,16 @@ import {
   FileText,
   Briefcase,
   Layers,
+  FileBadge,
+  ShieldCheck,
+  ExternalLink,
+  Eye,
+  Edit3,
 } from 'lucide-react'
 import Badge from '../ui/Badge.jsx'
 import Button from '../ui/Button.jsx'
+import { mediaUrl } from '../../lib/api.js'
+import { formatIbanSpaces } from '../../utils/ibanValidator.js'
 
 function PendingAccountDetailsModal({
   isOpen,
@@ -26,6 +33,7 @@ function PendingAccountDetailsModal({
   account,
   onApprove,
   onReject,
+  onEdit,
   actionLoading = false,
 }) {
   const [rejectConfirm, setRejectConfirm] = useState(false)
@@ -35,11 +43,11 @@ function PendingAccountDetailsModal({
   const isSupplier = account.role === 'supplier' || Boolean(account.supplier)
   const name = account.fullName || account.supplier || 'Unnamed User'
   const email = account.email || account.businessEmail || '—'
-  const businessName = account.businessName || '—'
+  const businessName = account.companyName || account.businessName || '—'
   const businessCategory = account.businessCategory || account.category || '—'
   const businessDescription = account.businessDescription || 'No description provided by applicant.'
-  const phone = account.businessPhone || account.phone || 'Not provided'
-  const address = account.businessAddress || 'Not provided'
+  const phone = account.companyPhone || account.businessPhone || account.phone || 'Not provided'
+  const address = account.companyAddress || account.businessAddress || 'Not provided'
   const city = account.city || ''
   const country = account.country || ''
   const location = account.location || [city, country].filter(Boolean).join(', ') || 'Not specified'
@@ -49,6 +57,18 @@ function PendingAccountDetailsModal({
   const cardDate = account.cardDate || '—'
   const joined = account.joined || '—'
   const wallet = account.wallet || (account.walletBalance !== undefined ? `$${account.walletBalance}` : '$0')
+  const registrationEntity = account.registrationEntity || '—'
+  const registrationNo = account.registrationNo || '—'
+  const ownerName = account.ownerName || account.fullName || '—'
+  const ownerEmail = account.ownerEmail || account.email || '—'
+  const ownerPhone = account.ownerPhone || '—'
+  const ownerAddress = account.ownerAddress || '—'
+  const idCardUrl = account.idCardUrl || ''
+  const idCardNumber = account.idCardNumber || '—'
+  const bankName = account.bankName || account.paymentProvider || '—'
+  const accountHolderName = account.accountHolderName || account.ownerName || account.fullName || '—'
+  const accountNumberOrIban = account.accountNumberOrIban || account.accNumber || '—'
+  const isImageId = idCardUrl && /\.(jpe?g|png|webp)($|\?)/i.test(idCardUrl)
 
   const handleModalClose = () => {
     setRejectConfirm(false)
@@ -119,16 +139,16 @@ function PendingAccountDetailsModal({
             </div>
           </div>
 
-          {/* Business & Profile Details */}
+          {/* ── Section 1: Company Details ── */}
           <div className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-              <Briefcase className="h-4 w-4 text-teal-600" />
-              <h4 className="text-sm font-bold text-slate-800">Business & Organization Profile</h4>
+              <Building2 className="h-4 w-4 text-teal-600" />
+              <h4 className="text-sm font-bold text-slate-800">Company Details</h4>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-sm">
               <div>
-                <dt className="text-xs text-slate-400 font-medium">Business / Company Name</dt>
+                <dt className="text-xs text-slate-400 font-medium">Name of Company</dt>
                 <dd className="mt-1 font-semibold text-slate-800 flex items-center gap-1.5">
                   <Building2 className="h-3.5 w-3.5 text-slate-400" />
                   {businessName}
@@ -136,18 +156,35 @@ function PendingAccountDetailsModal({
               </div>
 
               <div>
-                <dt className="text-xs text-slate-400 font-medium">Category / Industry</dt>
-                <dd className="mt-1 font-semibold text-slate-800 flex items-center gap-1.5">
-                  <Tag className="h-3.5 w-3.5 text-slate-400" />
-                  {businessCategory}
+                <dt className="text-xs text-slate-400 font-medium">Official Phone Number</dt>
+                <dd className="mt-1 text-slate-800 flex items-center gap-1.5 font-medium">
+                  <Phone className="h-3.5 w-3.5 text-slate-400" />
+                  {phone}
                 </dd>
               </div>
 
               <div>
-                <dt className="text-xs text-slate-400 font-medium">Fulfillment / Order Type</dt>
-                <dd className="mt-1 text-slate-700 flex items-center gap-1.5">
-                  <Layers className="h-3.5 w-3.5 text-slate-400" />
-                  {orderType}
+                <dt className="text-xs text-slate-400 font-medium">Email of Company</dt>
+                <dd className="mt-1 text-slate-800 flex items-center gap-1.5 font-medium">
+                  <Mail className="h-3.5 w-3.5 text-slate-400" />
+                  <a href={`mailto:${account.companyEmail || email}`} className="text-teal-600 hover:underline">
+                    {account.companyEmail || email}
+                  </a>
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-xs text-slate-400 font-medium">Registration Entity</dt>
+                <dd className="mt-1 font-semibold text-slate-800 flex items-center gap-1.5">
+                  <FileBadge className="h-3.5 w-3.5 text-slate-400" />
+                  {registrationEntity}
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-xs text-slate-400 font-medium">Registration No (NTN / SECP)</dt>
+                <dd className="mt-1 font-mono text-xs text-slate-800 bg-slate-50 px-2.5 py-1 rounded inline-block border border-slate-200">
+                  {registrationNo}
                 </dd>
               </div>
 
@@ -162,93 +199,158 @@ function PendingAccountDetailsModal({
               </div>
 
               <div className="col-span-1 sm:col-span-2">
-                <dt className="text-xs text-slate-400 font-medium">Business Description</dt>
-                <dd className="mt-1 rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-700 border border-slate-100">
-                  {businessDescription}
-                </dd>
-              </div>
-            </div>
-          </div>
-
-          {/* Contact & Physical Address */}
-          <div className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-              <MapPin className="h-4 w-4 text-teal-600" />
-              <h4 className="text-sm font-bold text-slate-800">Contact & Geographic Location</h4>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-sm">
-              <div>
-                <dt className="text-xs text-slate-400 font-medium">Contact Email</dt>
-                <dd className="mt-1 text-slate-800 flex items-center gap-1.5 font-medium">
-                  <Mail className="h-3.5 w-3.5 text-slate-400" />
-                  <a href={`mailto:${email}`} className="text-teal-600 hover:underline">
-                    {email}
-                  </a>
-                </dd>
-              </div>
-
-              <div>
-                <dt className="text-xs text-slate-400 font-medium">Phone Number</dt>
-                <dd className="mt-1 text-slate-800 flex items-center gap-1.5 font-medium">
-                  <Phone className="h-3.5 w-3.5 text-slate-400" />
-                  {phone !== 'Not provided' ? (
-                    <a href={`tel:${phone}`} className="text-teal-600 hover:underline">
-                      {phone}
-                    </a>
-                  ) : (
-                    <span className="text-slate-400">{phone}</span>
-                  )}
-                </dd>
-              </div>
-
-              <div>
-                <dt className="text-xs text-slate-400 font-medium">Country / Region</dt>
-                <dd className="mt-1 text-slate-800 flex items-center gap-1.5">
-                  <Globe className="h-3.5 w-3.5 text-slate-400" />
-                  {country || 'Not specified'}
-                </dd>
-              </div>
-
-              <div>
-                <dt className="text-xs text-slate-400 font-medium">City</dt>
-                <dd className="mt-1 text-slate-800">{city || 'Not specified'}</dd>
-              </div>
-
-              <div className="col-span-1 sm:col-span-2">
-                <dt className="text-xs text-slate-400 font-medium">Registered Physical Address</dt>
-                <dd className="mt-1 text-slate-700 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 text-xs">
+                <dt className="text-xs text-slate-400 font-medium">Address of Company</dt>
+                <dd className="mt-1 text-slate-700 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 text-xs flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                   {address}
                 </dd>
               </div>
             </div>
           </div>
 
-          {/* Payment & Payout Setup */}
+          {/* ── Section 2: Owner Details ── */}
           <div className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-              <CreditCard className="h-4 w-4 text-teal-600" />
-              <h4 className="text-sm font-bold text-slate-800">Financial & Payment Setup</h4>
+              <User className="h-4 w-4 text-sky-600" />
+              <h4 className="text-sm font-bold text-slate-800">Owner Details</h4>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 text-sm">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-sm">
               <div>
-                <dt className="text-xs text-slate-400 font-medium">Payment Provider</dt>
-                <dd className="mt-1 font-semibold text-slate-800">{paymentProvider}</dd>
-              </div>
-
-              <div>
-                <dt className="text-xs text-slate-400 font-medium">Account / Card Number</dt>
-                <dd className="mt-1 font-mono text-xs text-slate-700 bg-slate-50 px-2.5 py-1 rounded inline-block">
-                  {accNumber}
+                <dt className="text-xs text-slate-400 font-medium">Owner Name</dt>
+                <dd className="mt-1 font-semibold text-slate-800 flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5 text-slate-400" />
+                  {ownerName}
                 </dd>
               </div>
 
               <div>
-                <dt className="text-xs text-slate-400 font-medium">Expiry / Onboarding Date</dt>
-                <dd className="mt-1 text-slate-700">{cardDate}</dd>
+                <dt className="text-xs text-slate-400 font-medium">Owner Phone</dt>
+                <dd className="mt-1 text-slate-800 flex items-center gap-1.5 font-medium">
+                  <Phone className="h-3.5 w-3.5 text-slate-400" />
+                  {ownerPhone}
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-xs text-slate-400 font-medium">Owner Email (Account Login)</dt>
+                <dd className="mt-1 text-slate-800 flex items-center gap-1.5 font-medium">
+                  <Mail className="h-3.5 w-3.5 text-slate-400" />
+                  <a href={`mailto:${ownerEmail}`} className="text-sky-600 hover:underline">
+                    {ownerEmail}
+                  </a>
+                </dd>
+              </div>
+
+              <div className="col-span-1 sm:col-span-2">
+                <dt className="text-xs text-slate-400 font-medium">Owner Personal Address</dt>
+                <dd className="mt-1 text-slate-700 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 text-xs flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                  {ownerAddress}
+                </dd>
               </div>
             </div>
+          </div>
+
+          {/* ── Section 3: Bank & Settlement Details ── */}
+          <div className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+              <CreditCard className="h-4 w-4 text-primary-600" />
+              <h4 className="text-sm font-bold text-slate-800">Bank & Settlement Account</h4>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 text-sm">
+              <div>
+                <dt className="text-xs text-slate-400 font-medium">Bank Name</dt>
+                <dd className="mt-1 font-semibold text-slate-800 flex items-center gap-1.5">
+                  <Building2 className="h-3.5 w-3.5 text-slate-400" />
+                  {bankName}
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-xs text-slate-400 font-medium">Account Holder Name</dt>
+                <dd className="mt-1 font-semibold text-slate-800 flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5 text-slate-400" />
+                  {accountHolderName}
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-xs text-slate-400 font-medium">Account Number / IBAN</dt>
+                <dd className="mt-1 font-mono text-xs font-bold text-slate-900 bg-slate-50 px-2.5 py-1 rounded inline-block border border-slate-200 select-all">
+                  {formatIbanSpaces(accountNumberOrIban) || accountNumberOrIban}
+                </dd>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Section 4: ID Card for Verification ── */}
+          <div className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+              <ShieldCheck className="h-4 w-4 text-emerald-600" />
+              <h4 className="text-sm font-bold text-slate-800">ID Card for Verification</h4>
+            </div>
+
+            {idCardNumber && idCardNumber !== '—' && (
+              <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/50 p-3.5 flex items-center justify-between">
+                <div>
+                  <dt className="text-xs text-emerald-800 font-medium">Extracted CNIC / ID Card Number</dt>
+                  <dd className="mt-0.5 text-base font-bold font-mono text-emerald-950 tracking-wider">
+                    {idCardNumber}
+                  </dd>
+                </div>
+                <Badge tone="success" className="gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Verified
+                </Badge>
+              </div>
+            )}
+
+            {idCardUrl ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 font-bold text-xs uppercase">
+                      ID
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-emerald-950">ID Document Uploaded</p>
+                      <p className="text-[11px] text-emerald-700">CNIC / Passport verification document submitted</p>
+                    </div>
+                  </div>
+                  <a
+                    href={mediaUrl(idCardUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-700 transition-colors"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    View ID Card
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+
+                {isImageId && (
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                    <div className="bg-slate-100/80 px-3 py-1.5 text-[11px] font-semibold text-slate-600 border-b border-slate-200">
+                      ID Preview:
+                    </div>
+                    <div className="p-2 flex justify-center bg-slate-900/5">
+                      <img
+                        src={mediaUrl(idCardUrl)}
+                        alt="ID Card Verification"
+                        className="max-h-64 rounded-lg object-contain shadow-xs"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center text-xs text-slate-500">
+                No ID document file was uploaded for this account.
+              </div>
+            )}
           </div>
         </div>
 
@@ -286,6 +388,20 @@ function PendingAccountDetailsModal({
               </Button>
 
               <div className="flex items-center gap-2">
+                {Boolean(onEdit) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="md"
+                    onClick={() => onEdit(account)}
+                    disabled={actionLoading}
+                    className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs"
+                    title="Edit user information and business details before approval"
+                  >
+                    <Edit3 className="h-4 w-4 text-slate-600" />
+                    Edit Details
+                  </Button>
+                )}
                 <Button
                   variant="danger"
                   size="md"

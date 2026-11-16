@@ -305,6 +305,37 @@ function EditProductModal({ isOpen, onClose, onSuccess, product }) {
             </div>
           </div>
 
+          {/* Handling & Delivery Time */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700">
+                Handling / Dispatch Time (SLA)
+              </label>
+              <Select
+                value={form.handlingTime || '24 Hours (1 business day)'}
+                onChange={handleChange('handlingTime')}
+                options={[
+                  { label: 'Within 12 Hours (Same Day Fast Handover)', value: 'Within 12 Hours (Same Day Fast Handover)' },
+                  { label: '24 Hours (1 business day)', value: '24 Hours (1 business day)' },
+                  { label: '48 Hours (2 business days)', value: '48 Hours (2 business days)' },
+                  { label: '3 Days (72 hours)', value: '3 Days (72 hours)' },
+                  { label: '4 - 5 Days', value: '4 - 5 Days' },
+                ]}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700">
+                Customer Delivery Window
+              </label>
+              <Input
+                value={form.deliveryTime}
+                onChange={handleChange('deliveryTime')}
+                placeholder="e.g. 2 - 3 business days"
+              />
+            </div>
+          </div>
+
           {/* Description */}
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-700">Description</label>

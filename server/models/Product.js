@@ -17,6 +17,7 @@ const productSchema = new mongoose.Schema(
     commission: { type: Number, default: 0, min: 0 },
     isWmsVerified: { type: Boolean, default: false },
     wmsVerifiedAt: { type: Date, default: null },
+    wmsProductId: { type: Number, default: null },
     weight: { type: String, trim: true, default: '' },
     weightUnit: { type: String, default: 'gm' },
     length: { type: String, trim: true, default: '' },
@@ -59,6 +60,18 @@ const productSchema = new mongoose.Schema(
   { timestamps: true },
 )
 
+productSchema.pre('save', async function setSerialSku(next) {
+  if (!this.sku || !/^SVRO-\d+$/i.test(this.sku)) {
+    try {
+      const { getNextSku } = await import('../services/sequenceService.js')
+      this.sku = await getNextSku()
+    } catch (err) {
+      console.warn('[Product] Failed to get next SKU from sequenceService:', err?.message)
+    }
+  }
+  next()
+})
+
 productSchema.methods.toSafeObject = function toSafeObject() {
   const supplierDoc = this.supplier
   const isSupplierObj =
@@ -73,6 +86,8 @@ productSchema.methods.toSafeObject = function toSafeObject() {
 
   return {
     id: this._id.toString(),
+    productId: this.sku,
+    displayId: this.sku,
     name: this.name,
     sku: this.sku,
     category: this.category,
@@ -97,6 +112,7 @@ productSchema.methods.toSafeObject = function toSafeObject() {
     inWarehouse: Boolean(this.inWarehouse || this.fulfillBy === 'warehouse'),
     isWmsVerified: Boolean(this.isWmsVerified || this.inWarehouse || this.fulfillBy === 'warehouse'),
     wmsVerifiedAt: this.wmsVerifiedAt || (this.inWarehouse ? this.createdAt : null),
+    wmsProductId: this.wmsProductId || null,
     location: this.location || '—',
     country: this.country,
     barcode: this.barcode,

@@ -2,6 +2,11 @@ import mongoose from 'mongoose'
 
 const payoutSchema = new mongoose.Schema(
   {
+    payoutNo: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     supplier: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -89,6 +94,20 @@ const payoutSchema = new mongoose.Schema(
   { timestamps: true },
 )
 
+payoutSchema.pre('save', async function setPayoutNo(next) {
+  if (!this.payoutNo) {
+    try {
+      const { getNextPayoutNo } = await import('../services/sequenceService.js')
+      this.payoutNo = await getNextPayoutNo()
+    } catch (err) {
+      const yy = new Date().getFullYear().toString().slice(-2)
+      const num = 10001 + (parseInt(this._id ? this._id.toString().slice(-4) : '10001', 16) % 89999)
+      this.payoutNo = `${yy}-P-${String(num).slice(-5)}`
+    }
+  }
+  next()
+})
+
 payoutSchema.methods.toSafeObject = function toSafeObject() {
   const supplierDoc = this.supplier
   const supplierName =
@@ -101,10 +120,21 @@ payoutSchema.methods.toSafeObject = function toSafeObject() {
       : ''
   const rawSupplierId = supplierDoc?._id?.toString?.() || supplierDoc?.toString?.() || ''
   const supplierDisplayId =
-    supplierDoc?.clientId || (rawSupplierId ? `SUP-${rawSupplierId.slice(-6).toUpperCase()}` : '')
+    supplierDoc?.displayId ||
+    (supplierDoc?.clientId && /^SPAK-\d+$/i.test(supplierDoc.clientId) ? supplierDoc.clientId : '') ||
+    (rawSupplierId ? `SPAK-${1001 + (parseInt(rawSupplierId.slice(-4), 16) % 8999)}` : 'SPAK-1001')
+
+  const yy = this.createdAt
+    ? new Date(this.createdAt).getFullYear().toString().slice(-2)
+    : new Date().getFullYear().toString().slice(-2)
+  const hex = this._id ? this._id.toString() : ''
+  const fallbackNum = String(10001 + (parseInt(hex.slice(-4) || '10001', 16) % 89999)).slice(-5)
+  const payoutNo = this.payoutNo || `${yy}-P-${fallbackNum}`
 
   return {
     id: this._id.toString(),
+    payoutNo,
+    payoutDisplayId: payoutNo,
     supplierId: rawSupplierId,
     supplierDisplayId,
     supplier: supplierName,

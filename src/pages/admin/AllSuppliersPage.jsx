@@ -18,6 +18,9 @@ import {
   Star,
   Truck,
   ShieldAlert,
+  Eye,
+  ChevronDown,
+  MessageSquare,
 } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
@@ -34,7 +37,10 @@ import EditAccountModal from '../../components/admin/EditAccountModal.jsx'
 import DeleteAccountModal from '../../components/admin/DeleteAccountModal.jsx'
 import WarnSupplierModal from '../../components/admin/WarnSupplierModal.jsx'
 import SuspendSupplierModal from '../../components/admin/SuspendSupplierModal.jsx'
+import SupplierPerformanceModal from '../../components/admin/SupplierPerformanceModal.jsx'
+import SendMessageModal from '../../components/admin/SendMessageModal.jsx'
 import { adminApi, getErrorMessage } from '../../lib/api.js'
+import { formatSupplierId } from '../../lib/idFormatters.js'
 
 const TABLE_HEAD = [
   'Supplier',
@@ -65,7 +71,21 @@ function AllSuppliersPage() {
   const [selectedSupplier, setSelectedSupplier] = useState(null)
   const [warnModalSupplier, setWarnModalSupplier] = useState(null)
   const [suspendModalSupplier, setSuspendModalSupplier] = useState(null)
+  const [performanceModalSupplier, setPerformanceModalSupplier] = useState(null)
+  const [sendMessageSupplier, setSendMessageSupplier] = useState(null)
+  const [actionDropdownOpenId, setActionDropdownOpenId] = useState(null)
   const [statusSuccessMessage, setStatusSuccessMessage] = useState('')
+
+  // Close actions dropdown on click outside
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest('[data-actions-dropdown]')) {
+        setActionDropdownOpenId(null)
+      }
+    }
+    document.addEventListener('click', handleOutsideClick)
+    return () => document.removeEventListener('click', handleOutsideClick)
+  }, [])
 
   const loadSuppliers = async () => {
     setLoading(true)
@@ -540,7 +560,7 @@ function AllSuppliersPage() {
                             title="Click supplier ID to view monthly finance history, maturity & payouts"
                           >
                             <Wallet className="h-3 w-3" />
-                            <span>ID: {supplier.displayId || (supplier.id ? `SUP-${supplier.id.slice(-6).toUpperCase()}` : '—')}</span>
+                            <span>ID: {formatSupplierId(supplier)}</span>
                           </Link>
                         </div>
                       </td>
@@ -607,6 +627,16 @@ function AllSuppliersPage() {
                           ) : (
                             <span className="text-xs text-slate-400 italic">No ratings yet</span>
                           )}
+
+                          <button
+                            type="button"
+                            onClick={() => setPerformanceModalSupplier(supplier)}
+                            className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/90 px-2.5 py-1 text-xs font-bold text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 transition-all cursor-pointer shadow-2xs"
+                            title="View Supplier Performance, Ratings, Dispatch SLA & Product Reviews"
+                          >
+                            <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                            <span>Details</span>
+                          </button>
                         </div>
                       </td>
 
@@ -650,18 +680,23 @@ function AllSuppliersPage() {
                             </Badge>
 
                             {(supplier.warningsCount || 0) === 0 ? (
-                              <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200">
                                 0/3 Warnings
                               </span>
-                            ) : (supplier.warningsCount || 0) < 3 ? (
-                              <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-300">
-                                <AlertTriangle className="h-2.5 w-2.5 text-amber-600" />
-                                {supplier.warningsCount}/3 Warnings
+                            ) : (supplier.warningsCount || 0) === 1 ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 border border-amber-300">
+                                <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                1/3 Warnings
+                              </span>
+                            ) : (supplier.warningsCount || 0) === 2 ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-[11px] font-bold text-orange-900 border border-orange-300">
+                                <AlertTriangle className="h-3 w-3 text-orange-600" />
+                                2/3 Warnings
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-0.5 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-extrabold text-rose-800 border border-rose-300 animate-pulse">
-                                <ShieldAlert className="h-2.5 w-2.5 text-rose-700" />
-                                {supplier.warningsCount}/3 (Limit Met)
+                              <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-0.5 text-[11px] font-black text-rose-800 border border-rose-300">
+                                <ShieldAlert className="h-3 w-3 text-rose-700" />
+                                3/3 Warnings (Suspended)
                               </span>
                             )}
                           </div>
@@ -677,92 +712,155 @@ function AllSuppliersPage() {
                         </div>
                       </td>
 
-                      {/* 7. Actions */}
-                      <td className="whitespace-nowrap px-5 py-4">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {/* Warn Supplier Button */}
-                          {supplier.status !== 'suspended' && (
-                            <button
-                              type="button"
-                              onClick={() => setWarnModalSupplier(supplier)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-bold text-amber-800 transition-all hover:bg-amber-600 hover:text-white cursor-pointer shadow-2xs"
-                              title="Send formal performance warning email"
-                            >
-                              <AlertTriangle className="h-3.5 w-3.5" />
-                              <span>Warn</span>
-                            </button>
-                          )}
-
-                          {/* Suspend or Reinstate Button */}
-                          {supplier.status === 'suspended' ? (
-                            <button
-                              type="button"
-                              onClick={() => handleReinstate(supplier)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-800 transition-all hover:bg-emerald-600 hover:text-white cursor-pointer shadow-2xs"
-                              title="Reinstate supplier account"
-                            >
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                              <span>Reinstate</span>
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setSuspendModalSupplier(supplier)}
-                              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-bold transition-all cursor-pointer shadow-2xs ${
-                                (supplier.warningsCount || 0) >= 3
-                                  ? 'border-rose-400 bg-rose-600 text-white hover:bg-rose-700'
-                                  : 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-600 hover:text-white'
-                              }`}
-                              title={
-                                (supplier.warningsCount || 0) >= 3
-                                  ? '3 warnings limit reached - ready for suspension'
-                                  : 'Suspend supplier (3 warnings policy)'
-                              }
-                            >
-                              <ShieldAlert className="h-3.5 w-3.5" />
-                              <span>Suspend</span>
-                            </button>
-                          )}
-
-                          <Link
-                            to={`/admin/supplier/payouts?supplierId=${supplier.id}`}
-                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 transition-all hover:bg-emerald-600 hover:text-white cursor-pointer shadow-2xs"
-                            title="Monthly finance history & payouts"
-                          >
-                            <Wallet className="h-3.5 w-3.5" />
-                            <span>Finances</span>
-                          </Link>
-
+                      {/* 7. Actions Dropdown */}
+                      <td className="whitespace-nowrap px-5 py-4 text-right">
+                        <div className="relative inline-block text-left" data-actions-dropdown>
                           <button
                             type="button"
-                            disabled={actionLoading}
-                            onClick={() => handleImpersonate(supplier)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-primary-200 bg-primary-50 px-2 py-1 text-xs font-semibold text-primary transition-all hover:bg-primary hover:text-white disabled:opacity-50 cursor-pointer shadow-2xs"
-                            title={`Log in as ${supplier.fullName}`}
+                            onClick={() =>
+                              setActionDropdownOpenId(
+                                actionDropdownOpenId === supplier.id ? null : supplier.id,
+                              )
+                            }
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition cursor-pointer"
+                            aria-haspopup="true"
+                            aria-expanded={actionDropdownOpenId === supplier.id}
                           >
-                            <LogIn className="h-3.5 w-3.5" />
-                            <span>Login As</span>
+                            <span>Actions</span>
+                            <ChevronDown
+                              className={`h-3.5 w-3.5 text-slate-500 transition-transform ${
+                                actionDropdownOpenId === supplier.id ? 'rotate-180 text-indigo-600' : ''
+                              }`}
+                            />
                           </button>
 
-                          <IconAction
-                            icon={Pencil}
-                            tone="primary"
-                            aria-label="Edit supplier"
-                            onClick={() => {
-                              setSelectedSupplier(supplier)
-                              setEditModalOpen(true)
-                            }}
-                          />
+                          {actionDropdownOpenId === supplier.id && (
+                            <div className="absolute right-0 z-30 mt-1 w-56 origin-top-right rounded-2xl border border-slate-200 bg-white py-1.5 shadow-xl ring-1 ring-black/5 divide-y divide-slate-100 text-left animate-in fade-in zoom-in-95 duration-100">
+                              {/* 1. Direct Message to Supplier */}
+                              <div className="py-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSendMessageSupplier(supplier)
+                                    setActionDropdownOpenId(null)
+                                  }}
+                                  className="flex w-full items-center gap-2.5 px-3.5 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-50/70 transition cursor-pointer"
+                                >
+                                  <MessageSquare className="h-4 w-4 text-indigo-600 shrink-0" />
+                                  <span>Send Message</span>
+                                </button>
+                              </div>
 
-                          <IconAction
-                            icon={Trash2}
-                            tone="danger"
-                            aria-label="Delete supplier"
-                            onClick={() => {
-                              setSelectedSupplier(supplier)
-                              setDeleteModalOpen(true)
-                            }}
-                          />
+                              {/* 2. Performance, Reviews & Warnings */}
+                              <div className="py-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPerformanceModalSupplier(supplier)
+                                    setActionDropdownOpenId(null)
+                                  }}
+                                  className="flex w-full items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+                                >
+                                  <Eye className="h-4 w-4 text-indigo-600 shrink-0" />
+                                  <span>Performance &amp; Reviews</span>
+                                </button>
+
+                                {supplier.status !== 'suspended' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setWarnModalSupplier(supplier)
+                                      setActionDropdownOpenId(null)
+                                    }}
+                                    className="flex w-full items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-amber-800 hover:bg-amber-50 transition cursor-pointer"
+                                  >
+                                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                                    <span>Issue Warning ({supplier.warningsCount || 0}/3)</span>
+                                  </button>
+                                )}
+
+                                {supplier.status === 'suspended' ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleReinstate(supplier)
+                                      setActionDropdownOpenId(null)
+                                    }}
+                                    className="flex w-full items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition cursor-pointer"
+                                  >
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                                    <span>Reinstate Account</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSuspendModalSupplier(supplier)
+                                      setActionDropdownOpenId(null)
+                                    }}
+                                    className="flex w-full items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-rose-700 hover:bg-rose-50 transition cursor-pointer"
+                                  >
+                                    <ShieldAlert className="h-4 w-4 text-rose-600 shrink-0" />
+                                    <span>Suspend Account</span>
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* 3. Finances & Login Impersonation */}
+                              <div className="py-1">
+                                <Link
+                                  to={`/admin/supplier/payouts?supplierId=${supplier.id}`}
+                                  onClick={() => setActionDropdownOpenId(null)}
+                                  className="flex w-full items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+                                >
+                                  <Wallet className="h-4 w-4 text-emerald-600 shrink-0" />
+                                  <span>Finances &amp; Payouts</span>
+                                </Link>
+
+                                <button
+                                  type="button"
+                                  disabled={actionLoading}
+                                  onClick={() => {
+                                    handleImpersonate(supplier)
+                                    setActionDropdownOpenId(null)
+                                  }}
+                                  className="flex w-full items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
+                                >
+                                  <LogIn className="h-4 w-4 text-primary shrink-0" />
+                                  <span>Login As Supplier</span>
+                                </button>
+                              </div>
+
+                              {/* 4. Edit & Delete */}
+                              <div className="py-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedSupplier(supplier)
+                                    setEditModalOpen(true)
+                                    setActionDropdownOpenId(null)
+                                  }}
+                                  className="flex w-full items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+                                >
+                                  <Pencil className="h-4 w-4 text-slate-500 shrink-0" />
+                                  <span>Edit Account</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedSupplier(supplier)
+                                    setDeleteModalOpen(true)
+                                    setActionDropdownOpenId(null)
+                                  }}
+                                  className="flex w-full items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                >
+                                  <Trash2 className="h-4 w-4 text-rose-500 shrink-0" />
+                                  <span>Delete Supplier</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -819,7 +917,7 @@ function AllSuppliersPage() {
                       title="Supplier Monthly Finance History"
                     >
                       <Wallet className="h-3 w-3" />
-                      <span>ID: {supplier.displayId || (supplier.id ? `SUP-${supplier.id.slice(-6).toUpperCase()}` : '—')}</span>
+                      <span>ID: {formatSupplierId(supplier)}</span>
                     </Link>
                   </div>
                 }
@@ -829,11 +927,17 @@ function AllSuppliersPage() {
                       <Badge tone={supplier.status === 'approved' ? 'success' : supplier.status === 'suspended' ? 'danger' : 'warning'}>
                         {supplier.status}
                       </Badge>
-                      {(supplier.warningsCount || 0) > 0 && (
-                        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-800 border border-amber-300">
-                          {supplier.warningsCount}/3 Warn
-                        </span>
-                      )}
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                        (supplier.warningsCount || 0) === 0
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : (supplier.warningsCount || 0) === 1
+                          ? 'bg-amber-50 text-amber-800 border-amber-300'
+                          : (supplier.warningsCount || 0) === 2
+                          ? 'bg-orange-100 text-orange-900 border-orange-300'
+                          : 'bg-rose-100 text-rose-800 border-rose-300 font-extrabold'
+                      }`}>
+                        {supplier.warningsCount || 0}/3 Warnings
+                      </span>
                     </div>
                     {isWms ? (
                       <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
@@ -845,94 +949,172 @@ function AllSuppliersPage() {
                   </div>
                 }
                 actions={
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {supplier.status !== 'suspended' && (
-                      <button
-                        type="button"
-                        onClick={() => setWarnModalSupplier(supplier)}
-                        className="inline-flex items-center gap-1 rounded-md bg-amber-500 px-2 py-1 text-xs font-bold text-white shadow-xs hover:bg-amber-600 cursor-pointer"
-                      >
-                        <AlertTriangle className="h-3 w-3" />
-                        <span>Warn</span>
-                      </button>
-                    )}
-                    {supplier.status === 'suspended' ? (
-                      <button
-                        type="button"
-                        onClick={() => handleReinstate(supplier)}
-                        className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 cursor-pointer"
-                      >
-                        <CheckCircle2 className="h-3 w-3" />
-                        <span>Reinstate</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setSuspendModalSupplier(supplier)}
-                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold text-white shadow-xs cursor-pointer ${
-                          (supplier.warningsCount || 0) >= 3 ? 'bg-rose-600 hover:bg-rose-700' : 'bg-rose-500 hover:bg-rose-600'
-                        }`}
-                      >
-                        <ShieldAlert className="h-3 w-3" />
-                        <span>Suspend</span>
-                      </button>
-                    )}
-                    <Link
-                      to={`/admin/supplier/payouts?supplierId=${supplier.id}`}
-                      className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
-                      title="Supplier Monthly Finance History"
-                    >
-                      <Wallet className="h-3.5 w-3.5" />
-                      <span>Finances</span>
-                    </Link>
+                  <div className="flex items-center gap-2 flex-wrap" data-actions-dropdown>
                     <button
                       type="button"
-                      onClick={() => handleImpersonate(supplier)}
-                      className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-bold text-white shadow-xs cursor-pointer"
+                      onClick={() => setSendMessageSupplier(supplier)}
+                      className="inline-flex items-center gap-1 rounded-xl bg-indigo-600 px-2.5 py-1 text-xs font-bold text-white shadow-2xs hover:bg-indigo-700 cursor-pointer"
                     >
-                      <LogIn className="h-3.5 w-3.5" />
-                      <span>Login As</span>
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      <span>Message</span>
                     </button>
-                    <IconAction
-                      icon={Pencil}
-                      tone="primary"
-                      aria-label="Edit supplier"
-                      onClick={() => {
-                        setSelectedSupplier(supplier)
-                        setEditModalOpen(true)
-                      }}
-                    />
-                    <IconAction
-                      icon={Trash2}
-                      tone="danger"
-                      aria-label="Delete supplier"
-                      onClick={() => {
-                        setSelectedSupplier(supplier)
-                        setDeleteModalOpen(true)
-                      }}
-                    />
+
+                    <div className="relative inline-block text-left">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setActionDropdownOpenId(
+                            actionDropdownOpenId === `mobile-${supplier.id}`
+                              ? null
+                              : `mobile-${supplier.id}`,
+                          )
+                        }
+                        className="inline-flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 cursor-pointer"
+                      >
+                        <span>Actions</span>
+                        <ChevronDown className="h-3 w-3 text-slate-500" />
+                      </button>
+
+                      {actionDropdownOpenId === `mobile-${supplier.id}` && (
+                        <div className="absolute right-0 z-30 mt-1 w-52 origin-top-right rounded-2xl border border-slate-200 bg-white py-1 shadow-xl ring-1 ring-black/5 divide-y divide-slate-100 text-left">
+                          <div className="py-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPerformanceModalSupplier(supplier)
+                                setActionDropdownOpenId(null)
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                            >
+                              <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                              <span>Performance &amp; Reviews</span>
+                            </button>
+
+                            {supplier.status !== 'suspended' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setWarnModalSupplier(supplier)
+                                  setActionDropdownOpenId(null)
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-amber-800 hover:bg-amber-50"
+                              >
+                                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                                <span>Issue Warning ({supplier.warningsCount || 0}/3)</span>
+                              </button>
+                            )}
+
+                            {supplier.status === 'suspended' ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleReinstate(supplier)
+                                  setActionDropdownOpenId(null)
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                <span>Reinstate</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSuspendModalSupplier(supplier)
+                                  setActionDropdownOpenId(null)
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-rose-700 hover:bg-rose-50"
+                              >
+                                <ShieldAlert className="h-3.5 w-3.5 text-rose-600" />
+                                <span>Suspend</span>
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="py-1">
+                            <Link
+                              to={`/admin/supplier/payouts?supplierId=${supplier.id}`}
+                              onClick={() => setActionDropdownOpenId(null)}
+                              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                            >
+                              <Wallet className="h-3.5 w-3.5 text-emerald-600" />
+                              <span>Finances</span>
+                            </Link>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleImpersonate(supplier)
+                                setActionDropdownOpenId(null)
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                            >
+                              <LogIn className="h-3.5 w-3.5 text-primary" />
+                              <span>Login As</span>
+                            </button>
+                          </div>
+
+                          <div className="py-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedSupplier(supplier)
+                                setEditModalOpen(true)
+                                setActionDropdownOpenId(null)
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                            >
+                              <Pencil className="h-3.5 w-3.5 text-slate-500" />
+                              <span>Edit Details</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedSupplier(supplier)
+                                setDeleteModalOpen(true)
+                                setActionDropdownOpenId(null)
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 }
               >
                 <DetailRow
                   label="Performance Rating"
                   value={
-                    ratings.reviewsCount > 0 ? (
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-amber-600 flex items-center">
-                          <Star className="h-3 w-3 fill-amber-400 text-amber-400 mr-0.5" />
-                          {Number(ratings.averageRating || 0).toFixed(1)}/5
-                        </span>
-                        <span className="text-xs text-slate-500">({ratings.reviewsCount} reviews)</span>
-                        {ratings.onTimeDeliveryPercent !== null && (
-                          <span className="text-xs font-semibold text-emerald-700">
-                            {ratings.onTimeDeliveryPercent}% On-Time
+                    <div className="flex items-center justify-between w-full">
+                      {ratings.reviewsCount > 0 ? (
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-amber-600 flex items-center">
+                            <Star className="h-3 w-3 fill-amber-400 text-amber-400 mr-0.5" />
+                            {Number(ratings.averageRating || 0).toFixed(1)}/5
                           </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-slate-400">No ratings yet</span>
-                    )
+                          <span className="text-xs text-slate-500">({ratings.reviewsCount} reviews)</span>
+                          {ratings.onTimeDeliveryPercent !== null && (
+                            <span className="text-xs font-semibold text-emerald-700">
+                              {ratings.onTimeDeliveryPercent}% On-Time
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400">No ratings yet</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setPerformanceModalSupplier(supplier)}
+                        className="ml-2 inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100 cursor-pointer"
+                      >
+                        <Eye className="h-3 w-3" /> Details
+                      </button>
+                    </div>
                   }
                 />
                 <DetailRow
@@ -1028,12 +1210,14 @@ function AllSuppliersPage() {
       {/* Performance Warning Modal */}
       {warnModalSupplier && (
         <WarnSupplierModal
+          open={Boolean(warnModalSupplier)}
           isOpen={Boolean(warnModalSupplier)}
           supplier={warnModalSupplier}
           onClose={() => setWarnModalSupplier(null)}
-          onSuccess={(updatedSupplier) => {
+          onSuccess={(res) => {
             setStatusSuccessMessage(
-              `Warning #${updatedSupplier?.warningsCount || ''} email sent successfully to ${updatedSupplier?.fullName || 'supplier'}.`,
+              res?.message ||
+                `Warning #${res?.warningsCount || ''} recorded successfully for ${warnModalSupplier?.fullName || 'supplier'}.`,
             )
             loadSuppliers()
           }}
@@ -1043,12 +1227,50 @@ function AllSuppliersPage() {
       {/* Account Suspension Modal */}
       {suspendModalSupplier && (
         <SuspendSupplierModal
+          open={Boolean(suspendModalSupplier)}
           isOpen={Boolean(suspendModalSupplier)}
           supplier={suspendModalSupplier}
           onClose={() => setSuspendModalSupplier(null)}
-          onSuccess={(updatedSupplier) => {
+          onSuccess={(res) => {
             setStatusSuccessMessage(
-              `Supplier "${updatedSupplier?.fullName || 'supplier'}" has been suspended. Suspension email dispatched and active products deactivated.`,
+              res?.message ||
+                `Supplier "${suspendModalSupplier?.fullName || 'supplier'}" has been suspended and active products deactivated.`,
+            )
+            loadSuppliers()
+          }}
+        />
+      )}
+
+      {/* Complete Supplier Performance & Rating Details Modal */}
+      {performanceModalSupplier && (
+        <SupplierPerformanceModal
+          open={Boolean(performanceModalSupplier)}
+          supplierId={performanceModalSupplier.id}
+          onClose={() => setPerformanceModalSupplier(null)}
+          onOpenWarnModal={(supplier) => {
+            setPerformanceModalSupplier(null)
+            setWarnModalSupplier(supplier)
+          }}
+          onOpenSuspendModal={(supplier) => {
+            setPerformanceModalSupplier(null)
+            setSuspendModalSupplier(supplier)
+          }}
+          onSupplierUpdated={() => {
+            loadSuppliers()
+          }}
+        />
+      )}
+
+      {/* Send Direct Message / Warning Notice to Supplier */}
+      {sendMessageSupplier && (
+        <SendMessageModal
+          supplier={sendMessageSupplier}
+          open={Boolean(sendMessageSupplier)}
+          onClose={() => setSendMessageSupplier(null)}
+          onSuccess={(res) => {
+            setStatusSuccessMessage(
+              res?.message ||
+                `Message successfully dispatched to ${sendMessageSupplier.fullName}. Dispute thread opened.`,
             )
             loadSuppliers()
           }}

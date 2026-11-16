@@ -2,6 +2,11 @@ import mongoose from 'mongoose'
 
 const walletRequestSchema = new mongoose.Schema(
   {
+    transactionId: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -57,16 +62,16 @@ const walletRequestSchema = new mongoose.Schema(
       default: '',
     },
     // Shipping Courier Option selected by client (USPS, UPS, FedEx)
-    courier: {
-      type: String,
-      enum: ['USPS', 'UPS', 'FedEx', 'None'],
-      default: 'None',
-    },
-    courierService: {
-      type: String,
-      trim: true,
-      default: '',
-    },
+    // courier: {
+    //   type: String,
+    //   enum: ['USPS', 'UPS', 'FedEx', 'None'],
+    //   default: 'None',
+    // },
+    // courierService: {
+    //   type: String,
+    //   trim: true,
+    //   default: '',
+    // },
     // Payment Method & Client Account Details for International Real Transfer
     paymentMethod: {
       type: String,
@@ -122,6 +127,20 @@ const walletRequestSchema = new mongoose.Schema(
   { timestamps: true },
 )
 
+walletRequestSchema.pre('save', async function setTransactionId(next) {
+  if (!this.transactionId) {
+    try {
+      const { getNextWalletTxId } = await import('../services/sequenceService.js')
+      this.transactionId = await getNextWalletTxId()
+    } catch (err) {
+      const yy = new Date().getFullYear().toString().slice(-2)
+      const num = 10001 + (parseInt(this._id ? this._id.toString().slice(-4) : '10001', 16) % 89999)
+      this.transactionId = `${yy}-W-${String(num).slice(-5)}`
+    }
+  }
+  next()
+})
+
 walletRequestSchema.methods.toSafeObject = function toSafeObject(businessName = 'No Business', profile = null) {
   const userDoc = this.user
   const userName =
@@ -131,8 +150,17 @@ walletRequestSchema.methods.toSafeObject = function toSafeObject(businessName = 
   const walletBalance = userDoc && typeof userDoc === 'object' ? userDoc.walletBalance ?? 0 : 0
   const userStatus = userDoc && typeof userDoc === 'object' ? userDoc.status || 'approved' : 'approved'
 
+  const yy = this.createdAt
+    ? new Date(this.createdAt).getFullYear().toString().slice(-2)
+    : new Date().getFullYear().toString().slice(-2)
+  const hex = this._id ? this._id.toString() : ''
+  const fallbackNum = String(10001 + (parseInt(hex.slice(-4) || '10001', 16) % 89999)).slice(-5)
+  const transactionId = this.transactionId || `${yy}-W-${fallbackNum}`
+
   return {
     id: this._id.toString(),
+    transactionId,
+    transactionDisplayId: transactionId,
     userId: userDoc?._id?.toString?.() || userDoc?.toString?.() || '',
     user: userName,
     business: businessName || 'No Business',
@@ -171,10 +199,10 @@ walletRequestSchema.methods.toSafeObject = function toSafeObject(businessName = 
     adminNote: this.adminNote,
     date: this.createdAt
       ? new Date(this.createdAt).toLocaleDateString('en-US', {
-          month: 'short',
-          day: '2-digit',
-          year: 'numeric',
-        })
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+      })
       : '—',
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,

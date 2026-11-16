@@ -33,6 +33,7 @@ import Card from '../../components/ui/Card.jsx'
 import Badge from '../../components/ui/Badge.jsx'
 import Button from '../../components/ui/Button.jsx'
 import { adminApi, getErrorMessage, mediaUrl } from '../../lib/api.js'
+import { formatWalletTxId } from '../../lib/idFormatters.js'
 
 const FILTERS = [
   { label: 'From date', type: 'date' },
@@ -41,14 +42,9 @@ const FILTERS = [
 ]
 
 const TABLE_HEAD = [
-  'User',
-  'Courier API',
-  'Client Account (Payout)',
-  'Deposit Amount',
-  'Exchange Rate',
-  'Wallet Credit (USD)',
+  'User / Account',
+  'Deposit & Credit',
   'TID / Slip',
-  'Real Transfer Status',
   'Status',
   'Actions',
 ]
@@ -122,10 +118,10 @@ function RequestStatus({ status }) {
     status === 'pending'
       ? 'New Request'
       : status === 'approved'
-      ? 'Approved'
-      : status === 'rejected'
-      ? 'Rejected'
-      : status
+        ? 'Approved'
+        : status === 'rejected'
+          ? 'Rejected'
+          : status
   const tone = label === 'Approved' ? 'success' : label === 'Rejected' ? 'danger' : 'warning'
   return <Badge tone={tone}>{label}</Badge>
 }
@@ -138,6 +134,14 @@ export default function WalletsRequestsPage() {
   const [busyId, setBusyId] = useState('')
   const [activeFilter, setActiveFilter] = useState('All Requests')
   const [inspectRequest, setInspectRequest] = useState(null)
+  const [copyFeedback, setCopyFeedback] = useState('')
+
+  const handleCopyText = (text, label) => {
+    if (!text) return
+    navigator.clipboard?.writeText(text)
+    setCopyFeedback(`${label} copied!`)
+    setTimeout(() => setCopyFeedback(''), 2500)
+  }
 
   // Real Transfer Execution States (within inspect modal)
   const [transferProvider, setTransferProvider] = useState('wise')
@@ -425,6 +429,12 @@ export default function WalletsRequestsPage() {
 
       <FilterBar filters={FILTERS} onFilterChange={(val) => setActiveFilter(val)} />
 
+      {copyFeedback && (
+        <div className="fixed bottom-5 right-5 z-50 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-xl animate-bounce">
+          {copyFeedback}
+        </div>
+      )}
+
       {error && (
         <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">
           {error}
@@ -448,7 +458,7 @@ export default function WalletsRequestsPage() {
         </div>
 
         <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[950px] text-left text-sm">
+          <table className="w-full min-w-[650px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-400 bg-slate-50/75">
                 {TABLE_HEAD.map((head) => (
@@ -468,160 +478,88 @@ export default function WalletsRequestsPage() {
               )}
               {filteredRequests.map((request) => (
                 <tr key={request.id} className="hover:bg-slate-50/60 transition">
-                  {/* User */}
-                  <td className="whitespace-nowrap px-4 py-4">
+                  {/* 1. User / Account */}
+                  <td className="whitespace-nowrap px-4 py-3.5">
                     <p className="font-semibold text-slate-800">{request.user}</p>
                     <p className="text-xs text-slate-400">{request.email}</p>
-                  </td>
-
-                  {/* Courier API */}
-                  <td className="whitespace-nowrap px-4 py-4">
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold border ${
-                        request.courier === 'UPS'
-                          ? 'border-amber-400 bg-amber-50 text-amber-900'
-                          : request.courier === 'FedEx'
-                          ? 'border-purple-400 bg-purple-50 text-purple-900'
-                          : 'border-blue-400 bg-blue-50 text-blue-900'
-                      }`}
-                    >
-                      <Truck className="h-3 w-3" />
-                      {request.courier || 'USPS'}
-                    </span>
-                    <span className="block text-[11px] text-slate-500 mt-0.5 max-w-[130px] truncate" title={request.courierService}>
-                      {request.courierService || 'Standard Ground'}
-                    </span>
-                  </td>
-
-                  {/* Client Account (Payout) */}
-                  <td className="whitespace-nowrap px-4 py-4">
-                    <div className="text-xs">
-                      <span className="font-bold uppercase tracking-wider text-slate-700 block">
-                        {request.paymentMethod ? request.paymentMethod.toUpperCase() : 'INTERNATIONAL'}
+                    {request.business && (
+                      <span className="text-[11px] text-indigo-600 block mt-0.5 truncate max-w-[180px]">
+                        {request.business}
                       </span>
-                      {request.clientAccountNumber ? (
-                        <span className="font-mono font-medium text-indigo-700 block truncate max-w-[160px]" title={request.clientAccountNumber}>
-                          Acc: {request.clientAccountNumber}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 italic">No Client Account</span>
-                      )}
-                      {request.clientIban && (
-                        <span className="font-mono text-[10px] text-slate-500 block truncate max-w-[160px]" title={request.clientIban}>
-                          IBAN: {request.clientIban}
+                    )}
+                  </td>
+
+                  {/* 2. Deposit & Credit */}
+                  <td className="whitespace-nowrap px-4 py-3.5">
+                    <span className="font-extrabold text-emerald-600 text-sm block">
+                      +${Number(request.amount).toFixed(2)} USD
+                    </span>
+                    <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
+                      <span className="font-medium text-slate-700">
+                        {request.depositAmount != null
+                          ? `${Number(request.depositAmount).toLocaleString()} ${request.depositCurrency || 'USD'}`
+                          : `$${Number(request.amount).toFixed(2)}`}
+                      </span>
+                      {request.depositCurrency && request.depositCurrency !== 'USD' && (
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          (Rate: {request.exchangeRate})
                         </span>
                       )}
                     </div>
                   </td>
 
-                  {/* Deposit Amount */}
-                  <td className="whitespace-nowrap px-4 py-4">
-                    <span className="font-bold text-slate-900">
-                      {request.depositAmount != null
-                        ? `${Number(request.depositAmount).toLocaleString()} ${request.depositCurrency || 'USD'}`
-                        : `$${Number(request.amount).toFixed(2)}`}
+                  {/* 3. TID / Slip */}
+                  <td className="whitespace-nowrap px-4 py-3.5">
+                    <span className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 font-mono text-[11px] font-bold text-indigo-700 ring-1 ring-inset ring-indigo-200 mb-1">
+                      {formatWalletTxId(request)}
                     </span>
-                  </td>
-
-                  {/* Exchange Rate */}
-                  <td className="whitespace-nowrap px-4 py-4 text-xs text-slate-600">
-                    {request.depositCurrency && request.depositCurrency !== 'USD' ? (
-                      <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 font-mono">
-                        1 USD = {request.exchangeRate} {request.depositCurrency}
-                      </span>
-                    ) : (
-                      <span className="text-slate-400">1:1 (USD)</span>
-                    )}
-                  </td>
-
-                  {/* Wallet Credit */}
-                  <td className="whitespace-nowrap px-4 py-4">
-                    <span className="font-extrabold text-emerald-600 text-sm">
-                      +${Number(request.amount).toFixed(2)} USD
-                    </span>
-                  </td>
-
-                  {/* TID / Slip */}
-                  <td className="whitespace-nowrap px-4 py-4">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-semibold text-slate-800">{request.bankTid}</span>
+                      <span className="font-mono text-xs text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                        {request.bankTid}
+                      </span>
                       {request.receiptImage && (
                         <a
                           href={mediaUrl(request.receiptImage)}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-1 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+                          className="inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition"
+                          title="View uploaded deposit receipt"
                         >
                           <ExternalLink className="h-3 w-3" /> Slip
                         </a>
                       )}
                     </div>
+                    <span className="block text-[11px] text-slate-400 mt-1">
+                      {request.createdAt
+                        ? new Date(request.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                        : request.date}
+                    </span>
                   </td>
 
-                  {/* Real Transfer Status */}
-                  <td className="whitespace-nowrap px-4 py-4">
-                    {request.realTransferStatus === 'completed' ? (
-                      <div className="space-y-0.5">
-                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">
-                          <Check className="h-3 w-3" /> Transferred
+                  {/* 4. Status */}
+                  <td className="whitespace-nowrap px-4 py-3.5">
+                    <div>
+                      <RequestStatus status={request.status} />
+                      {request.realTransferStatus === 'completed' && (
+                        <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 mt-1 block w-fit border border-emerald-200">
+                          <Check className="h-2.5 w-2.5" /> Transferred
                         </span>
-                        <span className="block font-mono text-[11px] text-slate-700 select-all font-semibold max-w-[130px] truncate" title={request.realTransferRef}>
-                          {request.realTransferRef || 'REF-CONFIRMED'}
-                        </span>
-                      </div>
-                    ) : request.realTransferStatus === 'processing' ? (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
-                        <Zap className="h-3 w-3" /> Processing
-                      </span>
-                    ) : request.realTransferStatus === 'failed' ? (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">
-                        Transfer Failed
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-400 italic">Pending Transfer</span>
-                    )}
+                      )}
+                    </div>
                   </td>
 
-                  {/* Status */}
-                  <td className="whitespace-nowrap px-4 py-4">
-                    <RequestStatus status={request.status} />
-                  </td>
-
-                  {/* Actions */}
-                  <td className="whitespace-nowrap px-4 py-4">
-                    <div className="flex items-center gap-2">
+                  {/* 5. Actions */}
+                  <td className="whitespace-nowrap px-4 py-3.5 text-right">
+                    <div className="flex items-center justify-end">
                       <button
                         type="button"
                         onClick={() => handleOpenInspect(request)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:border-slate-300 transition cursor-pointer"
-                        title="View details & execute transfer"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-indigo-50/70 hover:border-indigo-400 hover:text-indigo-700 transition cursor-pointer"
+                        title="View complete deposit and transaction details"
                       >
-                        <Eye className="h-3.5 w-3.5 text-primary-600" />
-                        <span>Details / Transfer</span>
+                        <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                        <span>View Details</span>
                       </button>
-
-                      {request.status === 'pending' ? (
-                        <>
-                          <button
-                            type="button"
-                            disabled={busyId === request.id}
-                            onClick={() => handleApprove(request.id, request.amount)}
-                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
-                          >
-                            <Check className="h-3.5 w-3.5" /> Approve
-                          </button>
-                          <button
-                            type="button"
-                            disabled={busyId === request.id}
-                            onClick={() => handleReject(request.id)}
-                            className="inline-flex items-center gap-1 rounded-lg bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50 cursor-pointer"
-                          >
-                            <X className="h-3.5 w-3.5" /> Reject
-                          </button>
-                        </>
-                      ) : (
-                        <span className="text-xs text-slate-400 capitalize">{request.status}</span>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -643,38 +581,18 @@ export default function WalletsRequestsPage() {
                   <button
                     type="button"
                     onClick={() => handleOpenInspect(request)}
-                    className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                    className="inline-flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer shadow-2xs"
                   >
                     <Eye className="h-3.5 w-3.5 text-primary-600" />
-                    <span>View / Transfer</span>
+                    <span>View Details</span>
                   </button>
-                  {request.status === 'pending' && (
-                    <>
-                      <button
-                        type="button"
-                        disabled={busyId === request.id}
-                        onClick={() => handleApprove(request.id, request.amount)}
-                        className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white cursor-pointer"
-                      >
-                        Approve (${Number(request.amount).toFixed(2)} USD)
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busyId === request.id}
-                        onClick={() => handleReject(request.id)}
-                        className="rounded-md bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 cursor-pointer"
-                      >
-                        Reject
-                      </button>
-                    </>
-                  )}
                 </div>
               }
             >
-              <DetailRow label="Courier API" value={`${request.courier || 'USPS'} (${request.courierService || 'Standard'})`} full />
+              <DetailRow label="Transaction ID" value={formatWalletTxId(request)} full />
               <DetailRow
-                label="Client Account"
-                value={`${request.paymentMethod ? request.paymentMethod.toUpperCase() : 'INTL'}: ${request.clientAccountNumber || '—'}`}
+                label="Deposit Method"
+                value={request.paymentMethod ? request.paymentMethod.replace(/_/g, ' ').toUpperCase() : 'OFFICIAL ACCOUNT'}
                 full
               />
               <DetailRow
@@ -735,8 +653,8 @@ export default function WalletsRequestsPage() {
                     <h3 className="text-base font-bold text-slate-900">Wallet Deposit Request</h3>
                     <RequestStatus status={inspectRequest.status} />
                   </div>
-                  <p className="text-xs text-slate-500 font-mono">
-                    Ref ID: {inspectRequest.id}
+                  <p className="text-xs text-indigo-700 font-mono font-semibold">
+                    Transaction ID: {formatWalletTxId(inspectRequest)}
                   </p>
                 </div>
               </div>
@@ -832,8 +750,17 @@ export default function WalletsRequestsPage() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   <div>
-                    <span className="text-slate-400 block text-[11px]">Bank Transaction ID (TID / TxHash)</span>
-                    <span className="font-mono font-bold text-slate-900 text-sm select-all bg-slate-100 px-2.5 py-1 rounded border border-slate-200 inline-block mt-0.5">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-slate-400 block text-[11px]">Bank Transaction ID (TID / TxHash)</span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyText(inspectRequest.bankTid, 'Bank TID')}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                      >
+                        <Copy className="h-3 w-3" /> Copy
+                      </button>
+                    </div>
+                    <span className="font-mono font-bold text-slate-900 text-sm select-all bg-slate-100 px-2.5 py-1 rounded border border-slate-200 inline-block">
                       {inspectRequest.bankTid}
                     </span>
                   </div>
@@ -842,9 +769,9 @@ export default function WalletsRequestsPage() {
                     <span className="font-medium text-slate-800 block mt-0.5">
                       {inspectRequest.createdAt
                         ? new Date(inspectRequest.createdAt).toLocaleString('en-US', {
-                            dateStyle: 'medium',
-                            timeStyle: 'short',
-                          })
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        })
                         : inspectRequest.date}
                     </span>
                   </div>
@@ -854,52 +781,6 @@ export default function WalletsRequestsPage() {
                       <p className="mt-0.5">{inspectRequest.adminNote}</p>
                     </div>
                   )}
-                </div>
-              </div>
-
-              {/* Courier Logistics Service Section */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-2xs">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-700">
-                    <Truck className="h-4 w-4 text-indigo-600" />
-                    <span>Courier Logistics Partner (USPS / UPS / FedEx)</span>
-                  </div>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
-                    <Check className="h-3 w-3" /> API Ready
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Selected Carrier</span>
-                    <span
-                      className={`inline-flex items-center gap-1.5 mt-1 rounded-full px-2.5 py-1 text-xs font-bold border ${
-                        inspectRequest.courier === 'UPS'
-                          ? 'border-amber-400 bg-amber-50 text-amber-900'
-                          : inspectRequest.courier === 'FedEx'
-                          ? 'border-purple-400 bg-purple-50 text-purple-900'
-                          : 'border-blue-400 bg-blue-50 text-blue-900'
-                      }`}
-                    >
-                      <Truck className="h-3.5 w-3.5" />
-                      {inspectRequest.courier || 'USPS'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Service Tier</span>
-                    <span className="font-semibold text-slate-800 block mt-1">
-                      {inspectRequest.courierService || 'Priority Mail / Ground Advantage'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Integration API</span>
-                    <span className="font-mono text-indigo-700 block mt-1 font-semibold">
-                      {inspectRequest.courier === 'UPS'
-                        ? 'UPS Shipping REST API'
-                        : inspectRequest.courier === 'FedEx'
-                        ? 'FedEx REST Logistics API'
-                        : 'USPS Web Tools API'}
-                    </span>
-                  </div>
                 </div>
               </div>
 
@@ -976,11 +857,10 @@ export default function WalletsRequestsPage() {
                             key={p.id}
                             type="button"
                             onClick={() => setTransferProvider(p.id)}
-                            className={`p-2 rounded-lg border text-left transition ${
-                              isSelected
-                                ? 'border-indigo-600 bg-white ring-1 ring-indigo-500 shadow-xs font-bold text-indigo-900'
-                                : 'border-slate-200 bg-white/70 hover:bg-white text-slate-600'
-                            }`}
+                            className={`p-2 rounded-lg border text-left transition ${isSelected
+                              ? 'border-indigo-600 bg-white ring-1 ring-indigo-500 shadow-xs font-bold text-indigo-900'
+                              : 'border-slate-200 bg-white/70 hover:bg-white text-slate-600'
+                              }`}
                           >
                             <div className="text-xs flex items-center justify-between">
                               <span>{p.name}</span>
@@ -1178,11 +1058,10 @@ export default function WalletsRequestsPage() {
                     key={tab.id}
                     type="button"
                     onClick={() => setSettingsTab(tab.id)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg font-semibold whitespace-nowrap transition cursor-pointer ${
-                      isSelected
-                        ? 'bg-white text-indigo-700 shadow-xs border border-slate-200'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-                    }`}
+                    className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg font-semibold whitespace-nowrap transition cursor-pointer ${isSelected
+                      ? 'bg-white text-indigo-700 shadow-xs border border-slate-200'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                      }`}
                   >
                     <IconComponent className="h-3.5 w-3.5" />
                     <span>{tab.label}</span>

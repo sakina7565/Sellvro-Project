@@ -33,18 +33,13 @@ import {
 import { formatPartySummary } from '../../lib/disputeHelpers.js'
 
 import { disputeApi, getErrorMessage } from '../../lib/api.js'
-
 import { useDisputeList } from '../../hooks/useDisputeList.js'
-
-
+import { formatDisputeId } from '../../lib/idFormatters.js'
 
 const FILTER_CONTROL =
-
   'h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-500 focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100 sm:w-auto sm:min-w-[9rem]'
 
-
-
-const TABLE_HEAD = ['Against', 'Order', 'Product', 'Latest reply', 'Status', 'Date', 'Actions']
+const TABLE_HEAD = ['Dispute ID', 'Against', 'Order', 'Product', 'Latest reply', 'Status', 'Date', 'Actions']
 
 
 
@@ -260,6 +255,16 @@ function UserDisputesPage() {
 
                     <td className="whitespace-nowrap px-5 py-4">
 
+                      <span className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200">
+
+                        {formatDisputeId(dispute)}
+
+                      </span>
+
+                    </td>
+
+                    <td className="whitespace-nowrap px-5 py-4">
+
                       <DisputeAgainstCell dispute={dispute} />
 
                     </td>
@@ -356,7 +361,17 @@ function UserDisputesPage() {
 
                   <div className="min-w-0">
 
-                    <p className="text-sm font-semibold text-slate-800">{formatPartySummary(dispute)}</p>
+                    <div className="flex items-center gap-2">
+
+                      <span className="inline-flex items-center rounded-md bg-indigo-50 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200">
+
+                        {formatDisputeId(dispute)}
+
+                      </span>
+
+                      <p className="text-sm font-semibold text-slate-800">{formatPartySummary(dispute)}</p>
+
+                    </div>
 
                     <p className="mt-1 text-xs text-slate-500">
 

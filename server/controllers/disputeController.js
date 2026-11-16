@@ -2,6 +2,7 @@ import mongoose from 'mongoose'
 import Dispute, { CHAT_WINDOW_MS, getUnreadCountForUser } from '../models/Dispute.js'
 import Order from '../models/Order.js'
 import Product from '../models/Product.js'
+import { getNextDisputeNo } from '../services/sequenceService.js'
 
 async function populateDispute(query) {
   return query
@@ -137,7 +138,16 @@ export const createDispute = async (req, res) => {
     }
 
     const now = new Date()
+    let disputeNo = ''
+    try {
+      disputeNo = await getNextDisputeNo()
+    } catch (err) {
+      const yy = now.getFullYear().toString().slice(-2)
+      disputeNo = `${yy}-D-${String(Date.now()).slice(-4)}`
+    }
+
     const dispute = await Dispute.create({
+      disputeNo,
       raisedBy: req.user._id,
       againstRole,
       againstUser,

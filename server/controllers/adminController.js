@@ -7,10 +7,12 @@ import Product from '../models/Product.js'
 import Review from '../models/Review.js'
 import Country from '../models/Country.js'
 import Location from '../models/Location.js'
+import Dispute from '../models/Dispute.js'
 import { signToken } from '../middleware/auth.js'
 import { setAuthCookie, setImpersonatorCookie, readAuthToken } from '../utils/authCookie.js'
 import { createNotification } from '../utils/notifications.js'
 import { sendSupplierWarningEmail, sendSupplierSuspensionEmail } from '../utils/emailService.js'
+import { getNextDisputeNo } from '../services/sequenceService.js'
 
 const formatJoined = (date) =>
   new Date(date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
@@ -31,12 +33,27 @@ export const listPendingSuppliers = async (_req, res) => {
         supplier: user.fullName,
         fullName: user.fullName,
         email: user.email,
-        businessName: profile?.businessName || user.fullName,
+        businessName: profile?.businessName || user.companyName || user.fullName,
+        companyName: profile?.businessName || user.companyName || user.fullName,
+        companyEmail: profile?.businessEmail || user.companyEmail || user.email,
+        companyPhone: profile?.businessPhone || user.companyPhone || '—',
+        companyAddress: profile?.businessAddress || user.companyAddress || '—',
+        registrationEntity: profile?.registrationEntity || user.registrationEntity || '—',
+        registrationNo: profile?.registrationNo || user.registrationNo || '—',
+        ownerName: profile?.ownerName || user.ownerName || user.fullName,
+        ownerEmail: profile?.ownerEmail || user.ownerEmail || user.email,
+        ownerPhone: profile?.ownerPhone || user.ownerPhone || '—',
+        ownerAddress: profile?.ownerAddress || user.ownerAddress || '—',
+        idCardUrl: profile?.idCardUrl || user.idCardUrl || '',
+        idCardNumber: profile?.idCardNumber || user.idCardNumber || '—',
+        bankName: profile?.bankName || user.bankName || '—',
+        accountHolderName: profile?.accountHolderName || user.accountHolderName || '—',
+        accountNumberOrIban: profile?.accountNumberOrIban || user.accountNumberOrIban || profile?.accNumber || '—',
         businessDescription: profile?.businessDescription || 'No description provided.',
         businessCategory: profile?.businessCategory || '—',
-        businessEmail: profile?.businessEmail || user.email,
-        businessPhone: profile?.businessPhone || '—',
-        businessAddress: profile?.businessAddress || '—',
+        businessEmail: profile?.businessEmail || user.companyEmail || user.email,
+        businessPhone: profile?.businessPhone || user.companyPhone || '—',
+        businessAddress: profile?.businessAddress || user.companyAddress || '—',
         country: profile?.country || '',
         city: profile?.city || '',
         orderType: profile?.orderType || 'Standard',
@@ -47,8 +64,12 @@ export const listPendingSuppliers = async (_req, res) => {
         cardDate: profile?.cardDate || '—',
         joined: formatJoined(user.createdAt),
         rawJoined: user.createdAt,
-        status: 'Pending',
+        status: 'pending_approval',
         role: 'supplier',
+        supplierCode: user.supplierCode || null,
+        userCode: user.userCode || null,
+        phone: profile?.businessPhone || user.phone || '—',
+        businessProfile: profile ? (profile.toObject ? profile.toObject() : profile) : null,
       }
     })
 
@@ -73,12 +94,27 @@ export const listPendingUsers = async (_req, res) => {
         id: user._id.toString(),
         fullName: user.fullName,
         email: user.email,
-        businessName: profile?.businessName || '—',
+        businessName: profile?.businessName || user.companyName || user.fullName,
+        companyName: profile?.businessName || user.companyName || user.fullName,
+        companyEmail: profile?.businessEmail || user.companyEmail || user.email,
+        companyPhone: profile?.businessPhone || user.companyPhone || '—',
+        companyAddress: profile?.businessAddress || user.companyAddress || '—',
+        registrationEntity: profile?.registrationEntity || user.registrationEntity || '—',
+        registrationNo: profile?.registrationNo || user.registrationNo || '—',
+        ownerName: profile?.ownerName || user.ownerName || user.fullName,
+        ownerEmail: profile?.ownerEmail || user.ownerEmail || user.email,
+        ownerPhone: profile?.ownerPhone || user.ownerPhone || '—',
+        ownerAddress: profile?.ownerAddress || user.ownerAddress || '—',
+        idCardUrl: profile?.idCardUrl || user.idCardUrl || '',
+        idCardNumber: profile?.idCardNumber || user.idCardNumber || '—',
+        bankName: profile?.bankName || user.bankName || '—',
+        accountHolderName: profile?.accountHolderName || user.accountHolderName || '—',
+        accountNumberOrIban: profile?.accountNumberOrIban || user.accountNumberOrIban || profile?.accNumber || '—',
         businessDescription: profile?.businessDescription || 'No description provided.',
-        businessCategory: profile?.businessCategory || 'General Buyer',
-        businessEmail: profile?.businessEmail || user.email,
-        businessPhone: profile?.businessPhone || '—',
-        businessAddress: profile?.businessAddress || '—',
+        businessCategory: profile?.businessCategory || 'General Buyer / Reseller',
+        businessEmail: profile?.businessEmail || user.companyEmail || user.email,
+        businessPhone: profile?.businessPhone || user.companyPhone || '—',
+        businessAddress: profile?.businessAddress || user.companyAddress || '—',
         country: profile?.country || '',
         city: profile?.city || '',
         orderType: profile?.orderType || 'Standard',
@@ -90,8 +126,11 @@ export const listPendingUsers = async (_req, res) => {
         cardDate: profile?.cardDate || '—',
         joined: formatJoined(user.createdAt),
         rawJoined: user.createdAt,
-        status: 'Pending',
+        status: 'pending_approval',
         role: 'user',
+        userCode: user.userCode || null,
+        phone: profile?.businessPhone || user.phone || '—',
+        businessProfile: profile ? (profile.toObject ? profile.toObject() : profile) : null,
       }
     })
 
@@ -137,13 +176,46 @@ export const listApprovedUsers = async (_req, res) => {
       createdAt: -1,
     })
 
-    const data = users.map((user) => ({
-      id: user._id.toString(),
-      email: user.email,
-      wallet: '$0',
-      joined: formatJoined(user.createdAt),
-      status: user.status === 'suspended' ? 'suspended' : 'approved',
-    }))
+    const profiles = await BusinessProfile.find({
+      user: { $in: users.map((u) => u._id) },
+      profileType: 'user',
+    })
+    const profileMap = new Map(profiles.map((p) => [p.user.toString(), p]))
+
+    const data = users.map((user) => {
+      const profile = profileMap.get(user._id.toString())
+      return {
+        id: user._id.toString(),
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        wallet: `$${user.walletBalance ?? 0}`,
+        walletBalance: user.walletBalance ?? 0,
+        joined: formatJoined(user.createdAt),
+        createdAt: user.createdAt,
+        status: user.status === 'suspended' ? 'suspended' : 'approved',
+        companyName: user.companyName || profile?.businessName || user.fullName || '',
+        businessName: profile?.businessName || user.companyName || user.fullName || '',
+        companyEmail: user.companyEmail || profile?.businessEmail || user.email || '',
+        businessEmail: profile?.businessEmail || user.companyEmail || user.email || '',
+        companyPhone: user.companyPhone || profile?.businessPhone || '—',
+        businessPhone: profile?.businessPhone || user.companyPhone || '—',
+        companyAddress: user.companyAddress || profile?.businessAddress || '—',
+        businessAddress: profile?.businessAddress || user.companyAddress || '—',
+        businessCategory: user.businessCategory || profile?.businessCategory || '—',
+        registrationEntity: user.registrationEntity || profile?.registrationEntity || '—',
+        registrationNo: user.registrationNo || profile?.registrationNo || '—',
+        ownerName: user.ownerName || profile?.ownerName || user.fullName || '',
+        ownerEmail: user.ownerEmail || profile?.ownerEmail || user.email || '',
+        ownerPhone: user.ownerPhone || profile?.ownerPhone || '—',
+        ownerAddress: user.ownerAddress || profile?.ownerAddress || '—',
+        idCardUrl: user.idCardUrl || profile?.idCardUrl || '',
+        idCardNumber: user.idCardNumber || profile?.idCardNumber || '—',
+        bankName: user.bankName || profile?.bankName || '—',
+        accountHolderName: user.accountHolderName || profile?.accountHolderName || user.fullName || '—',
+        accountNumberOrIban: user.accountNumberOrIban || profile?.accountNumberOrIban || profile?.accNumber || '—',
+      }
+    })
 
     return res.json({ data })
   } catch (error) {
@@ -544,8 +616,19 @@ export const listAllAccounts = async (req, res) => {
         const warningsCount = user.warningsCount ?? (user.warnings?.length || 0)
         const isLowPerformance = (reviewsCount >= 1 && (avgRating < 3.0 || onTimePct < 70)) || badCount >= 1
 
+        const hex = user._id ? user._id.toString() : ''
+        const fallbackNum = 1001 + (parseInt(hex.slice(-4) || '1001', 16) % 8999)
+        const displayId =
+          user.displayId ||
+          (user.role === 'supplier'
+            ? `SPAK-${fallbackNum}`
+            : `US-${fallbackNum}`)
+
         return {
           id: user._id.toString(),
+          displayId,
+          supplierDisplayId: displayId,
+          userDisplayId: displayId,
           fullName: user.fullName,
           email: user.email,
           role: user.role,
@@ -575,6 +658,27 @@ export const listAllAccounts = async (req, res) => {
           suspensionReason: user.suspensionReason || '',
           suspendedAt: user.suspendedAt || null,
           canSuspend: warningsCount >= 3 || user.status === 'suspended',
+          // User & Supplier Registration Details
+          companyName: user.companyName || profile?.businessName || user.fullName || '',
+          businessName: profile?.businessName || user.companyName || user.fullName || '',
+          companyEmail: user.companyEmail || profile?.businessEmail || user.email || '',
+          businessEmail: profile?.businessEmail || user.companyEmail || user.email || '',
+          companyPhone: user.companyPhone || profile?.businessPhone || '—',
+          businessPhone: profile?.businessPhone || user.companyPhone || '—',
+          companyAddress: user.companyAddress || profile?.businessAddress || '—',
+          businessAddress: profile?.businessAddress || user.companyAddress || '—',
+          businessCategory: user.businessCategory || profile?.businessCategory || '—',
+          registrationEntity: user.registrationEntity || profile?.registrationEntity || '—',
+          registrationNo: user.registrationNo || profile?.registrationNo || '—',
+          ownerName: user.ownerName || profile?.ownerName || user.fullName || '',
+          ownerEmail: user.ownerEmail || profile?.ownerEmail || user.email || '',
+          ownerPhone: user.ownerPhone || profile?.ownerPhone || '—',
+          ownerAddress: user.ownerAddress || profile?.ownerAddress || '—',
+          idCardUrl: user.idCardUrl || profile?.idCardUrl || '',
+          idCardNumber: user.idCardNumber || profile?.idCardNumber || '—',
+          bankName: user.bankName || profile?.bankName || '—',
+          accountHolderName: user.accountHolderName || profile?.accountHolderName || user.fullName || '—',
+          accountNumberOrIban: user.accountNumberOrIban || profile?.accountNumberOrIban || profile?.accNumber || '—',
           businessProfile: profile
             ? {
                 businessName: profile.businessName || '',
@@ -1156,38 +1260,69 @@ export const warnSupplierAccount = async (req, res) => {
     supplier.warningsCount = nextWarningNumber
     if (!supplier.warnings) supplier.warnings = []
     supplier.warnings.push(warningRecord)
+
+    // Automatic Suspension Policy: When supplier receives 3 warnings, automatically suspend account
+    let autoSuspended = false
+    if (nextWarningNumber >= 3) {
+      supplier.status = 'suspended'
+      supplier.suspensionReason =
+        reason?.trim() ||
+        'Account automatically suspended: Reached maximum limit of 3 performance and SLA warnings.'
+      supplier.suspendedAt = new Date()
+      autoSuspended = true
+
+      // Deactivate all active/approved products from marketplace
+      await Product.updateMany(
+        { supplier: supplier._id, status: { $in: ['active', 'approved'] } },
+        { status: 'inactive' },
+      )
+    }
+
     await supplier.save()
 
-    // Create In-App Notification
-    try {
-      await createNotification({
-        userId: supplier._id,
-        title: `⚠️ Performance Warning #${nextWarningNumber}`,
-        message: `Admin has issued official warning #${nextWarningNumber} (Max: 3): ${warningRecord.reason}`,
-        type: 'account',
-      })
-    } catch {}
+    // Create In-App Notification (non-blocking)
+    createNotification({
+      userId: supplier._id,
+      title: autoSuspended
+        ? '🚫 Account Suspended (3/3 Warnings Reached)'
+        : `⚠️ Performance Warning #${nextWarningNumber}`,
+      message: autoSuspended
+        ? `Supplier account has been suspended after receiving warning #3: ${warningRecord.reason}`
+        : `Admin has issued official warning #${nextWarningNumber} of 3: ${warningRecord.reason}`,
+      type: 'account',
+    }).catch(() => {})
 
-    // Send Official Warning Email
-    try {
-      await sendSupplierWarningEmail(supplier.email, {
+    // Send Official Warning Email (purely optional / non-blocking background)
+    sendSupplierWarningEmail(supplier.email, {
+      supplierName: supplier.fullName,
+      warningNumber: nextWarningNumber,
+      maxWarnings: 3,
+      reason: warningRecord.reason,
+      details: warningRecord.details,
+      averageRating: avgRating,
+      onTimeDeliveryPercent: onTimePct,
+    }).catch(() => {})
+
+    // If auto-suspended on 3rd warning, also send formal suspension email in background
+    if (autoSuspended) {
+      sendSupplierSuspensionEmail(supplier.email, {
         supplierName: supplier.fullName,
-        warningNumber: nextWarningNumber,
-        maxWarnings: 3,
-        reason: warningRecord.reason,
-        details: warningRecord.details,
+        reason: supplier.suspensionReason,
+        suspendedAt: supplier.suspendedAt,
         averageRating: avgRating,
         onTimeDeliveryPercent: onTimePct,
-      })
-    } catch (mailErr) {
-      console.error('Failed to dispatch warning email:', mailErr)
+      }).catch(() => {})
     }
 
     return res.json({
       success: true,
-      message: `Warning #${nextWarningNumber} of 3 issued successfully to ${supplier.fullName}. Warning email has been sent.`,
+      message: autoSuspended
+        ? `Warning #3 of 3 issued. Supplier "${supplier.fullName}" has been AUTOMATICALLY SUSPENDED and products deactivated.`
+        : `Warning #${nextWarningNumber} of 3 recorded successfully for ${supplier.fullName}.`,
       warningsCount: supplier.warningsCount,
-      isLimitReached: supplier.warningsCount >= 3,
+      status: supplier.status,
+      isLimitReached: nextWarningNumber >= 3,
+      autoSuspended,
       warning: warningRecord,
     })
   } catch (error) {
@@ -1203,20 +1338,11 @@ export const warnSupplierAccount = async (req, res) => {
 export const suspendSupplierAccount = async (req, res) => {
   try {
     const { id } = req.params
-    const { reason, forceOverride = false } = req.body
+    const { reason } = req.body
 
     const supplier = await User.findById(id)
     if (!supplier || supplier.role !== 'supplier') {
       return res.status(404).json({ message: 'Supplier account not found.' })
-    }
-
-    // Policy check: "3 bar sy ziyada warn k bad usse suspende kr sake"
-    if ((supplier.warningsCount || 0) < 3 && !forceOverride) {
-      return res.status(400).json({
-        message: `Supplier has received ${supplier.warningsCount || 0} warning(s). Standard policy requires 3 warnings before suspension.`,
-        requireOverride: true,
-        currentWarnings: supplier.warningsCount || 0,
-      })
     }
 
     // Performance snapshot for suspension record
@@ -1234,42 +1360,38 @@ export const suspendSupplierAccount = async (req, res) => {
     supplier.status = 'suspended'
     supplier.suspensionReason =
       reason?.trim() ||
-      `Account suspended due to repeated low customer ratings, delivery SLA breach, and exceeding the threshold of 3 performance warnings.`
+      `Account manually suspended by Administration.`
     supplier.suspendedAt = new Date()
     await supplier.save()
 
-    // Deactivate active products from marketplace
+    // Deactivate all active/approved products from marketplace
     await Product.updateMany(
-      { supplier: supplier._id, status: 'active' },
+      { supplier: supplier._id, status: { $in: ['active', 'approved'] } },
       { status: 'inactive' },
     )
 
-    // In-App Notification
-    try {
-      await createNotification({
-        userId: supplier._id,
-        title: '🚫 Supplier Account Suspended',
-        message: supplier.suspensionReason,
-        type: 'account',
-      })
-    } catch {}
+    // In-App Notification (non-blocking)
+    createNotification({
+      userId: supplier._id,
+      title: '🚫 Supplier Account Suspended',
+      message: supplier.suspensionReason,
+      type: 'account',
+    }).catch(() => {})
 
-    // Send Suspension Email
-    try {
-      await sendSupplierSuspensionEmail(supplier.email, {
-        supplierName: supplier.fullName,
-        reason: supplier.suspensionReason,
-        totalWarnings: supplier.warningsCount || 3,
-        averageRating: avgRating,
-        onTimeDeliveryPercent: onTimePct,
-      })
-    } catch (mailErr) {
-      console.error('Failed to dispatch suspension email:', mailErr)
-    }
+    // Send Suspension Email (non-blocking background)
+    sendSupplierSuspensionEmail(supplier.email, {
+      supplierName: supplier.fullName,
+      reason: supplier.suspensionReason,
+      totalWarnings: supplier.warningsCount || 3,
+      averageRating: avgRating,
+      onTimeDeliveryPercent: onTimePct,
+    }).catch(() => {})
 
     return res.json({
       success: true,
-      message: `Supplier ${supplier.fullName} has been suspended. Listings deactivated and formal suspension email dispatched.`,
+      message: `Supplier "${supplier.fullName}" has been suspended and products deactivated.`,
+      status: supplier.status,
+      suspensionReason: supplier.suspensionReason,
       supplier: supplier.toSafeObject(),
     })
   } catch (error) {
@@ -1291,6 +1413,7 @@ export const reinstateSupplierAccount = async (req, res) => {
     }
 
     supplier.status = 'approved'
+    supplier.warningsCount = 0
     supplier.suspensionReason = ''
     supplier.suspendedAt = null
     await supplier.save()
@@ -1313,6 +1436,428 @@ export const reinstateSupplierAccount = async (req, res) => {
     return res.status(500).json({ message: error.message || 'Failed to reinstate supplier.' })
   }
 }
+
+/**
+ * Complete Supplier Performance, Reviews, Rating & Dispatch SLA Report
+ * GET /api/admin/suppliers/:id/performance-report
+ */
+export const getSupplierPerformanceReport = async (req, res) => {
+  try {
+    const { id } = req.params
+    const supplier = await User.findById(id)
+    if (!supplier || supplier.role !== 'supplier') {
+      return res.status(404).json({ message: 'Supplier account not found.' })
+    }
+
+    const profile = await BusinessProfile.findOne({ user: supplier._id, profileType: 'supplier' })
+
+    // 1. Fetch all reviews for this supplier
+    const reviews = await Review.find({ supplier: supplier._id })
+      .populate('product', 'name sku images')
+      .populate('order', 'orderNo createdAt')
+      .populate('user', 'fullName email')
+      .sort({ createdAt: -1 })
+
+    const totalReviews = reviews.length
+    let sumProduct = 0
+    let sumDelivery = 0
+    let onTimeCustomerCount = 0
+    let positiveCount = 0
+    let neutralCount = 0
+    let negativeCount = 0
+
+    const ratingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+
+    reviews.forEach((r) => {
+      const pR = Number(r.productRating || 5)
+      const dR = Number(r.deliveryRating || 5)
+      sumProduct += pR
+      sumDelivery += dR
+      if (r.deliveredOnTime) onTimeCustomerCount += 1
+
+      if (pR >= 4) positiveCount += 1
+      else if (pR === 3) neutralCount += 1
+      else negativeCount += 1
+
+      const starKey = Math.min(5, Math.max(1, Math.round(pR)))
+      ratingDistribution[starKey] = (ratingDistribution[starKey] || 0) + 1
+    })
+
+    const avgProductRating = totalReviews > 0 ? Number((sumProduct / totalReviews).toFixed(1)) : 0
+    const avgDeliveryRating = totalReviews > 0 ? Number((sumDelivery / totalReviews).toFixed(1)) : 0
+    const overallRating = totalReviews > 0 ? Number(((avgProductRating + avgDeliveryRating) / 2).toFixed(1)) : 0
+    const positivePercentage = totalReviews > 0 ? Math.round((positiveCount / totalReviews) * 100) : 100
+    const customerOnTimePct = totalReviews > 0 ? Math.round((onTimeCustomerCount / totalReviews) * 100) : 100
+
+    // 2. Fetch all orders for this supplier
+    const orders = await Order.find({ supplier: supplier._id })
+      .populate('product', 'name sku handlingTime deliveryTime fulfillBy images')
+      .sort({ createdAt: -1 })
+
+    // 3. Analyze Handling Time & Dispatch Performance (Promised vs Actual)
+    let totalActualDispatchHours = 0
+    let dispatchedOrdersCount = 0
+    let onTimeDispatchedCount = 0
+    let lateDispatchedCount = 0
+    let pendingHandoverCount = 0
+    let overduePendingCount = 0
+
+    const parseHandlingHours = (str) => {
+      if (!str) return 24
+      const lower = String(str).toLowerCase()
+      if (lower.includes('12') || lower.includes('same')) return 12
+      if (lower.includes('24') || lower.includes('1 business') || lower.includes('1 day')) return 24
+      if (lower.includes('48') || lower.includes('2 business') || lower.includes('2 day')) return 48
+      if (lower.includes('72') || lower.includes('3 business') || lower.includes('3 day')) return 72
+      if (lower.includes('4-5') || lower.includes('4 - 5') || lower.includes('5 day')) return 120
+      const match = lower.match(/(\d+)\s*hour/)
+      if (match) return parseInt(match[1], 10)
+      const dayMatch = lower.match(/(\d+)\s*day/)
+      if (dayMatch) return parseInt(dayMatch[1], 10) * 24
+      return 24
+    }
+
+    const comparisonList = orders.map((order) => {
+      const promisedStr = order.promisedHandlingTime || order.product?.handlingTime || '24 Hours (1 business day)'
+      const promisedHours = order.handlingHoursPromised || parseHandlingHours(promisedStr)
+
+      const createdAt = order.createdAt ? new Date(order.createdAt) : new Date()
+      let actualHours = order.actualHandlingHours
+      let isDispatched = Boolean(order.isDispatched || order.dispatchedAt)
+      let dispatchedAt = order.dispatchedAt ? new Date(order.dispatchedAt) : null
+
+      let complianceStatus = 'Pending Handover'
+      let delayHours = 0
+      let isOnTime = true
+
+      if (isDispatched && dispatchedAt) {
+        dispatchedOrdersCount += 1
+        if (!actualHours) {
+          actualHours = Math.max(1, Math.round((dispatchedAt - createdAt) / (1000 * 60 * 60)))
+        }
+        totalActualDispatchHours += actualHours
+        isOnTime = actualHours <= promisedHours
+        if (isOnTime) {
+          onTimeDispatchedCount += 1
+          complianceStatus = 'On-Time'
+        } else {
+          lateDispatchedCount += 1
+          delayHours = actualHours - promisedHours
+          complianceStatus = 'Late Dispatch'
+        }
+      } else {
+        pendingHandoverCount += 1
+        const elapsedHours = Math.max(1, Math.round((Date.now() - createdAt) / (1000 * 60 * 60)))
+        if (elapsedHours > promisedHours) {
+          overduePendingCount += 1
+          delayHours = elapsedHours - promisedHours
+          complianceStatus = 'Overdue'
+          isOnTime = false
+        } else {
+          complianceStatus = 'Pending (Within SLA)'
+          isOnTime = true
+        }
+      }
+
+      return {
+        orderId: order._id.toString(),
+        orderNo: order.orderNo,
+        productName: order.productName || order.product?.name || 'Item',
+        sku: order.product?.sku || '—',
+        carrier: order.carrier || 'Sellvro Express',
+        trackingNumber: order.trackingNumber || '',
+        orderDate: order.createdAt,
+        promisedHandlingTime: promisedStr,
+        promisedHours,
+        dispatchedAt,
+        actualHours: isDispatched ? actualHours : null,
+        isDispatched,
+        complianceStatus,
+        isOnTime,
+        delayHours,
+        status: order.status,
+        warehouseLocation: order.warehouseLocationLabel || order.warehouseLocation,
+      }
+    })
+
+    const avgActualDispatchHours = dispatchedOrdersCount > 0
+      ? Number((totalActualDispatchHours / dispatchedOrdersCount).toFixed(1))
+      : 0
+
+    const dispatchOnTimeRate = dispatchedOrdersCount > 0
+      ? Math.round((onTimeDispatchedCount / dispatchedOrdersCount) * 100)
+      : (orders.length > 0 && overduePendingCount === 0 ? 100 : 0)
+
+    // 4. Group reviews by Product
+    const productReviewsMap = new Map()
+    reviews.forEach((r) => {
+      const prodId = r.product?._id?.toString() || r.product?.toString() || 'unknown'
+      const prodName = r.product?.name || 'Product Item'
+      const prodSku = r.product?.sku || '—'
+      const prodImage = (r.product?.images && r.product.images[0]) || ''
+
+      if (!productReviewsMap.has(prodId)) {
+        productReviewsMap.set(prodId, {
+          productId: prodId,
+          productName: prodName,
+          sku: prodSku,
+          image: prodImage,
+          totalReviews: 0,
+          sumRating: 0,
+          reviews: [],
+        })
+      }
+
+      const pGroup = productReviewsMap.get(prodId)
+      pGroup.totalReviews += 1
+      pGroup.sumRating += (r.productRating || 5)
+      pGroup.reviews.push({
+        id: r._id.toString(),
+        orderNo: r.order?.orderNo || '—',
+        reviewerName: r.reviewerName || r.user?.fullName || 'Verified Buyer',
+        productQualityRating: r.productQualityRating || r.productRating || 5,
+        productPerformanceRating: r.productPerformanceRating || r.productRating || 5,
+        supplierServicesRating: r.supplierServicesRating || r.deliveryRating || 5,
+        supplierPerformanceRating: r.supplierPerformanceRating || r.deliveryRating || 5,
+        productRating: r.productRating || 5,
+        deliveryRating: r.deliveryRating || 5,
+        deliveredOnTime: Boolean(r.deliveredOnTime),
+        comment: r.comment || '',
+        date: r.createdAt,
+      })
+    })
+
+    const productReviewsList = Array.from(productReviewsMap.values()).map((p) => ({
+      ...p,
+      averageRating: p.totalReviews > 0 ? Number((p.sumRating / p.totalReviews).toFixed(1)) : 0,
+    }))
+
+    // 5. Supplier Reviews List
+    const supplierReviewsList = reviews.map((r) => ({
+      id: r._id.toString(),
+      orderNo: r.order?.orderNo || '—',
+      productName: r.product?.name || 'Item',
+      productSku: r.product?.sku || '—',
+      reviewerName: r.reviewerName || r.user?.fullName || 'Verified Buyer',
+      productQualityRating: r.productQualityRating || r.productRating || 5,
+      productPerformanceRating: r.productPerformanceRating || r.productRating || 5,
+      supplierServicesRating: r.supplierServicesRating || r.deliveryRating || 5,
+      supplierPerformanceRating: r.supplierPerformanceRating || r.deliveryRating || 5,
+      supplierDeliveryRating: r.deliveryRating || 5,
+      productRating: r.productRating || 5,
+      deliveredOnTime: Boolean(r.deliveredOnTime),
+      comment: r.comment || '',
+      date: r.createdAt,
+    }))
+
+    const rawSupplierId = supplier._id.toString()
+    const supplierDisplayId =
+      supplier.displayId ||
+      (supplier.clientId && /^SPAK-\d+$/i.test(supplier.clientId) ? supplier.clientId : '') ||
+      `SPAK-${1001 + (parseInt(rawSupplierId.slice(-4), 16) % 8999)}`
+
+    return res.json({
+      success: true,
+      supplier: {
+        id: rawSupplierId,
+        fullName: supplier.fullName,
+        email: supplier.email,
+        phone: supplier.phone || '',
+        supplierDisplayId,
+        businessName: profile?.businessName || supplier.companyName || supplier.fullName,
+        supplierType: supplier.isWmsRegistered ? 'WMS 3PL Integrated' : 'Direct Marketplace Vendor',
+        status: supplier.status,
+        warningsCount: supplier.warningsCount || 0,
+        warnings: supplier.warnings || [],
+        penalties: supplier.penalties || [],
+        suspensionReason: supplier.suspensionReason || '',
+        suspendedAt: supplier.suspendedAt || null,
+        joined: supplier.createdAt,
+      },
+      metrics: {
+        overallRating,
+        totalReviews,
+        positivePercentage,
+        positiveCount,
+        neutralCount,
+        negativeCount,
+        ratingDistribution,
+        avgProductRating,
+        avgDeliveryRating,
+        customerOnTimePct,
+        // Dispatch SLA & Handover metrics
+        totalOrders: orders.length,
+        dispatchedOrdersCount,
+        pendingHandoverCount,
+        onTimeDispatchedCount,
+        lateDispatchedCount,
+        overduePendingCount,
+        dispatchOnTimeRate,
+        avgActualDispatchHours,
+      },
+      comparisonList,
+      supplierReviews: supplierReviewsList,
+      productReviews: productReviewsList,
+    })
+  } catch (error) {
+    console.error('getSupplierPerformanceReport error:', error)
+    return res.status(500).json({ message: error.message || 'Failed to generate performance report.' })
+  }
+}
+
+/**
+ * Record a penalty on supplier account
+ * POST /api/admin/suppliers/:id/penalty
+ */
+export const penalizeSupplierAccount = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { amount = 0, reason, details } = req.body
+
+    const supplier = await User.findById(id)
+    if (!supplier || supplier.role !== 'supplier') {
+      return res.status(404).json({ message: 'Supplier account not found.' })
+    }
+
+    const penaltyNum = (supplier.penalties?.length || 0) + 1
+    const penaltyRecord = {
+      penaltyNumber: penaltyNum,
+      amount: Number(amount) || 0,
+      reason: reason?.trim() || 'SLA Dispatch Breach & Low Performance Penalty',
+      details: details?.trim() || '',
+      penalizedAt: new Date(),
+      penalizedBy: req.user?._id,
+    }
+
+    if (!supplier.penalties) supplier.penalties = []
+    supplier.penalties.push(penaltyRecord)
+    await supplier.save()
+
+    try {
+      await createNotification({
+        userId: supplier._id,
+        title: `⚠️ Performance Penalty Notice #${penaltyNum}`,
+        message: `Admin has recorded a performance penalty${amount > 0 ? ` ($${amount})` : ''}: ${penaltyRecord.reason}`,
+        type: 'account',
+      })
+    } catch {}
+
+    return res.json({
+      success: true,
+      message: `Penalty notice #${penaltyNum} recorded successfully.`,
+      penalties: supplier.penalties,
+    })
+  } catch (error) {
+    console.error('Penalize supplier error:', error)
+    return res.status(500).json({ message: error.message || 'Failed to record penalty.' })
+  }
+}
+
+/**
+ * Admin sends direct message / official warning notice to supplier
+ * Creates a dispute thread in the Supplier Panel's Disputes section
+ * POST /api/admin/suppliers/:id/send-message
+ */
+export const sendSupplierMessage = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { message, subject = 'Notice from Administration', isWarning = false } = req.body
+
+    const trimmedMsg = String(message || '').trim()
+    if (!trimmedMsg) {
+      return res.status(400).json({ message: 'Message text is required.' })
+    }
+
+    const supplier = await User.findById(id)
+    if (!supplier || supplier.role !== 'supplier') {
+      return res.status(404).json({ message: 'Supplier account not found.' })
+    }
+
+    // Generate dispute number (Pattern: 26-D-0001)
+    let disputeNo = ''
+    try {
+      disputeNo = await getNextDisputeNo()
+    } catch {
+      const yy = new Date().getFullYear().toString().slice(-2)
+      disputeNo = `${yy}-D-${String(Date.now()).slice(-4)}`
+    }
+
+    const fullMessage = subject
+      ? `[${isWarning ? 'OFFICIAL WARNING / NOTICE' : 'ADMIN MESSAGE'}] ${subject.trim()}:\n\n${trimmedMsg}`
+      : trimmedMsg
+
+    const now = new Date()
+    const dispute = await Dispute.create({
+      disputeNo,
+      raisedBy: req.user._id,
+      againstRole: 'supplier',
+      againstUser: supplier._id,
+      type: 'supplier_dispute',
+      message: fullMessage,
+      status: 'open',
+      chatWindowExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days chat window
+      messages: [
+        {
+          sender: req.user._id,
+          text: fullMessage,
+          role: 'admin',
+          createdAt: now,
+        },
+      ],
+    })
+
+    // If marked as warning, also increment warnings and record in supplier warnings log
+    let autoSuspended = false
+    if (isWarning) {
+      if (!supplier.warnings) supplier.warnings = []
+      const nextWarnNum = (supplier.warningsCount || supplier.warnings.length || 0) + 1
+      supplier.warnings.push({
+        warningNumber: nextWarnNum,
+        reason: subject || 'Administrative Performance Warning',
+        details: trimmedMsg,
+        warnedAt: now,
+        warnedBy: req.user._id,
+      })
+      supplier.warningsCount = nextWarnNum
+
+      if (nextWarnNum >= 3) {
+        supplier.status = 'suspended'
+        supplier.suspensionReason =
+          subject || 'Account automatically suspended: Reached maximum limit of 3 performance warnings.'
+        supplier.suspendedAt = now
+        autoSuspended = true
+
+        await Product.updateMany(
+          { supplier: supplier._id, status: 'active' },
+          { status: 'inactive' },
+        )
+      }
+
+      await supplier.save()
+    }
+
+    // In-app Notification for supplier
+    try {
+      await createNotification({
+        userId: supplier._id,
+        title: isWarning ? '⚠️ Official Warning from Administration' : '📩 Message from Administration',
+        message: `Admin has sent you a message: "${subject || 'Notice'}". Check your Disputes section to view and reply.`,
+        type: 'dispute',
+      })
+    } catch {}
+
+    return res.status(201).json({
+      success: true,
+      message: `Message sent successfully. Dispute #${disputeNo} has been opened in the Supplier Panel.`,
+      disputeId: dispute._id,
+      disputeNo,
+    })
+  } catch (error) {
+    console.error('sendSupplierMessage error:', error)
+    return res.status(500).json({ message: error.message || 'Failed to send message to supplier.' })
+  }
+}
+
 
 
 

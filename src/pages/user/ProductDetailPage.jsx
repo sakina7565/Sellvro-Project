@@ -1375,13 +1375,23 @@ function ProductDetailPage() {
 
               {/* Reviews List */}
               <div className="space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                  <h3 className="text-sm font-bold text-slate-900">
-                    Verified Customer Reviews ({reviewsData.count})
-                  </h3>
-                  <span className="text-xs text-slate-400">
-                    Delivered orders par customers ka feedback
-                  </span>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">
+                      Verified Customer Reviews ({reviewsData.count})
+                    </h3>
+                    <span className="text-xs text-slate-400">
+                      Delivered orders par customers ka verified feedback
+                    </span>
+                  </div>
+                  <Link
+                    to="/user/orders"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 transition shadow-2xs"
+                    title="Go to Orders to rate your delivered purchases"
+                  >
+                    <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
+                    <span>Rate / Review Delivered Order</span>
+                  </Link>
                 </div>
 
                 {loadingReviews ? (

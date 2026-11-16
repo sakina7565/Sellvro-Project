@@ -3,10 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom'
 import {
   ArrowLeft,
   Camera,
-  Image as ImageIcon,
-  Plus,
   X,
-  Sparkles,
   Check,
 } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
@@ -17,15 +14,6 @@ import Select from '../../components/ui/Select.jsx'
 import { adminApi, categoryApi, getErrorMessage } from '../../lib/api.js'
 
 const MAX_PHOTOS = 10
-
-function makeSku() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let suffix = ''
-  for (let i = 0; i < 5; i += 1) {
-    suffix += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return `SVRO-${suffix}`
-}
 
 function EditProductPage() {
   const { id } = useParams()
@@ -38,6 +26,7 @@ function EditProductPage() {
   const [success, setSuccess] = useState('')
 
   // Options
+  const [categoryObjects, setCategoryObjects] = useState([])
   const [categories, setCategories] = useState([])
   const [suppliers, setSuppliers] = useState([])
   const [locations, setLocations] = useState([])
@@ -46,18 +35,23 @@ function EditProductPage() {
   const [form, setForm] = useState({
     name: '',
     category: '',
+    subcategory: '',
     brand: '',
+    condition: 'Brand New',
+    handlingTime: '1 business day',
+    deliveryTime: '2-3 Days',
     client: '',
     description: '',
     sku: '',
     price: '',
     commission: '10',
     quantity: '0',
+    stockAlert: '10',
     location: '',
     status: 'active',
     stockExpiry: '',
     weight: '0',
-    weightUnit: 'g',
+    weightUnit: 'gm',
     length: '',
     width: '',
     height: '',
@@ -73,6 +67,7 @@ function EditProductPage() {
       .list()
       .then((res) => {
         const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : []
+        setCategoryObjects(list)
         setCategories(list.map((c) => (typeof c === 'string' ? c : c.name)))
       })
       .catch(() => {})
@@ -112,18 +107,26 @@ function EditProductPage() {
         setForm({
           name: prod.name || '',
           category: prod.category || '',
+          subcategory: prod.subcategory || '',
           brand: prod.brand || '',
+          condition: prod.condition || 'Brand New',
+          handlingTime: prod.handlingTime || '1 business day',
+          deliveryTime: prod.deliveryTime || '2-3 Days',
           client: prod.supplierId || prod.supplier?._id || prod.supplier?.id || '',
           description: prod.description || '',
           sku: prod.sku || '',
           price: prod.price !== undefined ? String(prod.price) : '',
-          commission: prod.commission !== undefined && prod.commission !== null && Number(prod.commission) > 0 ? String(prod.commission) : '10',
+          commission:
+            prod.commission !== undefined && prod.commission !== null && Number(prod.commission) > 0
+              ? String(prod.commission)
+              : '10',
           quantity: prod.quantity !== undefined ? String(prod.quantity) : '0',
+          stockAlert: prod.stockAlert !== undefined ? String(prod.stockAlert) : '10',
           location: prod.location && prod.location !== '—' ? prod.location : '',
           status: prod.status || 'approved',
           stockExpiry: prod.stockExpiry || prod.expiryDate || '',
           weight: prod.weight || '0',
-          weightUnit: prod.weightUnit || 'g',
+          weightUnit: prod.weightUnit || 'gm',
           length: prod.length || '',
           width: prod.width || '',
           height: prod.height || '',
@@ -131,9 +134,10 @@ function EditProductPage() {
         })
 
         // Populate photo slots
-        const existingImages = Array.isArray(prod.images) && prod.images.length > 0
-          ? prod.images
-          : prod.image
+        const existingImages =
+          Array.isArray(prod.images) && prod.images.length > 0
+            ? prod.images
+            : prod.image
             ? [prod.image]
             : []
 
@@ -158,12 +162,23 @@ function EditProductPage() {
   }, [id])
 
   const updateField = (field) => (e) => {
-    setForm((prev) => ({ ...prev, [field]: e.target.value }))
+    const val = e.target.value
+    setForm((prev) => {
+      const next = { ...prev, [field]: val }
+      // If changing category, reset or check subcategory and auto-set commission
+      if (field === 'category') {
+        const found = categoryObjects.find((c) => (c.name || c) === val)
+        const subList = Array.isArray(found?.subcategories) ? found.subcategories : []
+        if (!subList.includes(prev.subcategory)) {
+          next.subcategory = subList[0] || ''
+        }
+        if (found?.commissionRate !== undefined && found?.commissionRate !== null) {
+          next.commission = String(found.commissionRate)
+        }
+      }
+      return next
+    })
     if (error) setError('')
-  }
-
-  const handleGenerateSku = () => {
-    setForm((prev) => ({ ...prev, sku: makeSku() }))
   }
 
   // Handle Photo Slot Click
@@ -225,7 +240,11 @@ function EditProductPage() {
       const payload = {
         name: form.name.trim(),
         category: form.category,
+        subcategory: form.subcategory,
         brand: form.brand.trim(),
+        condition: form.condition,
+        handlingTime: form.handlingTime,
+        deliveryTime: form.deliveryTime,
         supplier: form.client,
         client: form.client,
         description: form.description.trim(),
@@ -233,6 +252,7 @@ function EditProductPage() {
         price: Number(form.price || 0),
         commission: Number(form.commission || 0),
         quantity: Number(form.quantity || 0),
+        stockAlert: Number(form.stockAlert || 0),
         location: form.location,
         status: form.status,
         stockExpiry: form.stockExpiry,
@@ -256,6 +276,20 @@ function EditProductPage() {
       setSubmitting(false)
     }
   }
+
+  // Get available subcategories for selected category
+  const selectedCatObj = categoryObjects.find((c) => (c.name || c) === form.category)
+  const availableSubcategories = Array.isArray(selectedCatObj?.subcategories)
+    ? selectedCatObj.subcategories
+    : []
+
+  const subcategoryOptions = [
+    { label: 'Select subcategory', value: '' },
+    ...(form.subcategory && !availableSubcategories.includes(form.subcategory)
+      ? [{ label: form.subcategory, value: form.subcategory }]
+      : []),
+    ...availableSubcategories.map((s) => ({ label: s, value: s })),
+  ]
 
   return (
     <AdminLayout>
@@ -393,7 +427,7 @@ function EditProductPage() {
                   />
                 </div>
 
-                {/* Category & Brand */}
+                {/* Category & Subcategory */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-slate-700">
@@ -412,6 +446,20 @@ function EditProductPage() {
 
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-slate-700">
+                      Subcategory
+                    </label>
+                    <Select
+                      value={form.subcategory}
+                      onChange={updateField('subcategory')}
+                      options={subcategoryOptions}
+                    />
+                  </div>
+                </div>
+
+                {/* Brand & Condition */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">
                       Brand
                     </label>
                     <Input
@@ -420,12 +468,31 @@ function EditProductPage() {
                       placeholder="e.g. Sony"
                     />
                   </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">
+                      Condition
+                    </label>
+                    <Select
+                      value={form.condition}
+                      onChange={updateField('condition')}
+                      options={[
+                        { label: 'Brand New', value: 'Brand New' },
+                        { label: 'New (Other)', value: 'New (Other)' },
+                        { label: 'Like New', value: 'Like New' },
+                        { label: 'Refurbished', value: 'Refurbished' },
+                        { label: 'Used - Excellent', value: 'Used - Excellent' },
+                        { label: 'Used - Good', value: 'Used - Good' },
+                        { label: 'WMS Verified Authentic (Inspected)', value: 'WMS Verified Authentic (Inspected)' },
+                      ]}
+                    />
+                  </div>
                 </div>
 
                 {/* Client / Supplier Dropdown */}
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-slate-700">
-                    Client
+                    Client / Supplier
                   </label>
                   <Select
                     value={form.client}
@@ -433,7 +500,10 @@ function EditProductPage() {
                     options={[
                       { label: 'Select client / supplier', value: '' },
                       ...suppliers.map((s) => {
-                        const code = s.clientId || s.supplierCode || `WMS-PAK${(parseInt(String(s.id).slice(-4), 16) % 9000) + 1000}`
+                        const code =
+                          s.clientId ||
+                          s.supplierCode ||
+                          `WMS-PAK${(parseInt(String(s.id).slice(-4), 16) % 9000) + 1000}`
                         const label = `${code} (${s.email || s.supplier || s.fullName})`
                         return { label, value: s.id }
                       }),
@@ -468,27 +538,21 @@ function EditProductPage() {
 
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* SKU with Generate button */}
+                  {/* SKU - System Predefined Series */}
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-slate-700">
-                      SKU *
+                      Product SKU (Predefined Series)
                     </label>
-                    <div className="flex gap-2">
-                      <Input
-                        value={form.sku}
-                        onChange={updateField('sku')}
-                        placeholder="e.g. SVRO-00131"
-                        className="font-mono"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={handleGenerateSku}
-                        className="shrink-0 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-semibold shadow-xs transition-colors"
-                      >
-                        Generate
-                      </button>
-                    </div>
+                    <Input
+                      value={form.sku}
+                      readOnly
+                      disabled
+                      placeholder="e.g. SVRO-0001"
+                      className="font-mono bg-slate-50 text-slate-700 cursor-not-allowed font-semibold"
+                    />
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Predefined series pattern (SVRO-0001). Auto-managed by the system.
+                    </p>
                   </div>
 
                   {/* Stock Quantity */}
@@ -539,7 +603,7 @@ function EditProductPage() {
                   </div>
                 </div>
 
-                {/* Stock Expiry */}
+                {/* Stock Expiry & Stock Alert Quantity */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-slate-700">
@@ -553,7 +617,22 @@ function EditProductPage() {
                     />
                   </div>
 
-                  {/* Price */}
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">
+                      Stock Alert (Low-Stock Threshold)
+                    </label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={form.stockAlert}
+                      onChange={updateField('stockAlert')}
+                      placeholder="e.g. 10 (Alert when below)"
+                    />
+                  </div>
+                </div>
+
+                {/* Price & Category Commission Info */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-slate-700">
                       Price ($) *
@@ -569,21 +648,21 @@ function EditProductPage() {
                     />
                   </div>
 
-                  {/* Platform Commission */}
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-slate-700">
-                      Marketplace Commission (%) *
+                      Category Commission (Automatic)
                     </label>
-                    <Input
-                      type="number"
-                      step="0.5"
-                      min="0.1"
-                      max="99"
-                      value={form.commission}
-                      onChange={updateField('commission')}
-                      placeholder="10"
-                      required
-                    />
+                    <div className="flex h-10 items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50/50 px-3.5 text-xs">
+                      <span className="font-semibold text-slate-600">
+                        {form.category || 'General'}
+                      </span>
+                      <span className="rounded-md bg-indigo-100 border border-indigo-200 px-2 py-0.5 font-mono font-bold text-indigo-700">
+                        {form.commission || 8}% Fee
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Automatically assigned from the category.
+                    </p>
                   </div>
                 </div>
 
@@ -643,11 +722,11 @@ function EditProductPage() {
                       value={form.weightUnit}
                       onChange={updateField('weightUnit')}
                       options={[
-                        { label: 'g', value: 'g' },
-                        { label: 'gm', value: 'gm' },
-                        { label: 'kg', value: 'kg' },
-                        { label: 'lbs', value: 'lbs' },
-                        { label: 'oz', value: 'oz' },
+                        { label: 'gm (grams)', value: 'gm' },
+                        { label: 'g (grams)', value: 'g' },
+                        { label: 'kg (kilograms)', value: 'kg' },
+                        { label: 'lbs (pounds)', value: 'lbs' },
+                        { label: 'oz (ounces)', value: 'oz' },
                       ]}
                     />
                   </div>
@@ -656,7 +735,7 @@ function EditProductPage() {
                 {/* Dimensions */}
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-slate-700">
-                    Dimensions
+                    Dimensions (L x W x H) &amp; Unit
                   </label>
                   <div className="grid grid-cols-4 gap-2">
                     <Input
@@ -665,7 +744,7 @@ function EditProductPage() {
                       min="0"
                       value={form.length}
                       onChange={updateField('length')}
-                      placeholder="L"
+                      placeholder="Length"
                     />
                     <Input
                       type="number"
@@ -673,7 +752,7 @@ function EditProductPage() {
                       min="0"
                       value={form.width}
                       onChange={updateField('width')}
-                      placeholder="W"
+                      placeholder="Width"
                     />
                     <Input
                       type="number"
@@ -681,15 +760,52 @@ function EditProductPage() {
                       min="0"
                       value={form.height}
                       onChange={updateField('height')}
-                      placeholder="H"
+                      placeholder="Height"
                     />
                     <Select
                       value={form.dimensionUnit}
                       onChange={updateField('dimensionUnit')}
                       options={[
-                        { label: 'cm', value: 'cm' },
-                        { label: 'in', value: 'in' },
-                        { label: 'mm', value: 'mm' },
+                        { label: 'cm (centimeters)', value: 'cm' },
+                        { label: 'in (inches)', value: 'in' },
+                        { label: 'mm (millimeters)', value: 'mm' },
+                        { label: 'm (meters)', value: 'm' },
+                      ]}
+                    />
+                  </div>
+                </div>
+
+                {/* Handling & Delivery Times */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">
+                      Handling Time
+                    </label>
+                    <Select
+                      value={form.handlingTime}
+                      onChange={updateField('handlingTime')}
+                      options={[
+                        { label: 'Same business day', value: 'Same business day' },
+                        { label: '1 business day', value: '1 business day' },
+                        { label: '2 business days', value: '2 business days' },
+                        { label: '3 business days', value: '3 business days' },
+                        { label: '4-5 business days', value: '4-5 business days' },
+                      ]}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">
+                      Delivery Time
+                    </label>
+                    <Select
+                      value={form.deliveryTime}
+                      onChange={updateField('deliveryTime')}
+                      options={[
+                        { label: '1 - 2 business days (Express)', value: '1 - 2 business days' },
+                        { label: '2 - 3 business days (Standard)', value: '2 - 3 business days' },
+                        { label: '3 - 5 business days (Economy)', value: '3 - 5 business days' },
+                        { label: '1 Day (WMS Express Delivery)', value: '1 Day (WMS Express Delivery)' },
                       ]}
                     />
                   </div>

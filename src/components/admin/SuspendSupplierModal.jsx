@@ -3,20 +3,20 @@ import { AlertOctagon, CheckCircle2, ShieldAlert, X, Mail, AlertTriangle } from 
 import Button from '../ui/Button.jsx'
 import { adminApi, getErrorMessage } from '../../lib/api.js'
 
-export default function SuspendSupplierModal({ supplier, open, onClose, onSuccess }) {
+export default function SuspendSupplierModal({ supplier, open, isOpen, onClose, onSuccess }) {
   const currentWarnings = supplier?.warningsCount || 0
   const isEligible = currentWarnings >= 3
 
   const [reason, setReason] = useState(
     isEligible
-      ? `Account suspended due to persistent low ratings, delivery delays, and exceeding the maximum threshold of 3 performance warnings.`
-      : `Account suspended due to quality violations.`,
+      ? `Account suspended due to persistent low ratings, delivery delays, and reaching the maximum limit of 3 performance warnings.`
+      : `Account suspended manually by Administration.`,
   )
-  const [forceOverride, setForceOverride] = useState(isEligible)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
-  if (!open || !supplier) return null
+  const isModalOpen = open !== undefined ? open : isOpen
+  if (!isModalOpen || !supplier) return null
 
   const ratingAvg = supplier.ratings?.averageRating || 0
   const onTimePct = supplier.ratings?.onTimeDeliveryPercent ?? 100
@@ -25,16 +25,11 @@ export default function SuspendSupplierModal({ supplier, open, onClose, onSucces
     e.preventDefault()
     setError('')
 
-    if (!isEligible && !forceOverride) {
-      setError('Please acknowledge the override checkbox if suspending before 3 warnings.')
-      return
-    }
-
     setSubmitting(true)
     try {
       const res = await adminApi.suspendSupplier(supplier.id, {
         reason: reason.trim(),
-        forceOverride: !isEligible ? forceOverride : true,
+        forceOverride: true,
       })
       if (onSuccess) {
         onSuccess(res)
@@ -145,21 +140,6 @@ export default function SuspendSupplierModal({ supplier, open, onClose, onSucces
             />
           </div>
 
-          {/* If under 3 warnings, require explicit override */}
-          {!isEligible && (
-            <label className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50/70 p-3 text-xs text-amber-900 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={forceOverride}
-                onChange={(e) => setForceOverride(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-amber-300 text-rose-600 focus:ring-rose-500"
-              />
-              <span>
-                <strong>Acknowledge Override:</strong> I confirm suspending this supplier before completing all 3 standard warning levels due to urgent compliance or quality reasons.
-              </span>
-            </label>
-          )}
-
           {/* Email Notice */}
           <div className="flex items-center gap-2 rounded-xl bg-slate-100 p-2.5 text-[11px] text-slate-600">
             <Mail className="h-4 w-4 text-slate-500 shrink-0" />
@@ -182,10 +162,10 @@ export default function SuspendSupplierModal({ supplier, open, onClose, onSucces
             <Button
               type="submit"
               size="sm"
-              disabled={submitting || (!isEligible && !forceOverride)}
-              className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+              disabled={submitting}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer"
             >
-              {submitting ? 'Suspending Supplier...' : 'Confirm Suspension & Send Email'}
+              {submitting ? 'Suspending Supplier…' : 'Suspend Account Immediately'}
             </Button>
           </div>
         </form>

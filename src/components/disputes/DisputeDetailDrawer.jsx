@@ -15,6 +15,7 @@ import { useDisputeNotifications } from '../../context/DisputeNotificationContex
 import { usePolling } from '../../hooks/usePolling.js'
 
 import { formatAgainstLabel, formatRaisedByLabel, formatPartySummary } from '../../lib/disputeHelpers.js'
+import { formatDisputeId } from '../../lib/idFormatters.js'
 
 
 
@@ -353,25 +354,22 @@ export default function DisputeDetailDrawer({
       <aside className="relative flex h-full w-full max-w-lg flex-col bg-white shadow-2xl">
 
         <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
-
           <div>
-
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{title}</p>
-
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{title}</p>
+              {dispute && (
+                <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                  {formatDisputeId(dispute)}
+                </span>
+              )}
+            </div>
             <h2 className="mt-1 text-lg font-semibold text-slate-900">
-
               {dispute?.orderNo && dispute.orderNo !== '—'
-
                 ? `Order ${dispute.orderNo}`
-
                 : dispute?.order && dispute.order !== '—'
-
                   ? `Order ${dispute.order}`
-
-                  : 'Dispute'}
-
+                  : `Dispute ${formatDisputeId(dispute)}`}
             </h2>
-
           </div>
 
           <button

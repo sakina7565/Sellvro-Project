@@ -111,7 +111,7 @@ export default function TrackOrderPage() {
                     type="text"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Enter Tracking ID (e.g. SLV-..., TCS-..., ORD-...)"
+                    placeholder="Enter Tracking ID (e.g. USPS 9400..., FedEx 7946..., UPS 1Z..., ORD-...)"
                     className="h-12 w-full rounded-xl bg-white pl-11 pr-4 text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-md focus:outline-none focus:ring-2 focus:ring-blue-400"
                   />
                 </div>
@@ -177,9 +177,16 @@ export default function TrackOrderPage() {
                       href={externalTrackingUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline"
+                      className={`mt-2.5 inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-extrabold text-white shadow-sm transition ${
+                        String(trackingData.carrier || '').toLowerCase().includes('fedex')
+                          ? 'bg-[#4D148C] hover:bg-[#3d1070]'
+                          : String(trackingData.carrier || '').toLowerCase().includes('ups')
+                          ? 'bg-[#351C15] hover:bg-[#25130e]'
+                          : 'bg-[#004B87] hover:bg-[#003865]'
+                      }`}
                     >
-                      Track on Courier Site <ExternalLink className="h-3 w-3" />
+                      <span>Track on {trackingData.carrier || 'Courier'} Official Site</span>
+                      <ExternalLink className="h-3 w-3" />
                     </a>
                   )}
                 </div>

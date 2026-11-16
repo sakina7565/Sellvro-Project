@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Heart, ChevronRight, Warehouse, Star, CheckCircle, Lock } from 'lucide-react'
 import { FEATURED_DEALS } from './marketplaceData.js'
@@ -23,8 +23,11 @@ function MarketplaceDeals({ products = [], activeCategory = 'All Categories', ac
     navigate(`/checkout/${itemId}`, { state: { product: { ...item, id: itemId } } })
   }
 
-  // Combine real database products with fallback deals if DB is small/empty
-  const allItems = products && products.length > 0 ? products : FEATURED_DEALS
+  // Combine real database products with fallback deals if DB is small/empty (latest added products first)
+  const allItems = useMemo(() => {
+    const raw = products && products.length > 0 ? products : FEATURED_DEALS
+    return [...raw].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+  }, [products])
 
   // Filter by search query, category, or subcategory
   const filtered = allItems.filter((item) => {

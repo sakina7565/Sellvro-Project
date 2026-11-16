@@ -132,10 +132,17 @@ export default function TrackingModal({ order, open, onClose }) {
                       href={externalTrackingUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-bold text-white shadow-2xs hover:bg-blue-700 transition"
-                      title="Open official carrier tracking portal"
+                      className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-extrabold text-white shadow-md transition ${
+                        carrier.toLowerCase().includes('fedex')
+                          ? 'bg-[#4D148C] hover:bg-[#3d1070]'
+                          : carrier.toLowerCase().includes('ups')
+                          ? 'bg-[#351C15] hover:bg-[#25130e]'
+                          : 'bg-[#004B87] hover:bg-[#003865]'
+                      }`}
+                      title={`Open official ${carrier} tracking portal`}
                     >
-                      Track on Courier Site <ExternalLink className="h-3 w-3" />
+                      <span>Track on {carrier} Official Portal</span>
+                      <ExternalLink className="h-3.5 w-3.5" />
                     </a>
                   )}
                 </div>

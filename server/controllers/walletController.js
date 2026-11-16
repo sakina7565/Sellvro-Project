@@ -3,6 +3,7 @@ import BusinessProfile from '../models/BusinessProfile.js'
 import User from '../models/User.js'
 import WalletSetting from '../models/WalletSetting.js'
 import { executeRealPaymentTransfer } from '../services/paymentTransferService.js'
+import { getNextWalletTxId } from '../services/sequenceService.js'
 
 async function withBusinessName(requests) {
   const userIds = [
@@ -194,7 +195,10 @@ export const createWalletRequest = async (req, res) => {
     const clientIban = String(req.body.clientIban || '').trim()
     const clientBankName = String(req.body.clientBankName || '').trim()
 
+    const transactionId = await getNextWalletTxId()
+
     const request = await WalletRequest.create({
+      transactionId,
       user: req.user._id,
       amount: netUsd, // Net amount in USD credited to wallet
       depositCurrency: foundCurrency.code,

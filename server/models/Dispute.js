@@ -25,6 +25,11 @@ const disputeMessageSchema = new mongoose.Schema(
 
 const disputeSchema = new mongoose.Schema(
   {
+    disputeNo: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     raisedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -192,6 +197,20 @@ function formatAgainstLabel(against, againstRole) {
   return formatRoleLabel(againstRole) || '—'
 }
 
+disputeSchema.pre('save', async function setDisputeNo(next) {
+  if (!this.disputeNo) {
+    try {
+      const { getNextDisputeNo } = await import('../services/sequenceService.js')
+      this.disputeNo = await getNextDisputeNo()
+    } catch (err) {
+      const yy = new Date().getFullYear().toString().slice(-2)
+      const num = 1001 + (parseInt(this._id ? this._id.toString().slice(-4) : '1001', 16) % 8999)
+      this.disputeNo = `${yy}-D-${String(num).slice(-4)}`
+    }
+  }
+  next()
+})
+
 disputeSchema.methods.toSafeObject = function toSafeObject(options = {}) {
   const { includeMessages = false, viewerId = null } = options
   const raised = this.raisedBy
@@ -200,6 +219,13 @@ disputeSchema.methods.toSafeObject = function toSafeObject(options = {}) {
   const productDoc = this.product
   const chatExpiresAt = getChatExpiresAt(this)
   const chatActive = isChatActive(this)
+
+  const yy = this.createdAt
+    ? new Date(this.createdAt).getFullYear().toString().slice(-2)
+    : new Date().getFullYear().toString().slice(-2)
+  const hex = this._id ? this._id.toString() : ''
+  const fallbackNum = String(1001 + (parseInt(hex.slice(-4) || '1001', 16) % 8999)).slice(-4)
+  const disputeNo = this.disputeNo || `${yy}-D-${fallbackNum}`
 
   const fromName = raised?.fullName || '—'
   const fromRole = raised?.role || ''
@@ -212,6 +238,8 @@ disputeSchema.methods.toSafeObject = function toSafeObject(options = {}) {
 
   const base = {
     id: this._id.toString(),
+    disputeNo,
+    disputeDisplayId: disputeNo,
     from: fromName,
     fromId: raised?._id?.toString?.() || raised?.toString?.() || '',
     fromRole,

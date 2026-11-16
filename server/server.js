@@ -5,7 +5,9 @@ import dotenv from 'dotenv'
 import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
-import connectDB from './config/db.js'
+import mongoose from 'mongoose'
+import connectDB, { isDbConnected } from './config/db.js'
+import { checkMySQLConnection, getMySQLStatus } from './config/mysql.js'
 import authRoutes from './routes/authRoutes.js'
 import businessRoutes from './routes/businessRoutes.js'
 import adminRoutes from './routes/adminRoutes.js'
@@ -98,6 +100,24 @@ app.get('/api/health', (_req, res) => {
   })
 })
 
+// Database connection guard for all API endpoints
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health' || req.path === '/healthcheck') {
+    return next()
+  }
+
+  // If MongoDB is disconnected (0), immediately return helpful response and attempt reconnect
+  if (mongoose.connection.readyState === 0) {
+    connectDB().catch(() => {})
+    return res.status(503).json({
+      message:
+        'Database connection is offline. Please ensure your internet connection is active and MongoDB Atlas IP Whitelist allows your IP (or 0.0.0.0/0).',
+    })
+  }
+
+  next()
+})
+
 app.use('/api/auth', authRoutes)
 app.use('/api/business', businessRoutes)
 app.use('/api/admin', adminRoutes)
@@ -136,6 +156,9 @@ app.use((err, _req, res, _next) => {
   console.error(err)
   res.status(err.message?.startsWith('CORS') ? 403 : 500).json({ message: err.message || 'Server error' })
 })
+
+// Connect to WMS MySQL
+checkMySQLConnection().catch(() => {})
 
 // Connect to MongoDB
 connectDB()

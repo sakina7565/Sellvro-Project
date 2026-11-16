@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, LogIn, Pencil, Trash2, CheckCircle2, XCircle, RefreshCw, Truck, BarChart3 } from 'lucide-react'
+import { Plus, LogIn, Pencil, Trash2, CheckCircle2, XCircle, RefreshCw, Truck, BarChart3, Eye } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import FilterBar from '../../components/admin/FilterBar.jsx'
@@ -15,15 +15,12 @@ import IconAction from '../../components/ui/IconAction.jsx'
 import AddAccountModal from '../../components/admin/AddAccountModal.jsx'
 import EditAccountModal from '../../components/admin/EditAccountModal.jsx'
 import DeleteAccountModal from '../../components/admin/DeleteAccountModal.jsx'
+import UserDetailsModal from '../../components/admin/UserDetailsModal.jsx'
 import { adminApi, getErrorMessage } from '../../lib/api.js'
+import { formatUserId } from '../../lib/idFormatters.js'
 
 function getUserDisplayId(user) {
-  if (user?.clientId) return user.clientId
-  if (user?.id) {
-    const hex = String(user.id)
-    return `USR-${hex.slice(-6).toUpperCase()}`
-  }
-  return 'USR-1001'
+  return formatUserId(user)
 }
 
 const FILTERS = [{ label: 'All Status', options: ['approved', 'suspended'] }]
@@ -37,7 +34,9 @@ function AllUsersPage() {
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState(null)
+  const [viewingUser, setViewingUser] = useState(null)
 
   const loadUsers = async () => {
     setLoading(true)
@@ -176,6 +175,19 @@ function AllUsersPage() {
                           <span>Login As</span>
                         </button>
 
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setViewingUser(user)
+                            setDetailsModalOpen(true)
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-teal-200 bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700 hover:bg-teal-600 hover:text-white transition shadow-2xs cursor-pointer"
+                          title="View Full User Details & Verification"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          <span>Details</span>
+                        </button>
+
                         <Link
                           to={`/admin/users/reporting?userId=${user.id}`}
                           className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-600 hover:text-white transition shadow-2xs"
@@ -253,6 +265,15 @@ function AllUsersPage() {
                     <span>Login As</span>
                   </button>
                   <IconAction
+                    icon={Eye}
+                    tone="primary"
+                    aria-label="View user details"
+                    onClick={() => {
+                      setViewingUser(user)
+                      setDetailsModalOpen(true)
+                    }}
+                  />
+                  <IconAction
                     icon={Pencil}
                     tone="primary"
                     aria-label="Edit user"
@@ -320,6 +341,18 @@ function AllUsersPage() {
           setSelectedUser(null)
         }}
         onSuccess={loadUsers}
+      />
+
+      <UserDetailsModal
+        isOpen={detailsModalOpen}
+        user={viewingUser}
+        onClose={() => {
+          setDetailsModalOpen(false)
+          setViewingUser(null)
+        }}
+        onImpersonate={handleImpersonate}
+        onToggleStatus={handleToggleStatus}
+        actionLoading={actionLoading}
       />
     </AdminLayout>
   )

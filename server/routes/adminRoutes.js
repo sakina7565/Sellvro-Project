@@ -30,6 +30,9 @@ import {
   warnSupplierAccount,
   suspendSupplierAccount,
   reinstateSupplierAccount,
+  getSupplierPerformanceReport,
+  penalizeSupplierAccount,
+  sendSupplierMessage,
   listCountries,
   createCountry,
   deleteCountry,
@@ -53,13 +56,13 @@ import {
 import {
 
   createCategory,
-
   updateCategory,
-
   deleteCategory,
-
   listCategories,
-
+  listBusinessCategories,
+  createBusinessCategory,
+  updateBusinessCategory,
+  deleteBusinessCategory,
 } from '../controllers/categoryController.js'
 
 import { listAllOrders, updateOrderTracking } from '../controllers/orderController.js'
@@ -246,6 +249,11 @@ router.patch('/products/:id/deactivate', requirePermission('admin.products.appro
 
 
 
+router.get('/categories/business', requirePermission('admin.categories.view'), listBusinessCategories)
+router.post('/categories/business', requirePermission('admin.categories.manage'), createBusinessCategory)
+router.patch('/categories/business/:id', requirePermission('admin.categories.manage'), updateBusinessCategory)
+router.delete('/categories/business/:id', requirePermission('admin.categories.manage'), deleteBusinessCategory)
+
 router.get('/categories', requirePermission('admin.categories.view'), listCategories)
 router.post('/categories', requirePermission('admin.categories.manage'), createCategory)
 router.patch('/categories/:id', requirePermission('admin.categories.manage'), updateCategory)
@@ -394,11 +402,21 @@ router.post(
   impersonateAccount,
 )
 
-// Supplier Performance Warning & Suspension Routes
+// Supplier Performance Warning, Suspension, Penalty & SLA Routes
+router.get(
+  '/suppliers/:id/performance-report',
+  requirePermission('admin.suppliers.view'),
+  getSupplierPerformanceReport,
+)
 router.post(
   '/suppliers/:id/warn',
   requirePermission('admin.suppliers.approve'),
   warnSupplierAccount,
+)
+router.post(
+  '/suppliers/:id/penalty',
+  requirePermission('admin.suppliers.approve'),
+  penalizeSupplierAccount,
 )
 router.post(
   '/suppliers/:id/suspend',
@@ -409,6 +427,11 @@ router.post(
   '/suppliers/:id/reinstate',
   requirePermission('admin.suppliers.approve'),
   reinstateSupplierAccount,
+)
+router.post(
+  '/suppliers/:id/send-message',
+  requirePermission('admin.suppliers.approve'),
+  sendSupplierMessage,
 )
 
 export default router

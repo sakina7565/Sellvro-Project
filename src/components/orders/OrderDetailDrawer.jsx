@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Building2, Check, ExternalLink, Printer, RefreshCw, Star, Tag, Truck, Warehouse, X } from 'lucide-react'
+import { Ban, Building2, Check, ExternalLink, Plus, Printer, RefreshCw, Star, Tag, Truck, Warehouse, X } from 'lucide-react'
 import Badge from '../ui/Badge.jsx'
 import Button from '../ui/Button.jsx'
 import TrackingModal from './TrackingModal.jsx'
 import CourierHandoverModal from './CourierHandoverModal.jsx'
 import OrderReviewModal from './OrderReviewModal.jsx'
+import UserCancelOrderModal from './UserCancelOrderModal.jsx'
+import UserUpdateTrackingModal from './UserUpdateTrackingModal.jsx'
+import ShippingAirwayBillModal from './ShippingAirwayBillModal.jsx'
 import { getErrorMessage, orderApi, mediaUrl } from '../../lib/api.js'
+import { formatSupplierId, formatUserId } from '../../lib/idFormatters.js'
+import { getCourierExternalTrackingUrl } from '../../lib/courierHelpers.js'
 import { formatShippingAddress, hasShippingAddress, ORDER_STATUS_OPTIONS } from '../../lib/orderHelpers.js'
 
 function statusTone(status) {
@@ -49,6 +54,9 @@ function OrderDetailDrawer({
   const [trackingModalOpen, setTrackingModalOpen] = useState(false)
   const [courierModalOpen, setCourierModalOpen] = useState(false)
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
+  const [cancelModalOpen, setCancelModalOpen] = useState(false)
+  const [updateTrackingOpen, setUpdateTrackingOpen] = useState(false)
+  const [showLabelModal, setShowLabelModal] = useState(false)
 
   const loadOrder = useCallback(async () => {
     if (!orderId) return
@@ -273,11 +281,10 @@ function OrderDetailDrawer({
                   </div>
                 </div>
                 <span
-                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold shadow-xs ${
-                    order.warehouseLocation === 'wms_hub'
-                      ? 'border border-amber-200 bg-amber-50 text-amber-800'
-                      : 'border border-blue-200 bg-blue-50 text-blue-800'
-                  }`}
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold shadow-xs ${order.warehouseLocation === 'wms_hub'
+                    ? 'border border-amber-200 bg-amber-50 text-amber-800'
+                    : 'border border-blue-200 bg-blue-50 text-blue-800'
+                    }`}
                 >
                   {order.warehouseLocation === 'wms_hub' ? 'WMS Fulfilled' : 'Supplier Direct'}
                 </span>
@@ -289,7 +296,7 @@ function OrderDetailDrawer({
                   <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">User / Buyer</dt>
                   <dd className="mt-1">
                     <span className="inline-block rounded bg-indigo-50 px-1.5 py-0.5 font-mono text-xs font-bold text-indigo-700">
-                      {order.userDisplayId || (order.userId ? `USR-${order.userId.slice(-6).toUpperCase()}` : '—')}
+                      {formatUserId(order.userDisplayId || order.userId)}
                     </span>
                     <p className="mt-1 text-sm font-semibold text-slate-800">{order.user}</p>
                     {order.userEmail ? <p className="text-xs text-slate-500">{order.userEmail}</p> : null}
@@ -300,7 +307,7 @@ function OrderDetailDrawer({
                   <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Supplier / Vendor</dt>
                   <dd className="mt-1">
                     <span className="inline-block rounded bg-amber-50 px-1.5 py-0.5 font-mono text-xs font-bold text-amber-800">
-                      {order.supplierDisplayId || (order.supplierId ? `SUP-${order.supplierId.slice(-6).toUpperCase()}` : '—')}
+                      {formatSupplierId(order.supplierDisplayId || order.supplierId)}
                     </span>
                     <p className="mt-1 text-sm font-semibold text-slate-800">{order.supplier}</p>
                     {order.supplierEmail ? <p className="text-xs text-slate-500">{order.supplierEmail}</p> : null}
@@ -393,24 +400,22 @@ function OrderDetailDrawer({
                     </div>
                   ) : null}
 
-                  <div className="col-span-2 border-t border-indigo-100/60 pt-2.5 flex items-center justify-between">
+                  <div className="col-span-2 border-t border-indigo-100/60 pt-2.5 flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowLabelModal(true)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-indigo-700 cursor-pointer"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                      View & Print 4x6 Airway Bill Label
+                    </button>
                     <button
                       type="button"
                       onClick={() => setShowThermalLabel((prev) => !prev)}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-indigo-700"
+                      className="text-xs font-semibold text-indigo-700 hover:underline cursor-pointer"
                     >
-                      <Printer className="h-3.5 w-3.5" />
-                      {showThermalLabel ? 'Hide Thermal Label' : 'View & Print Thermal Label'}
+                      {showThermalLabel ? 'Hide Quick Preview' : 'Quick Preview'}
                     </button>
-                    {showThermalLabel && (
-                      <button
-                        type="button"
-                        onClick={() => window.print()}
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-indigo-600"
-                      >
-                        Print 4x6 Label
-                      </button>
-                    )}
                   </div>
 
                   {showThermalLabel && (
@@ -435,7 +440,7 @@ function OrderDetailDrawer({
                             {order.warehouseLocation === 'wms_hub' ? 'Sellvro WMS Central Hub' : 'Supplier Facility Direct'}
                           </p>
                           <p className="text-[9px] text-slate-500">
-                            Supplier: {order.supplierDisplayId || (order.supplierId ? `SUP-${order.supplierId.slice(-6).toUpperCase()}` : '—')}
+                            Supplier: {formatSupplierId(order.supplierDisplayId || order.supplierId)}
                           </p>
                         </div>
                         <div>
@@ -490,7 +495,7 @@ function OrderDetailDrawer({
                           <span className="h-full w-1.5 bg-black"></span>
                         </div>
                         <p className="mt-0.5 text-[8px] tracking-widest text-slate-600">
-                          *{order.trackingNumber || `SLV-${order.orderNo}`}*
+                          *{order.trackingNumber || order.orderNo}*
                         </p>
                       </div>
                     </div>
@@ -596,7 +601,7 @@ function OrderDetailDrawer({
                     Live Parcel Tracking
                   </p>
                   <span className="rounded border border-indigo-200 bg-white px-2 py-0.5 font-mono text-xs font-bold text-indigo-700">
-                    {order.trackingNumber || `SLV-${order.orderNo?.replace('ORD-', '')}`}
+                    {order.trackingNumber && !order.trackingNumber.startsWith('SLV-') ? order.trackingNumber : 'Awaiting Tracking ID'}
                   </span>
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-700">
@@ -612,20 +617,59 @@ function OrderDetailDrawer({
                     <span className="block text-[11px] text-slate-400">Est. Delivery:</span>
                     <span className="font-medium text-slate-800">{order.estimatedDelivery || '3 - 5 Business Days'}</span>
                   </div>
-                  <div className="col-span-2 pt-1 border-t border-indigo-100/60 flex items-center justify-between">
+                  <div className="col-span-2 pt-2 border-t border-indigo-100/60 flex flex-wrap items-center justify-between gap-2">
                     <button
                       type="button"
                       onClick={() => setTrackingModalOpen(true)}
                       className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 transition shadow-2xs"
                     >
                       <Truck className="h-3.5 w-3.5" />
-                      Live Shipment Tracker & Timeline
+                      Shipment Timeline
                     </button>
+
+                    {order.status !== 'cancelled' && (
+                      <button
+                        type="button"
+                        onClick={() => setUpdateTrackingOpen(true)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        {order.trackingNumber ? 'Update Tracking ID' : 'Add Tracking ID'}
+                      </button>
+                    )}
+
+                    {order.status !== 'cancelled' &&
+                      !['in_transit', 'out_for_delivery', 'delivered'].includes((order.trackingStatus || '').toLowerCase()) &&
+                      !order.isDispatched &&
+                      order.warehouseLocation !== 'in_transit' &&
+                      order.warehouseLocation !== 'delivered' && (
+                        <button
+                          type="button"
+                          onClick={() => setCancelModalOpen(true)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition shadow-2xs"
+                        >
+                          <Ban className="h-3.5 w-3.5" />
+                          Cancel Order
+                        </button>
+                      )}
+
+                    {getCourierExternalTrackingUrl(order.carrier, order.trackingNumber) && (
+                      <a
+                        href={getCourierExternalTrackingUrl(order.carrier, order.trackingNumber)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-blue-600 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition shadow-2xs"
+                      >
+                        <span>Track on {order.carrier || 'Courier'}</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+
                     {showStatusUpdate && (
                       <button
                         type="button"
                         onClick={() => setCourierModalOpen(true)}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 hover:text-blue-900 underline"
+                        className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 hover:text-blue-900 underline ml-auto"
                       >
                         Handover Courier
                       </button>
@@ -720,8 +764,8 @@ function OrderDetailDrawer({
                       {pushingWms
                         ? 'Pushing to WMS…'
                         : order.isWmsOrder
-                        ? 'Re-Sync with WMS Warehouse'
-                        : 'Push Order to WMS Warehouse'}
+                          ? 'Re-Sync with WMS Warehouse'
+                          : 'Push Order to WMS Warehouse'}
                     </Button>
                   </div>
                 </div>
@@ -767,6 +811,40 @@ function OrderDetailDrawer({
             loadOrder()
             onUpdated?.()
           }}
+        />
+      )}
+
+      {/* Customer Order Cancellation Modal */}
+      {cancelModalOpen && order && (
+        <UserCancelOrderModal
+          order={order}
+          open={cancelModalOpen}
+          onClose={() => setCancelModalOpen(false)}
+          onSuccess={() => {
+            loadOrder()
+            onUpdated?.()
+          }}
+        />
+      )}
+
+      {/* Enter Real Courier Tracking Modal */}
+      {updateTrackingOpen && order && (
+        <UserUpdateTrackingModal
+          order={order}
+          open={updateTrackingOpen}
+          onClose={() => setUpdateTrackingOpen(false)}
+          onSuccess={() => {
+            loadOrder()
+            onUpdated?.()
+          }}
+        />
+      )}
+      {/* Official 4x6 Courier Shipping Airway Bill Modal */}
+      {showLabelModal && order && (
+        <ShippingAirwayBillModal
+          order={order}
+          open={showLabelModal}
+          onClose={() => setShowLabelModal(false)}
         />
       )}
     </div>

@@ -46,8 +46,18 @@ const orderSchema = new mongoose.Schema(
     commissionPercent: { type: Number, default: 0, min: 0 },
     status: {
       type: String,
-      enum: ['placed', 'pending', 'cancelled', 'in_process'],
-      default: 'placed',
+      enum: [
+        'placed',
+        'pending',
+        'awaiting_dispatch',
+        'order_due',
+        'in_process',
+        'processing',
+        'delivered',
+        'cancelled',
+        'returned',
+      ],
+      default: 'awaiting_dispatch',
     },
     brandLabel: { type: String, trim: true, default: '' },
     orderLabelRef: { type: String, trim: true, default: '' },
@@ -70,8 +80,30 @@ const orderSchema = new mongoose.Schema(
     },
     payoutStatus: {
       type: String,
-      enum: ['pending', 'processed'],
+      enum: ['pending', 'processed', 'cancelled'],
       default: 'pending',
+    },
+    isRefunded: {
+      type: Boolean,
+      default: false,
+    },
+    refundAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    refundedAt: {
+      type: Date,
+      default: null,
+    },
+    refundTxId: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    deliveredAt: {
+      type: Date,
+      default: null,
     },
     payoutTid: {
       type: String,
@@ -96,12 +128,23 @@ const orderSchema = new mongoose.Schema(
     carrier: {
       type: String,
       trim: true,
-      default: 'Sellvro Express',
+      default: 'FedEx',
     },
     trackingStatus: {
       type: String,
-      enum: ['placed', 'processing', 'in_transit', 'out_for_delivery', 'delivered', 'cancelled'],
-      default: 'placed',
+      enum: [
+        'placed',
+        'awaiting_dispatch',
+        'order_due',
+        'processing',
+        'in_process',
+        'in_transit',
+        'out_for_delivery',
+        'delivered',
+        'cancelled',
+        'returned',
+      ],
+      default: 'awaiting_dispatch',
     },
     estimatedDelivery: {
       type: String,
@@ -181,6 +224,23 @@ const orderSchema = new mongoose.Schema(
       ref: 'Review',
       default: null,
     },
+    promisedHandlingTime: {
+      type: String,
+      trim: true,
+      default: '24 Hours (1 business day)',
+    },
+    handlingHoursPromised: {
+      type: Number,
+      default: 24,
+    },
+    actualHandlingHours: {
+      type: Number,
+      default: null,
+    },
+    isOnTimeDispatch: {
+      type: Boolean,
+      default: null,
+    },
   },
   { timestamps: true },
 )
@@ -203,9 +263,29 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
   const shipping = this.shippingAddress || {}
 
   const rawUserId = userDoc?._id?.toString?.() || userDoc?.toString?.() || ''
-  const userDisplayId = userDoc?.clientId || (rawUserId ? `USR-${rawUserId.slice(-6).toUpperCase()}` : '')
+  const userDisplayId =
+    userDoc?.displayId ||
+    (userDoc?.clientId && /^US-\d+$/i.test(userDoc.clientId) ? userDoc.clientId : '') ||
+    (rawUserId ? `US-${1001 + (parseInt(rawUserId.slice(-4), 16) % 8999)}` : 'US-1001')
+
   const rawSupplierId = supplierDoc?._id?.toString?.() || supplierDoc?.toString?.() || ''
-  const supplierDisplayId = supplierDoc?.clientId || (rawSupplierId ? `SUP-${rawSupplierId.slice(-6).toUpperCase()}` : '')
+  const supplierDisplayId =
+    supplierDoc?.displayId ||
+    (supplierDoc?.clientId && /^SPAK-\d+$/i.test(supplierDoc.clientId) ? supplierDoc.clientId : '') ||
+    (rawSupplierId ? `SPAK-${1001 + (parseInt(rawSupplierId.slice(-4), 16) % 8999)}` : 'SPAK-1001')
+
+  const isDeliveredState =
+    this.status === 'delivered' ||
+    this.trackingStatus === 'delivered' ||
+    this.warehouseLocation === 'delivered'
+
+  const effectiveStatus = isDeliveredState ? 'delivered' : this.status
+  const effectiveTrackingStatus = isDeliveredState
+    ? 'delivered'
+    : (this.trackingStatus || (this.status === 'in_process' ? 'processing' : this.status === 'cancelled' ? 'cancelled' : 'placed'))
+  const effectiveWarehouseLocation = isDeliveredState
+    ? 'delivered'
+    : (this.warehouseLocation || 'supplier_warehouse')
 
   return {
     id: this._id.toString(),
@@ -230,26 +310,31 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
     total: this.total,
     commission: this.commission,
     commissionPercent: this.commissionPercent,
-    status: this.status,
-    statusLabel: formatStatus(this.status),
+    status: effectiveStatus,
+    statusLabel: formatStatus(effectiveStatus),
     brandLabel: this.brandLabel,
     orderLabelRef: this.orderLabelRef || this.orderNo || '',
     shippingLabelUrl: this.shippingLabelUrl || '',
     labelNotes: this.labelNotes || '',
-    warehouseLocation: this.warehouseLocation || 'supplier_warehouse',
+    warehouseLocation: effectiveWarehouseLocation,
     warehouseLocationLabel:
-      this.warehouseLocationLabel ||
-      (this.warehouseLocation === 'wms_hub'
-        ? 'At WMS Central Hub'
-        : this.warehouseLocation === 'in_transit'
-          ? 'In Courier Transit'
-          : this.warehouseLocation === 'delivered'
-            ? 'Delivered to Customer'
-            : 'At Supplier Warehouse'),
+      effectiveWarehouseLocation === 'delivered'
+        ? 'Delivered to Customer'
+        : (this.warehouseLocationLabel ||
+          (effectiveWarehouseLocation === 'wms_hub'
+            ? 'At WMS Central Hub'
+            : effectiveWarehouseLocation === 'in_transit'
+              ? 'In Courier Transit'
+              : 'At Supplier Warehouse')),
     paymentMethod: this.paymentMethod || 'wallet',
     payoutStatus: this.payoutStatus,
     payoutTid: this.payoutTid || '',
     payoutId: this.payoutId?.toString?.() || '',
+    isRefunded: Boolean(this.isRefunded),
+    refundAmount: this.refundAmount || 0,
+    refundedAt: this.refundedAt || null,
+    refundTxId: this.refundTxId || '',
+    deliveredAt: this.deliveredAt || (isDeliveredState ? (this.updatedAt || new Date()) : null),
     shippingAddress: {
       fullName: shipping.fullName || '',
       phone: shipping.phone || '',
@@ -260,21 +345,21 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
       country: shipping.country || '',
     },
     // Tracking details
-    trackingNumber: this.trackingNumber || `SLV-${this.orderNo?.replace('ORD-', '') || this._id.toString().slice(-8).toUpperCase()}`,
-    carrier: this.carrier || 'Sellvro Express',
-    trackingStatus: this.trackingStatus || (this.status === 'in_process' ? 'processing' : this.status === 'cancelled' ? 'cancelled' : 'placed'),
+    trackingNumber: this.trackingNumber || '',
+    carrier: this.carrier || '',
+    trackingStatus: effectiveTrackingStatus,
     estimatedDelivery: this.estimatedDelivery || '',
     trackingTimeline: Array.isArray(this.trackingTimeline) && this.trackingTimeline.length > 0
       ? this.trackingTimeline
       : [
-          {
-            status: 'placed',
-            title: 'Order Placed',
-            location: 'System Online',
-            timestamp: this.createdAt || new Date(),
-            note: 'Order successfully created & verified.',
-          },
-        ],
+        {
+          status: 'placed',
+          title: 'Order Placed',
+          location: 'System Online',
+          timestamp: this.createdAt || new Date(),
+          note: 'Order successfully created & verified.',
+        },
+      ],
     // WMS fulfillment details
     isWmsOrder: Boolean(this.isWmsOrder || this.warehouseLocation === 'wms_hub'),
     wmsBatchNumber: this.wmsBatchNumber || '',
@@ -289,12 +374,16 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
     wmsPushedAt: this.wmsPushedAt || null,
     isReviewed: Boolean(this.isReviewed),
     reviewId: this.review?.toString?.() || '',
+    promisedHandlingTime: this.promisedHandlingTime || '24 Hours (1 business day)',
+    handlingHoursPromised: this.handlingHoursPromised || 24,
+    actualHandlingHours: this.actualHandlingHours,
+    isOnTimeDispatch: this.isOnTimeDispatch,
     date: this.createdAt
       ? new Date(this.createdAt).toLocaleDateString('en-US', {
-          month: 'short',
-          day: '2-digit',
-          year: 'numeric',
-        })
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+      })
       : '—',
     createdAt: this.createdAt,
   }

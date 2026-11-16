@@ -149,12 +149,7 @@ function StatusBadge({ panel, publishActive, isWmsExisting }) {
 }
 
 function makeSku() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let suffix = ''
-  for (let i = 0; i < 6; i += 1) {
-    suffix += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return `SVRO-${suffix}`
+  return ''
 }
 
 const EMPTY_FORM = {
@@ -167,7 +162,7 @@ const EMPTY_FORM = {
   sku: '',
   price: '',
   fulfillBy: 'warehouse',
-  handlingTime: '1 business day',
+  handlingTime: '24 Hours (1 business day)',
   deliveryTime: '1 Day (WMS Express Delivery)',
   quantity: '',
   weight: '',
@@ -652,6 +647,10 @@ function AddProductForm({
     }
     if (panel === 'supplier' && !form.fulfillBy) {
       setError('Please select whether to store product in Sellvro Inventory (WMS) or keep with supplier.')
+      return
+    }
+    if (form.fulfillBy === 'self' && !form.handlingTime?.trim()) {
+      setError('Handling Time / Dispatch Time is strictly mandatory for self-fulfillment products. Please specify how quickly you will hand over packages to courier.')
       return
     }
 
@@ -1471,7 +1470,7 @@ function AddProductForm({
                   disabled={isFormLocked}
                   value={form.sku}
                   onChange={updateField('sku')}
-                  placeholder={isFormLocked ? 'Select WMS SKU above' : 'Auto-generated SKU'}
+                  placeholder={isFormLocked ? 'Select WMS SKU above' : 'Auto Serial (e.g. SVRO-0001)'}
                   className={`h-11 min-w-0 flex-1 border-0 px-3 text-sm placeholder:text-slate-400 focus:outline-none ${
                     isFormLocked ? 'bg-slate-50 text-slate-500 cursor-not-allowed' : 'bg-transparent text-slate-800'
                   }`}
@@ -1479,14 +1478,18 @@ function AddProductForm({
                 {!isFormLocked && (
                   <button
                     type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, sku: makeSku() }))}
+                    onClick={() => setForm((prev) => ({ ...prev, sku: '' }))}
                     className="inline-flex shrink-0 items-center gap-1.5 border-l border-slate-200 bg-primary px-4 text-sm font-semibold text-white transition-colors hover:bg-primary-700 cursor-pointer"
+                    title="Auto-generates sequential serial SVRO-0001, SVRO-0002..."
                   >
                     <Sparkles className="h-4 w-4" />
-                    Generate
+                    Auto Serial
                   </button>
                 )}
               </div>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Pattern: <span className="font-mono font-semibold text-slate-600">SVRO-0001</span>. Leave empty or click Auto Serial to assign next serial number upon save.
+              </p>
             </div>
 
             {/* 7. Admin Panel Specific Assignment Fields */}
@@ -1624,10 +1627,10 @@ function AddProductForm({
 
               {/* Handling Time & Customer Delivery Window */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 pt-2 border-t border-slate-100">
-                {/* Handling Time */}
+                {/* Handling Time / Dispatch Time */}
                 <div>
                   <FormLabel icon={Clock} htmlFor="handlingTime" required>
-                    Handling Time
+                    Handling Time / Dispatch Time (Courier Handover) *
                   </FormLabel>
                   <select
                     id="handlingTime"
@@ -1635,15 +1638,16 @@ function AddProductForm({
                     value={form.handlingTime}
                     onChange={updateField('handlingTime')}
                     className={isFormLocked ? DISABLED_FIELD_CLASS : FIELD_CLASS}
+                    required
                   >
-                    <option value="Same business day">Same business day (Fast Dispatch)</option>
-                    <option value="1 business day">1 business day</option>
-                    <option value="2 business days">2 business days</option>
-                    <option value="3 business days">3 business days</option>
-                    <option value="4-5 business days">4-5 business days</option>
+                    <option value="Within 12 Hours (Same Day Fast Handover)">Within 12 Hours (Same Day Fast Handover)</option>
+                    <option value="24 Hours (1 business day)">24 Hours (1 business day)</option>
+                    <option value="48 Hours (2 business days)">48 Hours (2 business days)</option>
+                    <option value="3 Days (72 hours)">3 Days (72 hours)</option>
+                    <option value="4 - 5 Days">4 - 5 Days</option>
                   </select>
                   <span className="mt-1 block text-[11px] text-slate-500">
-                    Time taken by seller/warehouse to process &amp; hand over package.
+                    Order receive hone ke baad aap kitne time mein parcel courier company ko handover karenge. Admin panel is timing ke according performance report generate karega.
                   </span>
                 </div>
 
@@ -1924,13 +1928,6 @@ function AddProductForm({
                   placeholder="Enter barcode"
                   value={form.barcode}
                   onChange={updateField('barcode')}
-                />
-                <Input
-                  id="commission"
-                  label="Commission (%)"
-                  placeholder="Enter commission"
-                  value={form.commission}
-                  onChange={updateField('commission')}
                 />
                 <Select id="country" label="Country" value={form.country} onChange={updateField('country')}>
                   <option value="" disabled>

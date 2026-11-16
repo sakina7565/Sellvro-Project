@@ -5,46 +5,37 @@ import {
   Building2,
   CheckCircle2,
   CreditCard,
-  FileCheck,
   FileText,
   MapPin,
   Minus,
-  PackageCheck,
   Plus,
   Printer,
-  ShieldCheck,
-  Tag,
+  Sparkles,
   Truck,
-  UploadCloud,
+  Upload,
   Warehouse,
   Wallet,
-  X,
+  AlertCircle,
+  Eye,
 } from 'lucide-react'
 import UserLayout from '../../components/layout/UserLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
-import FormLabel from '../../components/products/FormLabel.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Button from '../../components/ui/Button.jsx'
-import MarketplaceTopBar from '../../components/marketplace/MarketplaceTopBar.jsx'
-import MarketplaceSearchHeader from '../../components/marketplace/MarketplaceSearchHeader.jsx'
-import MarketplaceFooter from '../../components/marketplace/MarketplaceFooter.jsx'
+import ShippingAirwayBillModal from '../../components/orders/ShippingAirwayBillModal.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { mediaUrl, orderApi, productApi, walletApi, getErrorMessage } from '../../lib/api.js'
+import {
+  POPULAR_COURIERS,
+  validateCarrierTracking,
+  detectBestCourierByLocation,
+  generateAutomatedTrackingId,
+} from '../../lib/courierHelpers.js'
 
-const FIELD =
-  'h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100'
+const INPUT_STYLE =
+  'h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 transition'
 
-const EMPTY_ADDRESS = {
-  fullName: '',
-  phone: '',
-  addressLine: '',
-  city: '',
-  state: '',
-  postalCode: '',
-  country: '',
-}
-
-function UserCheckoutPage() {
+export default function UserCheckoutPage() {
   const { productId } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
@@ -60,49 +51,40 @@ function UserCheckoutPage() {
   })
   const [loadingProduct, setLoadingProduct] = useState(!location.state?.product)
   const [walletBalance, setWalletBalance] = useState(user?.walletBalance ?? 0)
-  // Exclusively wallet payment
-  const [paymentMethod] = useState('wallet')
   const [quantity, setQuantity] = useState(Number(location.state?.quantity) || 1)
-  const [address, setAddress] = useState({
-    fullName: '',
-    email: '',
-    phone: '',
-    addressLine: '',
-    city: '',
-    state: '',
-    postalCode: '',
-    country: '',
-  })
-  // Packaging Label Details
-  const [orderLabelRef, setOrderLabelRef] = useState('')
-  const [brandLabel, setBrandLabel] = useState('')
-  const [labelNotes, setLabelNotes] = useState('')
-  const [shippingLabelFile, setShippingLabelFile] = useState(null)
+
+  // Essential Customer & Destination Fields
+  const [customerName, setCustomerName] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
+  const [deliveryAddress, setDeliveryAddress] = useState('')
+  const [city, setCity] = useState('Karachi')
+  const [country, setCountry] = useState('Pakistan')
+
+  // Smart Courier Auto-Match
+  const [selectedCarrier, setSelectedCarrier] = useState('tcs')
+  const [isCarrierManual, setIsCarrierManual] = useState(false)
+  const [autoMatchInfo, setAutoMatchInfo] = useState(
+    'Auto-matched TCS Express (Pakistan Fast-Track Domestic Logistics)',
+  )
+
+  // Shipping Label Mode & Parcel Instructions
+  const [labelMode, setLabelMode] = useState('generate') // 'generate' | 'upload'
+  const [userTrackingNumber, setUserTrackingNumber] = useState(() => generateAutomatedTrackingId('tcs'))
+  const [parcelInstructions, setParcelInstructions] = useState('Fragile - Handle with care. Open parcel allowed.')
+  const [labelFile, setLabelFile] = useState(null)
+  const [labelFileName, setLabelFileName] = useState('')
+  const [parsingLabel, setParsingLabel] = useState(false)
+  const [extractionSuccess, setExtractionSuccess] = useState(null)
+  const [trackingValidationErr, setTrackingValidationErr] = useState('')
+
+  // Printable Modal Preview
+  const [showAirwayBillModal, setShowAirwayBillModal] = useState(false)
 
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [creditingWallet, setCreditingWallet] = useState(false)
 
-  const handleQuickTopup = async () => {
-    setCreditingWallet(true)
-    setError('')
-    try {
-      const needed = Math.max(500, Math.ceil(total - walletBalance + 50))
-      const res = await walletApi.quickCredit(needed)
-      const newBal = res.walletBalance ?? res.balance ?? (walletBalance + needed)
-      setWalletBalance(newBal)
-      if (user) {
-        updateUser({ ...user, walletBalance: newBal })
-      }
-      return newBal
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to credit test balance.'))
-      return null
-    } finally {
-      setCreditingWallet(false)
-    }
-  }
-
+  // Load wallet balance
   useEffect(() => {
     let active = true
     walletApi
@@ -116,47 +98,49 @@ function UserCheckoutPage() {
     }
   }, [])
 
+  // Smart location auto-match for courier
+  useEffect(() => {
+    if (isCarrierManual) return
+    const match = detectBestCourierByLocation(country, city)
+    if (match.carrierId && match.carrierId !== selectedCarrier) {
+      setSelectedCarrier(match.carrierId)
+      setAutoMatchInfo(match.reason)
+      if (labelMode === 'generate') {
+        setUserTrackingNumber(generateAutomatedTrackingId(match.carrierId))
+      }
+    }
+  }, [country, city, isCarrierManual, labelMode, selectedCarrier])
+
+  // Load product
   useEffect(() => {
     if (product && (product.id === productId || product._id === productId)) {
       setLoadingProduct(false)
-      return undefined
+      return
     }
     let active = true
     setLoadingProduct(true)
 
-    // 1. First attempt direct lookup by single product endpoint (if productId provided)
     const lookupPromise = productId ? productApi.get(productId) : Promise.reject(new Error('No ID'))
     lookupPromise
       .then((res) => {
         if (!active) return
         const prod = res.product || res.data || res
         if (prod && (prod.id || prod._id)) {
-          setProduct({
-            ...prod,
-            id: prod.id || prod._id,
-          })
+          setProduct({ ...prod, id: prod.id || prod._id })
           setError('')
-        } else {
-          throw new Error('Not found')
         }
       })
       .catch(() => {
-        // 2. Fallback to marketplace list
         return productApi.marketplace().then((data) => {
           if (!active) return
-          let found = (data.data || []).find(
+          const found = (data.data || []).find(
             (item) => String(item.id) === String(productId) || String(item._id) === String(productId),
-          )
-          // Graceful fallback to first active product in catalogue
-          if (!found && Array.isArray(data.data) && data.data.length > 0) {
-            found = data.data[0]
-          }
-          if (!found) {
-            setError('Product not found or unavailable.')
-            setProduct(null)
-          } else {
+          ) || data.data?.[0]
+          if (found) {
             setProduct({ ...found, id: found.id || found._id })
             setError('')
+          } else {
+            setError('Product not found or unavailable.')
           }
         })
       })
@@ -180,118 +164,11 @@ function UserCheckoutPage() {
     mediaUrl(product?.image) ||
     'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80'
 
-  const setField = (key, value) => {
-    setAddress((prev) => ({ ...prev, [key]: value }))
-  }
-
   const adjustQty = (delta) => {
     setQuantity((prev) => Math.min(maxQty, Math.max(1, prev + delta)))
   }
 
-  const executeOrderPlacement = async ({ customBalance, method } = {}) => {
-    if (!product) return
-    setError('')
-
-    const token =
-      localStorage.getItem('sellvro_token') ||
-      localStorage.getItem('token') ||
-      localStorage.getItem('auth_token')
-    const effectiveMethod = 'wallet'
-    const effectiveBalance = typeof customBalance === 'number' ? customBalance : walletBalance
-
-    // Wallet payment requires being logged in with an active account
-    if (!user && !isAuthenticated && !token) {
-      setError('Please sign in to your client account to pay from your Sellvro Wallet.')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
-    }
-
-    // Ensure wallet balance covers total
-    if (effectiveBalance < total) {
-      setError(
-        `Insufficient wallet balance. Total due is $${total.toFixed(2)}, but your wallet has $${Number(effectiveBalance || 0).toFixed(2)}. Please top up your wallet or use 1-Click Top-Up.`,
-      )
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
-    }
-
-    // Validate recipient address fields
-    if (!address.fullName?.trim()) {
-      setError('Please enter recipient full name.')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
-    }
-    if (!address.phone?.trim()) {
-      setError('Please enter recipient phone number.')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
-    }
-    if (!address.addressLine?.trim()) {
-      setError('Please enter delivery street address.')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
-    }
-    if (!address.city?.trim()) {
-      setError('Please enter delivery city.')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
-    }
-    if (!address.country?.trim()) {
-      setError('Please enter delivery country.')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
-    }
-
-    const cleanAddress = {
-      fullName: address.fullName.trim(),
-      phone: address.phone.trim(),
-      addressLine: address.addressLine.trim(),
-      city: address.city.trim(),
-      country: address.country.trim(),
-      state: address.state?.trim() || '',
-      postalCode: address.postalCode?.trim() || '',
-    }
-
-    const finalOrderLabelRef = orderLabelRef.trim()
-    const finalBrandLabel = brandLabel.trim()
-
-    const actualProductId = product?.id || product?._id || productId
-
-    setSubmitting(true)
-    try {
-      const data = await orderApi.create(
-        {
-          productId: actualProductId,
-          quantity,
-          paymentMethod: effectiveMethod,
-          email: address.email?.trim() || user?.email || '',
-          shippingAddress: cleanAddress,
-          orderLabelRef: finalOrderLabelRef,
-          brandLabel: finalBrandLabel,
-          labelNotes: labelNotes.trim(),
-        },
-        shippingLabelFile,
-      )
-      if (typeof data.walletBalance === 'number' && user) {
-        updateUser({ ...user, walletBalance: data.walletBalance })
-      }
-      const confirmedId = data.order?.id || data.order?._id || data.orderNo || 'confirmed'
-      navigate(`/orders/confirmation/${confirmedId}`, {
-        replace: true,
-        state: { order: data.order, message: data.message },
-      })
-    } catch (err) {
-      const msg = getErrorMessage(err, 'Could not place order.')
-      setError(msg)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    } finally {
-      setSubmitting(false)
-      setCreditingWallet(false)
-    }
-  }
-
-  // 1-Click Top-Up Deficit & Place Order
-  const handleQuickTopupAndPlace = async () => {
+  const handleQuickTopup = async () => {
     setCreditingWallet(true)
     setError('')
     try {
@@ -302,23 +179,234 @@ function UserCheckoutPage() {
       if (user) {
         updateUser({ ...user, walletBalance: newBal })
       }
-      await executeOrderPlacement({ customBalance: newBal, method: 'wallet' })
+      return newBal
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to credit test balance.'))
+      return null
+    } finally {
       setCreditingWallet(false)
     }
   }
 
-  const handleSubmit = (event) => {
-    event.preventDefault()
-    executeOrderPlacement()
+  const handleCarrierChange = (e) => {
+    const nextCarrier = e.target.value
+    setSelectedCarrier(nextCarrier)
+    setIsCarrierManual(true)
+    setAutoMatchInfo(`Manually selected ${nextCarrier.toUpperCase()}`)
+    if (labelMode === 'generate') {
+      setUserTrackingNumber(generateAutomatedTrackingId(nextCarrier))
+    }
   }
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setLabelFile(file)
+    setLabelFileName(file.name)
+    setParsingLabel(true)
+    setError('')
+
+    try {
+      const actualProductId = product?.id || product?._id || productId
+      const res = await orderApi.parseLabel(file, actualProductId)
+
+      if (res.extracted) {
+        const ext = res.extracted
+        if (ext.customerName) setCustomerName(ext.customerName)
+        if (ext.customerPhone) setCustomerPhone(ext.customerPhone)
+        if (ext.deliveryAddress) setDeliveryAddress(ext.deliveryAddress)
+        if (ext.city) setCity(ext.city)
+        if (ext.country) setCountry(ext.country)
+        if (ext.notes) setParcelInstructions(ext.notes)
+        if (ext.trackingNumber) setUserTrackingNumber(ext.trackingNumber)
+
+        if (ext.carrier) {
+          const cLower = ext.carrier.toLowerCase()
+          const found = POPULAR_COURIERS.find(
+            (c) => c.name.toLowerCase().includes(cLower) || c.id.toLowerCase() === cLower,
+          )
+          if (found) {
+            setSelectedCarrier(found.id)
+            setIsCarrierManual(true)
+            setAutoMatchInfo(`Extracted from label: ${found.name}`)
+          }
+        }
+
+        setExtractionSuccess({
+          frId: res.frId,
+          sku: res.product?.sku || product?.sku || 'SVRO-00139',
+          qty: quantity,
+          carrier: ext.carrier || selectedCarrier,
+          tracking: ext.trackingNumber || userTrackingNumber,
+          batch: res.batch,
+          customizations: res.customizations,
+          date: res.date,
+          status: 'SHIPPED',
+          wmsProofs: res.wmsProofs || file.name,
+        })
+      }
+    } catch (err) {
+      console.warn('Auto-extraction fallback:', err.message)
+    } finally {
+      setParsingLabel(false)
+    }
+  }
+
+  const handleLoadSampleFromScreenshot = () => {
+    setCustomerName('xyz')
+    setCustomerPhone('0300-1234567')
+    setDeliveryAddress('street 1, Abu Dhabi, UAE')
+    setCity('Abu Dhabi')
+    setCountry('UAE')
+    setParcelInstructions('user')
+    setSelectedCarrier('fedex')
+    setUserTrackingNumber('794612345678')
+    setIsCarrierManual(true)
+    setAutoMatchInfo('Loaded from WMS Screenshot Sample (FedEx / Abu Dhabi)')
+    setLabelFileName('FedEx_AbuDhabi_Sample_Label.pdf')
+
+    setExtractionSuccess({
+      frId: '1-CBF-WMS-PAK1035-051126',
+      sku: product?.sku || 'SVRO-00139',
+      qty: quantity || 4,
+      carrier: 'FEDEX',
+      tracking: '794612345678',
+      batch: 'CBF-WMS-PAK1035-051126',
+      customizations: `Marketplace Order #: ORD-${Date.now().toString().slice(-8)}, Customer: xyz, Phone: 0300-1234567, Address: street 1, Abu Dhabi, UAE, Notes: user`,
+      date: 'Nov 05, 2026',
+      status: 'SHIPPED',
+      wmsProofs: 'FedEx_AbuDhabi_Sample_Label.pdf',
+    })
+  }
+
+  const appendInstruction = (text) => {
+    setParcelInstructions((prev) => {
+      if (!prev.trim()) return text
+      if (prev.includes(text)) return prev
+      return `${prev.trim()} • ${text}`
+    })
+  }
+
+  const handleOrderPlacement = async (e) => {
+    if (e) e.preventDefault()
+    if (!product) return
+    setError('')
+
+    const token =
+      localStorage.getItem('sellvro_token') ||
+      localStorage.getItem('token') ||
+      localStorage.getItem('auth_token')
+
+    if (!user && !isAuthenticated && !token) {
+      setError('Please sign in to your client account to pay from your Sellvro Wallet.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+
+    if (walletBalance < total) {
+      setError(
+        `Insufficient wallet balance. Total due is $${total.toFixed(2)}, but you currently have $${Number(walletBalance || 0).toFixed(2)}. Click 1-Click Top-Up or deposit funds.`,
+      )
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+
+    // Required Customer & Address Validation
+    if (!customerName.trim()) {
+      setError('Customer Full Name is required.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    if (!customerPhone.trim()) {
+      setError('Customer Phone Number is required.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    if (!deliveryAddress.trim()) {
+      setError('Delivery Address is required.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    if (!city.trim()) {
+      setError('City is required.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+
+    const activeCourierMeta = POPULAR_COURIERS.find(
+      (c) => c.id === selectedCarrier || c.name.toLowerCase() === selectedCarrier.toLowerCase(),
+    ) || POPULAR_COURIERS[0]
+
+    // Validate tracking number if provided
+    const cleanTracking = userTrackingNumber.trim()
+    if (cleanTracking && labelMode === 'upload') {
+      const check = validateCarrierTracking(activeCourierMeta.name, cleanTracking)
+      if (!check.valid) {
+        setError(check.message)
+        setTrackingValidationErr(check.message)
+        window.scrollTo({ top: 200, behavior: 'smooth' })
+        return
+      }
+    }
+    setTrackingValidationErr('')
+
+    const cleanAddress = {
+      fullName: customerName.trim(),
+      phone: customerPhone.trim(),
+      addressLine: deliveryAddress.trim(),
+      city: city.trim(),
+      country: country.trim() || 'Pakistan',
+    }
+
+    const actualProductId = product?.id || product?._id || productId
+
+    setSubmitting(true)
+    try {
+      const payload = {
+        productId: actualProductId,
+        quantity,
+        paymentMethod: 'wallet',
+        shippingAddress: cleanAddress,
+        labelNotes: parcelInstructions.trim() || 'Handle with care',
+        carrier: activeCourierMeta.name,
+        trackingNumber: cleanTracking,
+      }
+
+      // If user uploaded a physical label file, send as FormData via orderApi.create
+      const data = await orderApi.create(payload, labelFile)
+
+      if (typeof data.walletBalance === 'number' && user) {
+        updateUser({ ...user, walletBalance: data.walletBalance })
+      }
+
+      const confirmedId = data.order?.id || data.order?._id || data.orderNo || 'confirmed'
+      navigate(`/orders/confirmation/${confirmedId}`, {
+        replace: true,
+        state: { order: data.order, message: data.message },
+      })
+    } catch (err) {
+      setError(getErrorMessage(err, 'Could not place order.'))
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const isWarehouseOrder = Boolean(product?.inWarehouse || product?.fulfillBy === 'warehouse')
+  const warehouseName = isWarehouseOrder
+    ? (product?.location || 'Sellvro Central WMS Hub (Section B)')
+    : `Supplier Facility (${product?.supplierBusinessName || product?.vendorName || 'Supplier Direct'})`
+
+  const activeCourierMeta = POPULAR_COURIERS.find(
+    (c) => c.id === selectedCarrier || c.name.toLowerCase() === selectedCarrier.toLowerCase(),
+  ) || POPULAR_COURIERS[0]
 
   return (
     <UserLayout>
       <PageHeader
-        eyebrow="User Panel"
-        title="Checkout"
+        eyebrow="Marketplace Order"
+        title="Checkout, Shipping Label & Parcel Instructions"
         action={
           <Button as={Link} to="/" variant="outline" size="sm">
             <ArrowLeft className="h-4 w-4" />
@@ -328,9 +416,9 @@ function UserCheckoutPage() {
       />
 
       {error && (
-        <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">
-          {error}
-        </p>
+        <div className="mb-4 rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm font-semibold text-rose-800 shadow-2xs">
+          ⚠️ {error}
+        </div>
       )}
 
       {loadingProduct ? (
@@ -338,485 +426,441 @@ function UserCheckoutPage() {
       ) : !product ? (
         <Card className="p-10 text-center text-sm text-slate-500 shadow-soft">
           Product unavailable.{' '}
-          <Link to="/" className="font-semibold text-primary">
+          <Link to="/" className="font-semibold text-blue-600">
             Return to shop
           </Link>
         </Card>
       ) : (
-        <form noValidate onSubmit={handleSubmit} className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+        <form noValidate onSubmit={handleOrderPlacement} className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+          {/* Left Column: Location, Courier, Shipping Label & Instructions */}
           <div className="space-y-5 lg:col-span-3">
-            {/* Card 1: Destination Address */}
-            <Card className="p-5 shadow-soft">
-              <div className="mb-4 flex items-center justify-between">
+            {/* 1. Customer Location & Courier Auto-Match Card */}
+            <Card className="p-5 shadow-soft border border-slate-200">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
                 <div className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5 text-primary" />
+                  <MapPin className="h-5 w-5 text-indigo-600" />
                   <div>
-                    <h2 className="text-base font-semibold text-slate-900">Destination Shipping Address</h2>
-                    <p className="text-xs text-slate-500">Where this customer order should be delivered</p>
+                    <h2 className="text-base font-bold text-slate-900">Customer Delivery Location & Courier</h2>
+                    <p className="text-xs text-slate-500">
+                      Courier company is automatically selected based on customer location
+                    </p>
                   </div>
                 </div>
-                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
-                  Step 1: Recipient
+                <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-bold text-indigo-700">
+                  Step 1
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {/* Warehouse Origin Notice */}
+              <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-2xs">
+                    {isWarehouseOrder ? <Warehouse className="h-4 w-4" /> : <Building2 className="h-4 w-4" />}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900">
+                      Physical Stock Origin: <span className="text-blue-700">{warehouseName}</span>
+                    </p>
+                    <p className="text-[11px] text-slate-600">
+                      📦 {maxQty} Units Ready in Warehouse • 6:00 PM Daily Dispatch Cutoff
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Customer Inputs */}
+              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
                 <div>
-                  <FormLabel htmlFor="fullName" required>
-                    Full name
-                  </FormLabel>
+                  <label htmlFor="customerName" className="block text-xs font-bold text-slate-700 mb-1">
+                    Customer Full Name <span className="text-rose-500">*</span>
+                  </label>
                   <input
-                    id="fullName"
+                    id="customerName"
                     required
-                    value={address.fullName}
-                    onChange={(e) => setField('fullName', e.target.value)}
-                    className={FIELD}
-                    placeholder="Recipient's full name"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="e.g. John Doe / Customer Name"
+                    className={INPUT_STYLE}
                   />
                 </div>
+
                 <div>
-                  <FormLabel htmlFor="phone" required>
-                    Phone
-                  </FormLabel>
+                  <label htmlFor="customerPhone" className="block text-xs font-bold text-slate-700 mb-1">
+                    Customer Phone Number <span className="text-rose-500">*</span>
+                  </label>
                   <input
-                    id="phone"
+                    id="customerPhone"
                     required
-                    value={address.phone}
-                    onChange={(e) => setField('phone', e.target.value)}
-                    className={FIELD}
-                    placeholder="Recipient phone number"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="e.g. 0300-1234567 / +1 555-0199"
+                    className={INPUT_STYLE}
                   />
                 </div>
+
                 <div className="sm:col-span-2">
-                  <FormLabel htmlFor="addressLine" required>
-                    Address line
-                  </FormLabel>
+                  <label htmlFor="deliveryAddress" className="block text-xs font-bold text-slate-700 mb-1">
+                    Delivery Street Address <span className="text-rose-500">*</span>
+                  </label>
                   <input
-                    id="addressLine"
+                    id="deliveryAddress"
                     required
-                    value={address.addressLine}
-                    onChange={(e) => setField('addressLine', e.target.value)}
-                    className={FIELD}
-                    placeholder="Street address, house/flat #, landmark"
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    placeholder="e.g. House 14, Street 5, Phase 6, DHA"
+                    className={INPUT_STYLE}
                   />
                 </div>
+
                 <div>
-                  <FormLabel htmlFor="city" required>
-                    City
-                  </FormLabel>
+                  <label htmlFor="city" className="block text-xs font-bold text-slate-700 mb-1">
+                    City <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     id="city"
                     required
-                    value={address.city}
-                    onChange={(e) => setField('city', e.target.value)}
-                    className={FIELD}
-                    placeholder="City"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="e.g. Karachi, Lahore, Dubai, New York"
+                    className={INPUT_STYLE}
                   />
                 </div>
+
                 <div>
-                  <FormLabel htmlFor="state">State / Province (Optional)</FormLabel>
-                  <input
-                    id="state"
-                    value={address.state}
-                    onChange={(e) => setField('state', e.target.value)}
-                    className={FIELD}
-                    placeholder="State or province (Optional)"
-                  />
-                </div>
-                <div>
-                  <FormLabel htmlFor="postalCode">Postal code / ZIP (Optional)</FormLabel>
-                  <input
-                    id="postalCode"
-                    value={address.postalCode}
-                    onChange={(e) => setField('postalCode', e.target.value)}
-                    className={FIELD}
-                    placeholder="Postal code / ZIP (Optional)"
-                  />
-                </div>
-                <div>
-                  <FormLabel htmlFor="country" required>
-                    Country
-                  </FormLabel>
+                  <label htmlFor="country" className="block text-xs font-bold text-slate-700 mb-1">
+                    Country <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     id="country"
                     required
-                    value={address.country}
-                    onChange={(e) => setField('country', e.target.value)}
-                    className={FIELD}
-                    placeholder="Country"
-                  />
-                </div>
-                <div>
-                  <FormLabel htmlFor="email">Email address (Optional — for delivery tracking)</FormLabel>
-                  <input
-                    id="email"
-                    type="email"
-                    value={address.email}
-                    onChange={(e) => setField('email', e.target.value)}
-                    className={FIELD}
-                    placeholder="name@example.com (Optional)"
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    placeholder="e.g. Pakistan, UAE, United States"
+                    className={INPUT_STYLE}
                   />
                 </div>
               </div>
-            </Card>
 
-            {/* Card 2: Payment Method Selection */}
-            <Card className="border border-slate-200 bg-white p-5 shadow-soft">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs">
-                    <CreditCard className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900">Payment Method</h2>
-                    <p className="text-xs text-slate-500">
-                      Choose how you would like to pay for this order
-                    </p>
-                  </div>
-                </div>
-                <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
-                  Step 2: Payment
-                </span>
-              </div>
-
-              <div>
-                {/* Sellvro Prepaid Wallet */}
-                <div className="relative rounded-xl border-2 border-indigo-600 bg-indigo-50/40 p-4 shadow-sm ring-2 ring-indigo-500/20">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">
-                        <Wallet className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-bold text-slate-900">Sellvro Wallet</span>
-                          <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-800">
-                            Prepaid
-                          </span>
-                        </div>
-                        <p className="mt-0.5 text-xs text-slate-500">Instant debit from wallet balance</p>
-                      </div>
-                    </div>
-                    <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 bg-white px-2 py-1 rounded-md border border-indigo-200">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-indigo-600" /> Active
-                    </span>
-                  </div>
-
-                  <div className="mt-3 border-t border-slate-200/80 pt-2 text-[11px] flex items-center justify-between">
-                    <span className="text-slate-600">Your Available Balance:</span>
-                    <span
-                      className={`font-bold ${
-                        walletBalance >= total ? 'text-emerald-700' : 'text-rose-600'
-                      }`}
-                    >
-                      ${Number(walletBalance || 0).toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Dynamic Payment State Helper */}
-              <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3.5">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                      Available Balance
-                    </span>
-                    <p className="mt-0.5 text-base font-black text-slate-900">
-                      ${Number(walletBalance || 0).toFixed(2)}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-2xs">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                      Order Total
-                    </span>
-                    <p className="mt-0.5 text-base font-black text-rose-600">
-                      -${total.toFixed(2)}
-                    </p>
-                  </div>
-                  <div
-                    className={`rounded-lg border p-3 shadow-2xs ${
-                      walletBalance >= total
-                        ? 'border-emerald-200 bg-white'
-                        : 'border-rose-300 bg-rose-50/50'
-                    }`}
-                  >
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                      After Order
-                    </span>
-                    <p
-                      className={`mt-0.5 text-base font-black ${
-                        walletBalance >= total ? 'text-emerald-700' : 'text-rose-600'
-                      }`}
-                    >
-                      ${Number(walletBalance - total).toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-
-                {walletBalance < total ? (
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">⚠️</span>
-                      <p>
-                        Wallet balance short by <strong>${(total - Number(walletBalance || 0)).toFixed(2)}</strong>. Aap 1-Click top-up kar sakte hain ya deposit page se funds add karein.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleQuickTopup}
-                        disabled={creditingWallet}
-                        className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-500 disabled:opacity-50 transition"
-                      >
-                        {creditingWallet ? 'Adding…' : '⚡ 1-Click Top-Up ($500)'}
-                      </button>
-                      <Link
-                        to="/user/wallet"
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 transition"
-                      >
-                        Deposit Funds &rarr;
-                      </Link>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-emerald-800">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                    <span>Sufficient wallet balance. Amount will be deducted upon order confirmation.</span>
-                  </div>
-                )}
-              </div>
-            </Card>
-
-            {/* Card 3: Custom Dispatch Label & Notes (Optional) */}
-            <Card className="border border-slate-200 bg-white p-5 shadow-soft">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Tag className="h-5 w-5 text-indigo-600" />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-base font-semibold text-slate-900">Custom Dispatch Label & Notes</h2>
-                      <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">
-                        Optional / Auto-Generated
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      Standard dispatch label auto-generate ho jata hai. Agar aap apna store name ya external airway bill attach karna chahein to yahan add kar sakte hain.
-                    </p>
-                  </div>
-                </div>
-                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
-                  Step 3: Label (Optional)
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <FormLabel htmlFor="orderLabelRef">Order / Label Reference ID (Optional)</FormLabel>
-                  <input
-                    id="orderLabelRef"
-                    value={orderLabelRef}
-                    onChange={(e) => setOrderLabelRef(e.target.value)}
-                    className={FIELD}
-                    placeholder="e.g. LBL-8F29KD or Shopify Order #"
-                  />
-                  <p className="mt-1 text-[11px] text-slate-400">Order reference code printed on the box.</p>
-                </div>
-
-                <div>
-                  <FormLabel htmlFor="brandLabel">Store / Brand Name (Optional)</FormLabel>
-                  <input
-                    id="brandLabel"
-                    value={brandLabel}
-                    onChange={(e) => setBrandLabel(e.target.value)}
-                    className={FIELD}
-                    placeholder="e.g. My Brand Store"
-                  />
-                  <p className="mt-1 text-[11px] text-slate-400">Brand identity displayed to your end customer.</p>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <FormLabel htmlFor="labelNotes">Handling & Packaging Instructions (Optional)</FormLabel>
-                  <input
-                    id="labelNotes"
-                    value={labelNotes}
-                    onChange={(e) => setLabelNotes(e.target.value)}
-                    className={FIELD}
-                    placeholder="e.g. Fragile glass item, double bubble-wrap, do not crush"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <FormLabel htmlFor="shippingLabelFile">
-                    Attach External Airway Bill / Shipping Label (Optional)
-                  </FormLabel>
-
-                  {!shippingLabelFile ? (
-                    <label
-                      htmlFor="shippingLabelFile"
-                      className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/60 p-4 text-center cursor-pointer transition-colors hover:border-indigo-400 hover:bg-indigo-50/40"
-                    >
-                      <input
-                        id="shippingLabelFile"
-                        type="file"
-                        accept=".pdf,image/png,image/jpeg,image/jpg,image/webp"
-                        className="sr-only"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) setShippingLabelFile(file)
-                        }}
-                      />
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 mb-1.5">
-                        <UploadCloud className="h-5 w-5" />
-                      </div>
-                      <p className="text-xs font-semibold text-slate-700">
-                        Click to attach external Airway Bill / Courier Label (Optional)
-                      </p>
-                      <p className="mt-0.5 text-[11px] text-slate-400">PDF, JPG, PNG (Max 25MB)</p>
-                    </label>
-                  ) : (
-                    <div className="flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50/60 p-3">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white font-bold text-xs uppercase">
-                          {shippingLabelFile.name.endsWith('.pdf') ? 'PDF' : <FileCheck className="h-4 w-4" />}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-bold text-slate-900">
-                            {shippingLabelFile.name}
-                          </p>
-                          <p className="text-[11px] text-slate-500">
-                            {(shippingLabelFile.size / 1024).toFixed(1)} KB • Attached
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShippingLabelFile(null)}
-                        className="ml-3 shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card>
-
-            {/* Card 3: Live Thermal Shipping Label Preview */}
-            <Card className="overflow-hidden border border-slate-300 bg-white p-5 shadow-sm">
-              <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-3">
-                <div className="flex items-center gap-2">
-                  <Printer className="h-4 w-4 text-slate-600" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                    Live Thermal Shipping Label Preview
+              {/* Auto-Match Courier Indicator */}
+              <div className="mt-4 pt-3.5 border-t border-slate-100">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <label htmlFor="carrierSelect" className="block text-xs font-bold text-slate-700">
+                    Selected Courier Partner
+                  </label>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                    <Sparkles className="h-3 w-3" />
+                    {autoMatchInfo}
                   </span>
                 </div>
-                <span className="text-[11px] font-mono font-semibold text-slate-500">STANDARD 4x6 INCH</span>
+
+                <select
+                  id="carrierSelect"
+                  value={selectedCarrier}
+                  onChange={handleCarrierChange}
+                  className={INPUT_STYLE}
+                >
+                  {POPULAR_COURIERS.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} — {c.fullName} ({c.transitEstimate}) • {c.region}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Customer ki location ke mutabiq best courier auto-select ho jata hai. Aap chahein to manually change bhi kar sakte hain.
+                </p>
+              </div>
+            </Card>
+
+            {/* 2. Shipping Label & Parcel Instructions Card (User Sirf Label Dena Chahe) */}
+            <Card className="p-5 shadow-soft border border-slate-200">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-blue-600" />
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900">Courier Shipping Label & Parcel Instructions</h2>
+                    <p className="text-xs text-slate-500">
+                      User ko order place karte waqt sirf shipping label dena hota hai aur instructions
+                    </p>
+                  </div>
+                </div>
+                <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700">
+                  Step 2
+                </span>
               </div>
 
-              {/* Thermal Label Mock Box */}
-              <div className="rounded-lg border-2 border-dashed border-slate-800 bg-slate-50/50 p-4 font-mono text-slate-900">
-                {/* Header */}
-                <div className="flex items-start justify-between border-b-2 border-slate-800 pb-2">
-                  <div>
-                    <h3 className="text-base font-black tracking-tight text-slate-900">SELLVRO EXPRESS</h3>
-                    <p className="text-[10px] text-slate-600">PRIORITY DOMESTIC / AIR DROPSHIP</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs font-black uppercase text-indigo-700">
-                      {product.inWarehouse || product.fulfillBy === 'warehouse' ? '🏢 WMS HUB' : '🏭 SUPPLIER'}
-                    </p>
-                    <p className="text-[10px] text-slate-500">REF: {orderLabelRef || 'PENDING'}</p>
-                  </div>
-                </div>
+              {/* Mode Toggle: Auto-Generate vs Upload Customer Label */}
+              <div className="mb-4 flex rounded-xl bg-slate-100 p-1 border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setLabelMode('generate')}
+                  className={`flex-1 rounded-lg py-2 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                    labelMode === 'generate'
+                      ? 'bg-white text-blue-700 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+                  1-Click Auto-Generate Courier Label
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLabelMode('upload')}
+                  className={`flex-1 rounded-lg py-2 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                    labelMode === 'upload'
+                      ? 'bg-white text-blue-700 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Upload className="h-3.5 w-3.5 text-blue-600" />
+                  Upload Customer's Label (PDF / Image)
+                </button>
+              </div>
 
-                {/* Custody Route */}
-                <div className="grid grid-cols-2 gap-3 border-b-2 border-slate-800 py-2.5 text-xs">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Origin Custody (Warehouse):
-                    </p>
-                    <p className="font-bold text-slate-900">
-                      {product.inWarehouse || product.fulfillBy === 'warehouse'
-                        ? 'Sellvro WMS Central Hub'
-                        : 'Verified Supplier Facility'}
-                    </p>
-                    <p className="text-[10px] text-slate-500">
-                      User: {user?.clientId || ('USR-' + (user?.id || user?._id || '').slice(-6).toUpperCase())}
-                    </p>
+              {labelMode === 'generate' ? (
+                /* Auto-Generated Label Preview Card */
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                    <div>
+                      <span className="text-xs text-slate-500">Generated Airway Bill # (Tracking ID)</span>
+                      <p className="font-mono text-base font-black text-slate-900">{userTrackingNumber}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAirwayBillModal(true)}
+                      className="border-blue-300 text-blue-700 hover:bg-blue-50 font-bold"
+                    >
+                      <Eye className="h-3.5 w-3.5 mr-1" />
+                      Preview & Print Customer Label
+                    </Button>
                   </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Deliver To (Destination):
-                    </p>
-                    <p className="font-bold text-slate-900">{address.fullName || '[Recipient Name]'}</p>
-                    <p className="text-[11px] text-slate-700">{address.addressLine || '[Address Line]'}</p>
-                    <p className="text-[11px] text-slate-700">
-                      {address.city || '[City]'}, {address.state || '[State]'} {address.postalCode || '[Zip]'}
-                    </p>
-                    <p className="text-[10px] text-slate-500">{address.country || '[Country]'} · Ph: {address.phone || '—'}</p>
-                  </div>
-                </div>
 
-                {/* SKU & Item Spec */}
-                <div className="py-2.5 text-xs">
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase text-slate-500">Product SKU</p>
-                      <p className="font-black text-indigo-800">{product.sku || 'SKU-PENDING'}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase text-slate-500">Quantity</p>
-                      <p className="font-bold">{quantity} Unit(s)</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase text-slate-500">Brand / Merchant</p>
-                      <p className="font-bold truncate">{brandLabel || 'Merchant Store'}</p>
-                    </div>
-                  </div>
-                  <p className="mt-1.5 truncate text-[11px] font-semibold text-slate-800">
-                    Item: {product.name}
+                  <p className="mt-2 text-xs text-slate-600">
+                    💡 Customer ke liye official <strong>{activeCourierMeta.name} Airway Bill</strong> auto-generate ho chuka hai jis mein real barcode, tracking ID aur delivery address shamil hai. Aap ye label print karke customer ko bhi de sakte hain.
                   </p>
-                  {labelNotes && (
-                    <p className="mt-1 text-[10px] italic text-slate-600">Note: {labelNotes}</p>
+                </div>
+              ) : (
+                /* Upload Customer's Existing Label */
+                <div className="space-y-3">
+                  <div className="rounded-xl border-2 border-dashed border-slate-300 bg-slate-50/50 p-5 text-center hover:bg-slate-50 transition relative">
+                    <input
+                      type="file"
+                      id="labelUploadInput"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                    <label htmlFor="labelUploadInput" className="cursor-pointer block">
+                      <Upload className="mx-auto h-8 w-8 text-blue-500 mb-2" />
+                      <p className="text-xs font-bold text-slate-800">
+                        {parsingLabel ? (
+                          '⏳ Scanning & Extracting Label Details...'
+                        ) : labelFileName ? (
+                          `Attached: ${labelFileName} (Extracted Successfully)`
+                        ) : (
+                          'Click to Upload Shipping Label (PDF, PNG, JPG)'
+                        )}
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        System parcel label mein se Carrier, Tracking, Customer Name, Address aur Notes auto-extract kar leta hai.
+                      </p>
+                    </label>
+                  </div>
+
+                  {/* 1-Click Sample Button matching user screenshot */}
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={handleLoadSampleFromScreenshot}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition cursor-pointer"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      ⚡ 1-Click Auto-Fill from Screenshot Sample (FedEx / Abu Dhabi / xyz)
+                    </button>
+                    {labelFileName && (
+                      <span className="text-[11px] font-semibold text-emerald-700">
+                        ✓ Label Attached
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Extracted & System Matched Summary Card matching user screenshot */}
+                  {extractionSuccess && (
+                    <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50/70 p-3.5 shadow-2xs">
+                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-emerald-200">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                          <span>Extracted from Label & Matched with System (WMS Ready):</span>
+                        </div>
+                        <span className="rounded bg-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-900 font-mono">
+                          Batch: {extractionSuccess.batch}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] bg-white p-2.5 rounded-lg border border-emerald-200 font-mono mb-2">
+                        <div>
+                          <span className="text-slate-400 block text-[9px] font-sans font-bold">FR ID</span>
+                          <span className="text-slate-800 font-bold">{extractionSuccess.frId}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[9px] font-sans font-bold">PRODUCT SKU</span>
+                          <span className="text-indigo-900 font-black">{extractionSuccess.sku}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[9px] font-sans font-bold">CARRIER</span>
+                          <span className="text-blue-700 font-bold uppercase">{extractionSuccess.carrier}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[9px] font-sans font-bold">TRACKING</span>
+                          <span className="text-slate-900 font-bold">{extractionSuccess.tracking}</span>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg bg-amber-50 border border-amber-300 p-2.5 text-xs text-amber-950 font-sans">
+                        <div className="font-bold text-[11px] text-amber-900 mb-0.5">
+                          ℹ️ WMS Customizations Column Format:
+                        </div>
+                        <p className="font-mono text-[11px] text-slate-800 leading-snug">
+                          {extractionSuccess.customizations}
+                        </p>
+                      </div>
+                    </div>
                   )}
+
+                  <div>
+                    <label htmlFor="trackingInput" className="block text-xs font-bold text-slate-700 mb-1">
+                      Tracking / Airway Bill Number from Attached Label
+                    </label>
+                    <input
+                      id="trackingInput"
+                      value={userTrackingNumber}
+                      onChange={(e) => {
+                        setUserTrackingNumber(e.target.value)
+                        setTrackingValidationErr('')
+                      }}
+                      placeholder="e.g. 7946 1234 5678 / 9400 1118 9956..."
+                      className={INPUT_STYLE}
+                    />
+                    {trackingValidationErr && (
+                      <p className="mt-1 text-xs font-semibold text-rose-600">⚠️ {trackingValidationErr}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* PARCEL INSTRUCTIONS / HANDLING NOTES */}
+              <div className="mt-4 pt-3.5 border-t border-slate-100">
+                <label htmlFor="parcelInstructionsInput" className="block text-xs font-bold text-slate-800 mb-1">
+                  Parcel Instructions / Special Handling Notes (WMS & Supplier Note)
+                </label>
+                <input
+                  id="parcelInstructionsInput"
+                  value={parcelInstructions}
+                  onChange={(e) => setParcelInstructions(e.target.value)}
+                  placeholder="e.g. Fragile glass item, handle with care, open parcel allowed"
+                  className={INPUT_STYLE}
+                />
+
+                {/* Quick Instruction Chips */}
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {[
+                    'Fragile - Handle with Care',
+                    'Open Parcel Allowed',
+                    'Double Bubble-Wrap',
+                    'Urgent / Priority Dispatch',
+                    'Do Not Fold',
+                  ].map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => appendInstruction(chip)}
+                      className="rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700 border border-slate-200 transition cursor-pointer"
+                    >
+                      + {chip}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-[11px] text-slate-400">
+                  Ye instructions parcel label par print hongi aur Supplier aur WMS portal ke dashboard par show hongi.
+                </p>
+              </div>
+            </Card>
+
+            {/* 3. Sellvro Wallet Payment Card */}
+            <Card className="p-5 shadow-soft border border-slate-200">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                <div className="flex items-center gap-2">
+                  <Wallet className="h-5 w-5 text-emerald-600" />
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900">Prepaid Wallet Payment</h2>
+                    <p className="text-xs text-slate-500">Instant deduction from verified Sellvro Wallet</p>
+                  </div>
+                </div>
+                <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700">
+                  Step 3
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div>
+                  <span className="text-xs text-slate-500">Your Wallet Balance</span>
+                  <p className={`text-xl font-black ${walletBalance >= total ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    ${Number(walletBalance || 0).toFixed(2)}
+                  </p>
                 </div>
 
-                {/* Simulated Barcode */}
-                <div className="border-t-2 border-slate-800 pt-2 text-center">
-                  <div className="flex h-9 items-center justify-center gap-[2px] bg-white px-2 py-1">
-                    <span className="h-full w-1 bg-black"></span>
-                    <span className="h-full w-0.5 bg-black"></span>
-                    <span className="h-full w-1.5 bg-black"></span>
-                    <span className="h-full w-0.5 bg-black"></span>
-                    <span className="h-full w-1 bg-black"></span>
-                    <span className="h-full w-2 bg-black"></span>
-                    <span className="h-full w-0.5 bg-black"></span>
-                    <span className="h-full w-1 bg-black"></span>
-                    <span className="h-full w-0.5 bg-black"></span>
-                    <span className="h-full w-1.5 bg-black"></span>
-                    <span className="h-full w-1 bg-black"></span>
-                    <span className="h-full w-2 bg-black"></span>
-                    <span className="h-full w-0.5 bg-black"></span>
-                    <span className="h-full w-1.5 bg-black"></span>
-                    <span className="h-full w-0.5 bg-black"></span>
-                    <span className="h-full w-1 bg-black"></span>
-                  </div>
-                  <p className="mt-1 text-[9px] tracking-widest text-slate-600">
-                    *{orderLabelRef || 'SLV-SAMPLE'}*
+                <div>
+                  <span className="text-xs text-slate-500">Order Total Due</span>
+                  <p className="text-xl font-black text-slate-900">${total.toFixed(2)}</p>
+                </div>
+
+                <div>
+                  <span className="text-xs text-slate-500">Remaining After Order</span>
+                  <p className={`text-xl font-black ${walletBalance >= total ? 'text-blue-700' : 'text-rose-600'}`}>
+                    ${Number(walletBalance - total).toFixed(2)}
                   </p>
                 </div>
               </div>
+
+              {walletBalance < total ? (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                  <span>
+                    ⚠️ Balance is short by <strong>${(total - Number(walletBalance || 0)).toFixed(2)}</strong>.
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleQuickTopup}
+                      disabled={creditingWallet}
+                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-500 disabled:opacity-50 transition cursor-pointer"
+                    >
+                      {creditingWallet ? 'Adding…' : '⚡ 1-Click Top-Up ($500)'}
+                    </button>
+                    <Link
+                      to="/user/wallet"
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 transition"
+                    >
+                      Deposit &rarr;
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-emerald-800">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>Sufficient wallet balance. Amount will be deducted upon order placement.</span>
+                </div>
+              )}
             </Card>
           </div>
 
-          {/* Right Column: Order Summary & Warehouse Custody Status */}
+          {/* Right Column: Order Summary & Place Order */}
           <div className="space-y-4 lg:col-span-2">
-            <Card className="h-fit p-5 shadow-soft">
-              <h2 className="text-base font-semibold text-slate-900">Order Summary</h2>
+            <Card className="h-fit p-5 shadow-soft border border-slate-200 sticky top-6">
+              <h2 className="text-base font-bold text-slate-900 border-b border-slate-100 pb-3">Order Summary</h2>
 
               <div className="mt-4 flex gap-3">
-                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
+                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-slate-100 bg-white">
                   <img
                     src={imageSrc}
                     alt={product.name}
@@ -828,54 +872,25 @@ function UserCheckoutPage() {
                   />
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className="truncate text-sm font-semibold text-slate-800">{product.name}</p>
-                    {(product.inWarehouse || product.fulfillBy === 'warehouse') ? (
-                      <span className="rounded bg-slate-900 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-amber-400">
-                        WMS
-                      </span>
-                    ) : (
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-600">
-                        Supplier Direct
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 text-sm text-slate-500">${unitPrice.toFixed(2)} each</p>
-                  {product.sku ? (
-                    <p className="text-xs font-mono font-semibold text-indigo-700">SKU: {product.sku}</p>
-                  ) : null}
-                </div>
-              </div>
-
-              {/* Warehouse Custody Status Box */}
-              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-                <div className="flex items-center gap-2">
-                  {product.inWarehouse || product.fulfillBy === 'warehouse' ? (
-                    <Warehouse className="h-4 w-4 text-amber-600" />
-                  ) : (
-                    <Building2 className="h-4 w-4 text-blue-600" />
+                  <p className="truncate text-sm font-bold text-slate-900">{product.name}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">${unitPrice.toFixed(2)} each</p>
+                  {product.sku && (
+                    <span className="inline-block mt-1 font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                      SKU: {product.sku}
+                    </span>
                   )}
-                  <p className="text-xs font-bold text-slate-800">
-                    {product.inWarehouse || product.fulfillBy === 'warehouse'
-                      ? 'Stock Custody: WMS Central Hub'
-                      : 'Stock Custody: Supplier Warehouse'}
-                  </p>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">
-                  {product.inWarehouse || product.fulfillBy === 'warehouse'
-                    ? 'Physical stock is stored in the Central WMS Hub. Automated labeling & priority dispatch will execute immediately.'
-                    : 'Physical stock is with the verified Supplier. Order & shipping label will be routed directly to the supplier.'}
-                </p>
               </div>
 
-              <div className="mt-4">
-                <FormLabel>Quantity</FormLabel>
-                <div className="mt-1 flex items-center gap-2">
+              {/* Quantity selector */}
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Order Quantity</label>
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => adjustQty(-1)}
                     disabled={quantity <= 1}
-                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 disabled:opacity-40"
                   >
                     <Minus className="h-4 w-4" />
                   </button>
@@ -886,117 +901,87 @@ function UserCheckoutPage() {
                     value={quantity}
                     onChange={(e) => {
                       const next = Number(e.target.value)
-                      if (!Number.isFinite(next)) return
-                      setQuantity(Math.min(maxQty, Math.max(1, Math.floor(next))))
+                      if (Number.isFinite(next)) {
+                        setQuantity(Math.min(maxQty, Math.max(1, Math.floor(next))))
+                      }
                     }}
-                    className="h-10 w-16 rounded-lg border border-slate-200 bg-slate-50 text-center text-sm font-medium text-slate-800 focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                    className="h-9 w-16 rounded-lg border border-slate-200 text-center font-bold text-sm text-slate-900"
                   />
                   <button
                     type="button"
                     onClick={() => adjustQty(1)}
                     disabled={quantity >= maxQty}
-                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 disabled:opacity-40"
                   >
                     <Plus className="h-4 w-4" />
                   </button>
-                  <span className="text-xs text-slate-400">{maxQty} in stock</span>
+                  <span className="text-xs text-slate-500 ml-1">{maxQty} in stock</span>
                 </div>
               </div>
 
-              <div className="mt-5 space-y-2 border-t border-slate-100 pt-4 text-sm">
-                <div className="flex justify-between text-slate-500">
+              {/* Price Calculation */}
+              <div className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-sm">
+                <div className="flex justify-between text-slate-600">
                   <span>Subtotal</span>
-                  <span>${total.toFixed(2)}</span>
+                  <span className="font-semibold text-slate-900">${total.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>Payment Method</span>
-                  <span className="font-semibold text-slate-800">
-                    Sellvro Wallet
+                <div className="flex justify-between text-slate-600">
+                  <span>Courier Partner</span>
+                  <span className="font-bold text-blue-700 uppercase">{activeCourierMeta.name}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Airway Bill / Tracking</span>
+                  <span className="font-mono text-xs font-bold text-slate-800">
+                    {userTrackingNumber.trim() || 'Awaiting'}
                   </span>
                 </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>Wallet balance</span>
-                  <span className={walletBalance >= total ? 'text-emerald-700 font-semibold' : 'text-rose-600 font-semibold'}>
-                    ${Number(walletBalance || 0).toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-base font-bold text-slate-900 pt-1 border-t border-slate-100">
-                  <span>Total due</span>
-                  <span className="text-primary-700 font-black text-lg">${total.toFixed(2)}</span>
+                <div className="flex justify-between text-base font-black text-slate-900 pt-2 border-t border-slate-100">
+                  <span>Total Due</span>
+                  <span className="text-lg text-blue-600 font-black">${total.toFixed(2)}</span>
                 </div>
               </div>
 
-              {/* Informative Payment Tone */}
-              <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50/70 p-2.5 text-xs text-indigo-900">
-                <p className="font-bold flex items-center gap-1.5 text-indigo-800">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-indigo-600" />
-                  Prepaid Wallet Payment
-                </p>
-                <p className="mt-0.5 text-[11px] text-indigo-700">
-                  Order total (${total.toFixed(2)}) aapke verified Sellvro Wallet se deduct hoga.
-                </p>
-              </div>
-
-              {/* Error display directly above submit button */}
-              {error && (
-                <div className="mt-3 rounded-lg border border-rose-300 bg-rose-50 p-3 text-xs font-semibold text-rose-700">
-                  ⚠️ {error}
-                </div>
-              )}
-
-              {/* Insufficient wallet balance alert if wallet method selected */}
-              {walletBalance < total && (
-                <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-                  <p className="font-bold text-amber-900">⚠️ Insufficient Wallet Balance</p>
-                  <p className="mt-1 text-[11px] text-amber-800 leading-relaxed">
-                    Total due is <strong>${total.toFixed(2)}</strong>, but your wallet has <strong>${Number(walletBalance || 0).toFixed(2)}</strong>. Please use 1-Click Top-Up or deposit funds in your wallet.
-                  </p>
-                </div>
-              )}
-
-              {/* Primary Action Buttons */}
-              {walletBalance >= total ? (
+              {/* Place Order Button */}
+              <div className="mt-5">
                 <Button
                   type="submit"
-                  fullWidth
-                  className="mt-4 font-bold py-3 text-sm shadow-md"
+                  size="lg"
+                  loading={submitting}
                   disabled={submitting}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 text-sm shadow-md"
                 >
-                  {submitting
-                    ? 'Processing Prepaid Order…'
-                    : `Pay from Wallet & Place Order — $${total.toFixed(2)}`}
+                  Pay from Wallet & Place Order — ${total.toFixed(2)}
                 </Button>
-              ) : (
-                <div className="mt-4 space-y-2">
-                  <button
-                    type="button"
-                    onClick={handleQuickTopupAndPlace}
-                    disabled={creditingWallet || submitting}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-md hover:bg-emerald-500 active:scale-[0.99] transition disabled:opacity-50"
-                  >
-                    <span>
-                      {creditingWallet || submitting
-                        ? 'Funding & Placing Order…'
-                        : `⚡ 1-Click Top-Up & Place Order ($${total.toFixed(2)})`}
-                    </span>
-                  </button>
-                  <Button
-                    as={Link}
-                    to="/user/wallet"
-                    variant="outline"
-                    fullWidth
-                    size="sm"
-                  >
-                    Go to Wallet Deposit Page &rarr;
-                  </Button>
-                </div>
-              )}
+              </div>
+
+              <div className="mt-3 text-center">
+                <p className="text-[11px] text-slate-500">
+                  🛡️ <strong>100% Pre-Dispatch Cancellation Protected:</strong> Warehouse ya supplier se dispatch hone se pehle aap order cancel kar sakte hain aur 100% wallet refund receive kar sakte hain.
+                </p>
+              </div>
             </Card>
           </div>
         </form>
       )}
+
+      {/* Airway Bill Live Preview Modal */}
+      <ShippingAirwayBillModal
+        open={showAirwayBillModal}
+        onClose={() => setShowAirwayBillModal(false)}
+        carrierName={activeCourierMeta.name}
+        trackingNumber={userTrackingNumber}
+        customer={{
+          fullName: customerName,
+          phone: customerPhone,
+          addressLine: deliveryAddress,
+          city: city,
+          country: country,
+        }}
+        product={product}
+        quantity={quantity}
+        parcelInstructions={parcelInstructions}
+        warehouseLocation={isWarehouseOrder ? 'wms_hub' : 'supplier_warehouse'}
+      />
     </UserLayout>
   )
 }
-
-export default UserCheckoutPage

@@ -18,6 +18,7 @@ import MarketplaceDeals from '../components/marketplace/MarketplaceDeals.jsx'
 import MarketplaceTrending from '../components/marketplace/MarketplaceTrending.jsx'
 import MarketplaceDarkBanner from '../components/marketplace/MarketplaceDarkBanner.jsx'
 import MarketplaceFooter from '../components/marketplace/MarketplaceFooter.jsx'
+import MarketplaceCategoryView from '../components/marketplace/MarketplaceCategoryView.jsx'
 import { productApi, categoryApi, mediaUrl } from '../lib/api.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { getDashboardPathForUser } from '../lib/authRedirect.js'
@@ -38,16 +39,6 @@ function LandingPage() {
     }
   }, [searchParams])
 
-  // Supplier can NEVER access the landing page with their account
-  if (user?.role === 'supplier') {
-    return <Navigate to="/supplier/dashboard" replace />
-  }
-
-  // Admin cannot access the landing page by default with their email,
-  // UNLESS visiting via the Admin Panel option
-  if (user?.role === 'admin' && !isAdminPreview) {
-    return <Navigate to="/admin/dashboard" replace />
-  }
   const searchQuery = searchParams.get('q') || ''
   const categoryFromUrl = searchParams.get('category') || 'All Categories'
   const subcategoryFromUrl = searchParams.get('sub') || ''
@@ -123,6 +114,45 @@ function LandingPage() {
     }
   }, [])
 
+  // Supplier can NEVER access the landing page with their account
+  if (user?.role === 'supplier') {
+    return <Navigate to="/supplier/dashboard" replace />
+  }
+
+  // Admin cannot access the landing page by default with their email,
+  // UNLESS visiting via the Admin Panel option
+  if (user?.role === 'admin' && !isAdminPreview) {
+    return <Navigate to="/admin/dashboard" replace />
+  }
+
+
+  const hasActiveFilter = Boolean(
+    (activeCategory && activeCategory !== 'All Categories') ||
+    searchQuery?.trim() ||
+    activeSubcategory?.trim() ||
+    searchParams.get('sku') ||
+    searchParams.get('minPrice') ||
+    searchParams.get('maxPrice') ||
+    searchParams.get('warehouse') === 'true'
+  )
+
+
+  const handleApplyPriceFilter = (min, max) => {
+    const params = new URLSearchParams(searchParams)
+    if (min) params.set('minPrice', min)
+    else params.delete('minPrice')
+    if (max) params.set('maxPrice', max)
+    else params.delete('maxPrice')
+    setSearchParams(params)
+  }
+
+  const handleResetFilters = () => {
+    setActiveCategory('All Categories')
+    setActiveSubcategory('')
+    setSearchParams(new URLSearchParams())
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   // Handle Search Submission directly on Landing Page
   const handleSearch = ({ query, category, advSku, advMinPrice, advMaxPrice, advWarehouseOnly }) => {
     const params = new URLSearchParams()
@@ -134,8 +164,16 @@ function LandingPage() {
     if (advWarehouseOnly) params.set('warehouse', 'true')
     setSearchParams(params)
     if (category) setActiveCategory(category)
-    const el = document.getElementById('deals')
-    if (el) el.scrollIntoView({ behavior: 'smooth' })
+    
+    // Smooth scroll down to where products / search results appear
+    setTimeout(() => {
+      const target = query?.trim()
+        ? (document.getElementById('results-section') || document.getElementById('marketplace-category-view') || document.getElementById('deals'))
+        : (document.getElementById('marketplace-category-view') || document.getElementById('deals'))
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }, 150)
   }
 
   // Handle Category Quick Selection
@@ -146,9 +184,17 @@ function LandingPage() {
     if (catName && catName !== 'All Categories') params.set('category', catName)
     if (subName) params.set('sub', subName)
     setSearchParams(params)
-    const el = document.getElementById('deals')
-    if (el) el.scrollIntoView({ behavior: 'smooth' })
+    
+    // Smooth scroll down to category view
+    setTimeout(() => {
+      const target = document.getElementById('marketplace-category-view') || document.getElementById('deals')
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }, 150)
   }
+
+
 
   return (
     <div className="min-h-screen bg-[#f7f7f7] text-slate-800 antialiased font-sans selection:bg-blue-500 selection:text-white">
@@ -203,135 +249,155 @@ function LandingPage() {
 
       {/* Main Content Sections */}
       <main className="relative z-0 pb-12">
-        {/* 4. Top Hero Banner Carousel */}
-        <MarketplaceHeroCarousel />
+        {hasActiveFilter ? (
+          /* ── When Category or Search is Selected: Show eBay Category View ── */
+          <MarketplaceCategoryView
+            products={liveProducts}
+            categories={categories}
+            activeCategory={activeCategory}
+            activeSubcategory={activeSubcategory}
+            searchQuery={searchQuery}
+            skuQuery={searchParams.get('sku') || ''}
+            minPriceQuery={searchParams.get('minPrice') || ''}
+            maxPriceQuery={searchParams.get('maxPrice') || ''}
+            onApplyPriceFilter={handleApplyPriceFilter}
+            onSelectCategory={handleSelectCategory}
+            onResetFilters={handleResetFilters}
+          />
+        ) : (
+          /* ── Default Home View: Show Hero, Promo Banners, Category Grid, Deals, Trending ── */
+          <>
+            {/* 4. Top Hero Banner Carousel */}
+            <MarketplaceHeroCarousel />
 
-        {/* 5. Client & Reseller Quick Portal Banner */}
-        <section className="mx-auto mt-6 max-w-7xl px-4 sm:px-6">
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 p-5 sm:p-7 text-white shadow-lg border border-slate-800">
-            {/* Background ambient glow */}
-            <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-blue-500/20 blur-3xl pointer-events-none" />
-            <div className="absolute -left-16 -bottom-16 h-56 w-56 rounded-full bg-emerald-500/15 blur-3xl pointer-events-none" />
+            {/* 5. Client & Reseller Quick Portal Banner */}
+            <section className="mx-auto mt-6 max-w-7xl px-4 sm:px-6">
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 p-5 sm:p-7 text-white shadow-lg border border-slate-800">
+                {/* Background ambient glow */}
+                <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-blue-500/20 blur-3xl pointer-events-none" />
+                <div className="absolute -left-16 -bottom-16 h-56 w-56 rounded-full bg-emerald-500/15 blur-3xl pointer-events-none" />
 
-            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-              <div className="max-w-2xl">
-                <div className="flex flex-wrap items-center gap-2 mb-2.5">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/20 px-3 py-0.5 text-xs font-bold text-blue-300 border border-blue-400/30">
-                    <Zap className="h-3.5 w-3.5 text-blue-400" />
-                    <span>Client & Reseller Portal</span>
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-300 border border-emerald-400/30">
-                    <Warehouse className="h-3 w-3" />
-                    <span>3PL Automated Dispatch</span>
-                  </span>
-                </div>
+                <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                  <div className="max-w-2xl">
+                    <div className="flex flex-wrap items-center gap-2 mb-2.5">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/20 px-3 py-0.5 text-xs font-bold text-blue-300 border border-blue-400/30">
+                        <Zap className="h-3.5 w-3.5 text-blue-400" />
+                        <span>Client & Reseller Portal</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-300 border border-emerald-400/30">
+                        <Warehouse className="h-3 w-3" />
+                        <span>3PL Automated Dispatch</span>
+                      </span>
+                    </div>
 
-                <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight text-white leading-tight">
-                  Launch Your Reselling Business with Direct Wholesale Sourcing
-                </h2>
-                <p className="mt-2 text-xs sm:text-sm text-slate-300 leading-relaxed">
-                  Sign in to your client account to place bulk wholesale orders, manage store dropshipping, and route orders to our 3PL fulfillment warehouse with instant barcode tracking.
-                </p>
+                    <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight text-white leading-tight">
+                      Launch Your Reselling Business with Direct Wholesale Sourcing
+                    </h2>
+                    <p className="mt-2 text-xs sm:text-sm text-slate-300 leading-relaxed">
+                      Sign in to your client account to place bulk wholesale orders, manage store dropshipping, and route orders to our 3PL fulfillment warehouse with instant barcode tracking.
+                    </p>
 
-                {/* Key feature pills */}
-                <div className="mt-3.5 flex flex-wrap items-center gap-3 text-xs text-slate-300 font-medium">
-                  <div className="flex items-center gap-1.5">
-                    <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                    <span>Escrow Protected Funds</span>
+                    {/* Key feature pills */}
+                    <div className="mt-3.5 flex flex-wrap items-center gap-3 text-xs text-slate-300 font-medium">
+                      <div className="flex items-center gap-1.5">
+                        <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                        <span>Escrow Protected Funds</span>
+                      </div>
+                      <span className="text-slate-600">•</span>
+                      <div className="flex items-center gap-1.5">
+                        <Warehouse className="h-4 w-4 text-blue-400" />
+                        <span>Live 3PL Warehouse Stock</span>
+                      </div>
+                      <span className="text-slate-600">•</span>
+                      <div className="flex items-center gap-1.5">
+                        <Zap className="h-4 w-4 text-amber-400" />
+                        <span>Instant CSV & Store Push</span>
+                      </div>
+                    </div>
                   </div>
-                  <span className="text-slate-600">•</span>
-                  <div className="flex items-center gap-1.5">
-                    <Warehouse className="h-4 w-4 text-blue-400" />
-                    <span>Live 3PL Warehouse Stock</span>
-                  </div>
-                  <span className="text-slate-600">•</span>
-                  <div className="flex items-center gap-1.5">
-                    <Zap className="h-4 w-4 text-amber-400" />
-                    <span>Instant CSV & Store Push</span>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-col sm:flex-row lg:flex-col gap-2.5 shrink-0 min-w-[240px]">
+                    {isAuthenticated ? (
+                      <>
+                        <div className="rounded-xl bg-white/10 p-3 backdrop-blur-xs border border-white/15">
+                          <p className="text-xs text-slate-300">Signed in as:</p>
+                          <p className="font-bold text-white text-sm truncate">{user?.fullName || 'Client'}</p>
+                          <p className="text-[11px] text-blue-300 capitalize">{user?.role === 'admin' ? 'Administrator' : `${user?.role} Account`}</p>
+                        </div>
+                        <Link
+                          to={user?.role === 'admin' ? '/admin/dashboard' : dashboardPath}
+                          onClick={() => {
+                            if (user?.role === 'admin') {
+                              sessionStorage.removeItem('sellvro_admin_preview')
+                            }
+                          }}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-blue-500 transition focus:outline-none"
+                        >
+                          <LayoutDashboard className="h-4 w-4" />
+                          <span>{user?.role === 'admin' ? 'Return to Admin Panel' : 'Open Client Dashboard'}</span>
+                        </Link>
+                      </>
+                    ) : (
+                      <>
+                        <Link
+                          to="/login"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-blue-500 transition focus:outline-none"
+                        >
+                          <LogIn className="h-4 w-4" />
+                          <span>Client Sign In</span>
+                        </Link>
+
+                        <Link
+                          to="/register"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-xs sm:text-sm font-bold text-slate-900 shadow-sm hover:bg-slate-100 transition focus:outline-none"
+                        >
+                          <UserPlus className="h-4 w-4 text-blue-600" />
+                          <span>Register as Reseller</span>
+                        </Link>
+
+                        <div className="pt-1 text-center">
+                          <Link
+                            to="/register?role=supplier"
+                            className="text-[11px] text-slate-400 hover:text-white transition underline"
+                          >
+                            Are you a manufacturer? Join as Supplier →
+                          </Link>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
+            </section>
 
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row lg:flex-col gap-2.5 shrink-0 min-w-[240px]">
-                {isAuthenticated ? (
-                  <>
-                    <div className="rounded-xl bg-white/10 p-3 backdrop-blur-xs border border-white/15">
-                      <p className="text-xs text-slate-300">Signed in as:</p>
-                      <p className="font-bold text-white text-sm truncate">{user?.fullName || 'Client'}</p>
-                      <p className="text-[11px] text-blue-300 capitalize">{user?.role === 'admin' ? 'Administrator' : `${user?.role} Account`}</p>
-                    </div>
-                    <Link
-                      to={user?.role === 'admin' ? '/admin/dashboard' : dashboardPath}
-                      onClick={() => {
-                        if (user?.role === 'admin') {
-                          sessionStorage.removeItem('sellvro_admin_preview')
-                        }
-                      }}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-blue-500 transition focus:outline-none"
-                    >
-                      <LayoutDashboard className="h-4 w-4" />
-                      <span>{user?.role === 'admin' ? 'Return to Admin Panel' : 'Open Client Dashboard'}</span>
-                    </Link>
-                  </>
-                ) : (
-                  <>
-                    <Link
-                      to="/login"
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-blue-500 transition focus:outline-none"
-                    >
-                      <LogIn className="h-4 w-4" />
-                      <span>Client Sign In</span>
-                    </Link>
+            {/* 6. "The future in your hands" Category Cards Grid */}
+            <MarketplaceCategoryGrid
+              categories={categories}
+              onSelectCategory={(cat) => handleSelectCategory(cat, '')}
+            />
 
-                    <Link
-                      to="/register"
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-xs sm:text-sm font-bold text-slate-900 shadow-sm hover:bg-slate-100 transition focus:outline-none"
-                    >
-                      <UserPlus className="h-4 w-4 text-blue-600" />
-                      <span>Register as Reseller</span>
-                    </Link>
+            {/* 7. "Sourcing made easy" & Promo Deal Banner */}
+            <MarketplacePromoBanner />
 
-                    <div className="pt-1 text-center">
-                      <Link
-                        to="/register?role=supplier"
-                        className="text-[11px] text-slate-400 hover:text-white transition underline"
-                      >
-                        Are you a manufacturer? Join as Supplier →
-                      </Link>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
+            {/* 8. "Today's Deals" Product Showcase */}
+            <MarketplaceDeals
+              products={liveProducts}
+              activeCategory={activeCategory}
+              activeSubcategory={activeSubcategory}
+              searchQuery={searchQuery}
+            />
 
-        {/* 6. "The future in your hands" Category Cards Grid */}
-        <MarketplaceCategoryGrid
-          categories={categories}
-          onSelectCategory={(cat) => handleSelectCategory(cat, '')}
-        />
+            {/* 9. "Trending on Sellvro" Round Category Spotlight */}
+            <MarketplaceTrending
+              categories={categories}
+              onSelectCategory={handleSelectCategory}
+            />
 
-        {/* 7. "Sourcing made easy" & Promo Deal Banner */}
-        <MarketplacePromoBanner />
-
-        {/* 8. "Today's Deals" Product Showcase */}
-        <MarketplaceDeals
-          products={liveProducts}
-          activeCategory={activeCategory}
-          activeSubcategory={activeSubcategory}
-          searchQuery={searchQuery}
-        />
-
-        {/* 9. "Trending on Sellvro" Round Category Spotlight */}
-        <MarketplaceTrending
-          categories={categories}
-          onSelectCategory={handleSelectCategory}
-        />
-
-        {/* 10. Dark 3PL Warehouse & Logistics Showcase Banner */}
-        <MarketplaceDarkBanner />
+            {/* 10. Dark 3PL Warehouse & Logistics Showcase Banner */}
+            <MarketplaceDarkBanner />
+          </>
+        )}
       </main>
 
       {/* 11. Comprehensive eBay-Style Multi-Column Footer */}

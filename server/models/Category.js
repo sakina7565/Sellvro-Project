@@ -13,6 +13,12 @@ const categorySchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    commissionRate: {
+      type: Number,
+      default: 8,
+      min: 0,
+      max: 100,
+    },
     subcategories: {
       type: [String],
       default: [],
@@ -26,6 +32,7 @@ categorySchema.methods.toSafeObject = function toSafeObject(productCount = 0) {
     id: this._id.toString(),
     name: this.name,
     description: this.description,
+    commissionRate: this.commissionRate !== undefined && this.commissionRate !== null ? Number(this.commissionRate) : 8,
     subcategories: Array.isArray(this.subcategories) ? this.subcategories : [],
     products: productCount,
     createdAt: this.createdAt,

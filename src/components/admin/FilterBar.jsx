@@ -10,17 +10,42 @@ const controlClasses =
  * Each filter defaults to a `select`, but can be `type: 'text'` or
  * `type: 'date'` for free-text / date-range filters (e.g. Orders).
  */
-function FilterBar({ filters = [], onFilterClick = () => {} }) {
+function FilterBar({ filters = [], onFilterClick = () => {}, children }) {
   return (
     <Card className="mb-5 flex flex-wrap items-center justify-between gap-3 p-4 shadow-soft">
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         {filters.map((filter) => {
+          if (filter.render) {
+            return <div key={filter.key || filter.label}>{filter.render()}</div>
+          }
+
+          if (filter.type === 'custom') {
+            return <div key={filter.key || filter.label}>{filter.component}</div>
+          }
+
           if (filter.type === 'text') {
             return (
               <input
                 key={filter.label}
                 type="text"
                 placeholder={filter.label}
+                value={filter.value ?? ''}
+                onChange={filter.onChange}
+                className={`${controlClasses} placeholder:text-slate-400`}
+              />
+            )
+          }
+
+          if (filter.type === 'number') {
+            return (
+              <input
+                key={filter.label}
+                type="number"
+                min={filter.min ?? '0'}
+                step={filter.step ?? 'any'}
+                placeholder={filter.placeholder || filter.label}
+                value={filter.value ?? ''}
+                onChange={filter.onChange}
                 className={`${controlClasses} placeholder:text-slate-400`}
               />
             )
@@ -35,15 +60,19 @@ function FilterBar({ filters = [], onFilterClick = () => {} }) {
               return (
                 <select
                   key={filter.label}
-                  value={filter.value ?? filter.options[0]}
+                  value={filter.value ?? (typeof filter.options[0] === 'object' ? filter.options[0].value : filter.options[0])}
                   onChange={filter.onChange}
                   className={`appearance-none ${controlClasses}`}
                 >
-                  {filter.options.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
+                  {filter.options.map((option) => {
+                    const val = typeof option === 'object' ? option.value : option
+                    const label = typeof option === 'object' ? option.label : option
+                    return (
+                      <option key={val} value={val}>
+                        {label}
+                      </option>
+                    )
+                  })}
                 </select>
               )
             }
@@ -53,11 +82,15 @@ function FilterBar({ filters = [], onFilterClick = () => {} }) {
                 <option value="" disabled>
                   {filter.label}
                 </option>
-                {filter.options.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
+                {filter.options.map((option) => {
+                  const val = typeof option === 'object' ? option.value : option
+                  const label = typeof option === 'object' ? option.label : option
+                  return (
+                    <option key={val} value={val}>
+                      {label}
+                    </option>
+                  )
+                })}
               </select>
             )
           }
@@ -70,11 +103,12 @@ function FilterBar({ filters = [], onFilterClick = () => {} }) {
             </select>
           )
         })}
+        {children}
       </div>
       <button
         type="button"
         onClick={onFilterClick}
-        className="flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-primary"
+        className="flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-primary cursor-pointer"
       >
         Filter
         <SlidersHorizontal className="h-4 w-4" />

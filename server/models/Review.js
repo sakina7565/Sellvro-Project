@@ -28,14 +28,42 @@ const reviewSchema = new mongoose.Schema(
       trim: true,
       default: 'Verified Buyer',
     },
-    // Product Quality Rating (1-5 stars)
+    // 1. Product Quality Rating (1-5 stars)
+    productQualityRating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      default: 5,
+    },
+    // 2. Product Performance Rating (1-5 stars)
+    productPerformanceRating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      default: 5,
+    },
+    // 3. Supplier Services Rating (1-5 stars)
+    supplierServicesRating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      default: 5,
+    },
+    // 4. Supplier Performance Rating (1-5 stars)
+    supplierPerformanceRating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      default: 5,
+    },
+    // Overall Product Rating (1-5 stars)
     productRating: {
       type: Number,
       required: true,
       min: 1,
       max: 5,
     },
-    // Supplier Delivery Speed & Punctuality Rating (1-5 stars)
+    // Overall Supplier / Delivery Rating (1-5 stars)
     deliveryRating: {
       type: Number,
       required: true,
@@ -64,6 +92,10 @@ reviewSchema.methods.toSafeObject = function toSafeObject() {
     supplierId: this.supplier?.toString?.() || '',
     userId: this.user?._id?.toString?.() || this.user?.toString?.() || '',
     reviewerName: this.reviewerName || 'Verified Buyer',
+    productQualityRating: Number(this.productQualityRating || this.productRating || 5),
+    productPerformanceRating: Number(this.productPerformanceRating || this.productRating || 5),
+    supplierServicesRating: Number(this.supplierServicesRating || this.deliveryRating || 5),
+    supplierPerformanceRating: Number(this.supplierPerformanceRating || this.deliveryRating || 5),
     productRating: Number(this.productRating || 5),
     deliveryRating: Number(this.deliveryRating || 5),
     deliveredOnTime: Boolean(this.deliveredOnTime),

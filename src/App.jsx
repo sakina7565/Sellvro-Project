@@ -60,7 +60,7 @@ function AdminRoute({ children }) {
 }
 
 function SupplierRoute({ children }) {
-  return <ProtectedRoute roles={['supplier']}>{children}</ProtectedRoute>
+  return <ProtectedRoute roles={['supplier', 'admin']}>{children}</ProtectedRoute>
 }
 
 function UserRoute({ children }) {

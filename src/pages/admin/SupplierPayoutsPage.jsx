@@ -26,10 +26,12 @@ import {
   User,
   Wallet,
   X,
+  Pencil,
 } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import OrderDetailDrawer from '../../components/orders/OrderDetailDrawer.jsx'
+import EditAccountModal from '../../components/admin/EditAccountModal.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Badge from '../../components/ui/Badge.jsx'
 import Button from '../../components/ui/Button.jsx'
@@ -39,22 +41,25 @@ import { adminApi, getErrorMessage } from '../../lib/api.js'
 function SupplierPayoutsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const initialSupplierId = searchParams.get('supplierId') || ''
-  const initialTab = searchParams.get('tab') || 'pending-weeks'
-
-  // Primary top tab: 'pending-weeks' (the dedicated weekly queue) | 'directory' (all suppliers)
-  const [activeTab, setActiveTab] = useState(initialSupplierId ? 'directory' : initialTab)
+  const initialFilter = searchParams.get('filter') || (searchParams.get('tab') === 'pending-weeks' ? 'mature' : '')
 
   // Navigation views: 'directory' | 'monthly' | 'weeks' | 'orders'
   const [viewMode, setViewMode] = useState(initialSupplierId ? 'monthly' : 'directory')
-  const [ordersPreviousView, setOrdersPreviousView] = useState('pending-weeks')
+  const [ordersPreviousView, setOrdersPreviousView] = useState('directory')
 
   // Global Alerts & Feedback
   const [error, setError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
   const [copyFeedback, setCopyFeedback] = useState('')
 
+  // Details Modal States
+  const [selectedWeekDetail, setSelectedWeekDetail] = useState(null)
+  const [selectedSupplierDetail, setSelectedSupplierDetail] = useState(null)
+  const [editingSupplier, setEditingSupplier] = useState(null)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+
   // -------------------------------------------------------------
-  // TAB 1: PENDING WEEKLY PAYOUTS STREAM
+  // WEEKLY PAYOUTS STREAM & QUEUE
   // -------------------------------------------------------------
   const [pendingWeeks, setPendingWeeks] = useState([])
   const [pendingWeeksSummary, setPendingWeeksSummary] = useState({
@@ -64,8 +69,6 @@ function SupplierPayoutsPage() {
     totalMatureOrdersCount: 0,
   })
   const [loadingPendingWeeks, setLoadingPendingWeeks] = useState(false)
-  const [pendingWeeksSearch, setPendingWeeksSearch] = useState('')
-  const [pendingWeeksFilter, setPendingWeeksFilter] = useState('all') // 'all', 'actionable', 'holding'
 
   const loadPendingWeeks = async () => {
     setLoadingPendingWeeks(true)
@@ -89,7 +92,7 @@ function SupplierPayoutsPage() {
   }
 
   // -------------------------------------------------------------
-  // TAB 2: SUPPLIERS DIRECTORY & ARCHIVE
+  // SUPPLIERS DIRECTORY & ARCHIVE
   // -------------------------------------------------------------
   const [suppliers, setSuppliers] = useState([])
   const [directorySummary, setDirectorySummary] = useState({
@@ -100,7 +103,15 @@ function SupplierPayoutsPage() {
   })
   const [loadingDirectory, setLoadingDirectory] = useState(false)
   const [directorySearch, setDirectorySearch] = useState('')
-  const [directoryFilter, setDirectoryFilter] = useState('all') // 'all', 'mature', 'settled'
+  const [directoryFilter, setDirectoryFilter] = useState(
+    initialFilter === 'mature' || initialFilter === 'pending'
+      ? 'mature'
+      : initialFilter === 'holding'
+        ? 'holding'
+        : initialFilter === 'weekly'
+          ? 'weekly'
+          : 'all'
+  )
 
   // Selected supplier & monthly history
   const [selectedSupplierId, setSelectedSupplierId] = useState(initialSupplierId)
@@ -386,11 +397,8 @@ Status: VERIFIED & COMPLETED
   // Filtered Pending Weeks
   const filteredPendingWeeks = useMemo(() => {
     return pendingWeeks.filter((w) => {
-      if (pendingWeeksFilter === 'actionable' && !w.isActionable) return false
-      if (pendingWeeksFilter === 'holding' && w.isActionable) return false
-
-      if (pendingWeeksSearch.trim()) {
-        const q = pendingWeeksSearch.toLowerCase().trim()
+      if (directorySearch.trim()) {
+        const q = directorySearch.toLowerCase().trim()
         const match =
           (w.supplierDisplayId && w.supplierDisplayId.toLowerCase().includes(q)) ||
           (w.supplierName && w.supplierName.toLowerCase().includes(q)) ||
@@ -398,17 +406,19 @@ Status: VERIFIED & COMPLETED
           (w.bankDetails?.provider && w.bankDetails.provider.toLowerCase().includes(q)) ||
           (w.bankDetails?.accNumber && w.bankDetails.accNumber.toLowerCase().includes(q)) ||
           (w.weekLabel && w.weekLabel.toLowerCase().includes(q)) ||
+          (w.periodLabel && w.periodLabel.toLowerCase().includes(q)) ||
           (w.saturdayLabel && w.saturdayLabel.toLowerCase().includes(q))
         if (!match) return false
       }
       return true
     })
-  }, [pendingWeeks, pendingWeeksFilter, pendingWeeksSearch])
+  }, [pendingWeeks, directorySearch])
 
   // Filtered Suppliers for Directory View
   const filteredSuppliers = useMemo(() => {
     return suppliers.filter((s) => {
-      if (directoryFilter === 'mature' && !s.hasMaturePayout) return false
+      if (directoryFilter === 'mature' && (!s.matureAmount || s.matureAmount <= 0) && !s.hasMaturePayout) return false
+      if (directoryFilter === 'holding' && (!s.immatureAmount || s.immatureAmount <= 0)) return false
       if (directoryFilter === 'settled' && (s.matureAmount > 0 || s.immatureAmount > 0)) return false
 
       if (directorySearch.trim()) {
@@ -499,347 +509,10 @@ Status: VERIFIED & COMPLETED
         </div>
       )}
 
-      {/* Primary Tab Switcher (Only visible on main directory level) */}
+      {/* ========================================================== */}
+      {/* UNIFIED SUPPLIER FINANCES & PAYOUTS VIEW                   */}
+      {/* ========================================================== */}
       {viewMode === 'directory' && (
-        <div className="mb-6 flex border-b border-slate-200">
-          <button
-            type="button"
-            onClick={() => setActiveTab('pending-weeks')}
-            className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-bold transition-colors ${
-              activeTab === 'pending-weeks'
-                ? 'border-emerald-600 text-emerald-700'
-                : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800'
-            }`}
-          >
-            <Calendar className="h-4 w-4" />
-            Pending Weekly Payouts
-            {pendingWeeksSummary.actionableWeeksCount > 0 && (
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-black text-emerald-800">
-                {pendingWeeksSummary.actionableWeeksCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('directory')}
-            className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-bold transition-colors ${
-              activeTab === 'directory'
-                ? 'border-indigo-600 text-indigo-700'
-                : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800'
-            }`}
-          >
-            <Building2 className="h-4 w-4" />
-            Supplier Directory & Full History
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
-              {suppliers.length}
-            </span>
-          </button>
-        </div>
-      )}
-
-      {/* ========================================================== */}
-      {/* TAB 1: PENDING WEEKLY PAYOUTS (DEDICATED ACTION SCREEN)    */}
-      {/* ========================================================== */}
-      {viewMode === 'directory' && activeTab === 'pending-weeks' && (
-        <div className="space-y-5">
-          {/* Top Metric Stat Cards for Pending Weeks */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card className="border border-emerald-200 bg-emerald-50/20 p-4 shadow-soft">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
-                  <DollarSign className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-semibold text-emerald-800">Actionable Balance</p>
-                    <span className="rounded bg-emerald-200 px-1.5 py-0.2 text-[9px] font-bold text-emerald-900">
-                      Delivered
-                    </span>
-                  </div>
-                  <p className="text-xl font-black text-emerald-700">
-                    ${pendingWeeksSummary.totalActionableAmount.toFixed(2)}
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-4 shadow-soft">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                  <Calendar className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-500">Actionable Weeks</p>
-                  <p className="text-xl font-bold text-slate-900">
-                    {pendingWeeksSummary.actionableWeeksCount}
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="p-4 shadow-soft">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-                  <Building2 className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-500">Suppliers to Pay</p>
-                  <p className="text-xl font-bold text-slate-900">
-                    {pendingWeeksSummary.distinctSuppliersCount}
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            <Card className="border border-amber-200 bg-amber-50/20 p-4 shadow-soft">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
-                  <Clock className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-semibold text-amber-800">Delivered Orders</p>
-                    <span className="rounded bg-amber-200 px-1.5 py-0.2 text-[9px] font-bold text-amber-900">
-                      Ready
-                    </span>
-                  </div>
-                  <p className="text-xl font-bold text-amber-700">
-                    {pendingWeeksSummary.totalMatureOrdersCount}
-                  </p>
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          {/* Workflow Notice Banner */}
-          <Card className="border border-indigo-100 bg-gradient-to-r from-indigo-50/60 via-white to-emerald-50/40 p-4 text-xs text-slate-700">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="space-y-1">
-                <span className="inline-flex items-center gap-1 rounded bg-indigo-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
-                  Rolling Weekly Disbursement Policy
-                </span>
-                <p className="text-slate-800">
-                  Only <strong>delivered orders</strong> are considered mature and disbursed every Saturday. If a week has partially delivered items, the mature orders are paid immediately, while in-transit items remain open under that week until confirmed delivered.
-                </p>
-              </div>
-              <span className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-2xs">
-                Bank-to-Bank Transfer · TID & Receipt Required
-              </span>
-            </div>
-          </Card>
-
-          {/* Search & Filter Bar */}
-          <Card className="flex flex-wrap items-center justify-between gap-3 p-4 shadow-soft">
-            <div className="flex flex-1 flex-wrap items-center gap-3">
-              <div className="relative min-w-[260px] flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={pendingWeeksSearch}
-                  onChange={(e) => setPendingWeeksSearch(e.target.value)}
-                  placeholder="Search by Supplier, IBAN, Bank, or Week Cycle…"
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100"
-                />
-              </div>
-
-              <select
-                value={pendingWeeksFilter}
-                onChange={(e) => setPendingWeeksFilter(e.target.value)}
-                className="h-10 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100"
-              >
-                <option value="all">All Weekly Cycles ({pendingWeeks.length})</option>
-                <option value="actionable">🟢 Actionable (Mature Ready to Release)</option>
-                <option value="holding">🟡 Pending Delivery</option>
-              </select>
-            </div>
-
-            <span className="text-xs font-medium text-slate-500">
-              Showing <strong className="text-slate-800">{filteredPendingWeeks.length}</strong> weekly cycles
-            </span>
-          </Card>
-
-          {/* Actionable Pending Weeks Table */}
-          <Card className="overflow-hidden shadow-soft">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-semibold text-slate-500">
-                    <th className="px-4 py-3.5">Supplier Details</th>
-                    <th className="px-4 py-3.5">Bank Account / IBAN</th>
-                    <th className="px-4 py-3.5">Weekly Cycle & Period</th>
-                    <th className="px-4 py-3.5">Saturday Release Date</th>
-                    <th className="px-4 py-3.5">Fulfillment Status</th>
-                    <th className="px-4 py-3.5">Gross / Platform Fee</th>
-                    <th className="px-4 py-3.5">Mature Ready to Pay</th>
-                    <th className="px-4 py-3.5">Remaining Pending</th>
-                    <th className="px-4 py-3.5">Cycle Status</th>
-                    <th className="px-4 py-3.5 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {loadingPendingWeeks && (
-                    <tr>
-                      <td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-500">
-                        Loading pending weekly payout streams…
-                      </td>
-                    </tr>
-                  )}
-                  {!loadingPendingWeeks && filteredPendingWeeks.length === 0 && (
-                    <tr>
-                      <td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-500">
-                        No pending weekly cycles found matching your criteria.
-                      </td>
-                    </tr>
-                  )}
-                  {filteredPendingWeeks.map((item) => (
-                    <tr
-                      key={item.id}
-                      className={`hover:bg-slate-50/60 transition-colors ${
-                        item.isActionable ? 'bg-emerald-50/15' : ''
-                      }`}
-                    >
-                      {/* Supplier Details */}
-                      <td className="whitespace-nowrap px-4 py-3.5">
-                        <div className="flex items-center gap-2">
-                          <span className="rounded bg-indigo-50 px-2 py-0.5 font-mono text-xs font-bold text-indigo-700 border border-indigo-200">
-                            {item.supplierDisplayId}
-                          </span>
-                          <span className="font-semibold text-slate-900">{item.supplierName}</span>
-                        </div>
-                        <p className="mt-0.5 text-xs text-slate-500">{item.businessName}</p>
-                      </td>
-
-                      {/* Bank Details with Copy IBAN */}
-                      <td className="whitespace-nowrap px-4 py-3.5 text-xs">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-medium text-slate-800">{item.bankDetails?.provider || 'Bank'}</p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const b = item.bankDetails
-                              const text = `${b?.provider || 'Bank'} | Acc: ${b?.accNumber || 'N/A'} | Title: ${b?.cardDate || item.supplierName}`
-                              handleCopyText(text, 'Bank Account Details')
-                            }}
-                            className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-indigo-600 hover:text-indigo-800"
-                            title="Copy IBAN and Details"
-                          >
-                            <Copy className="h-3 w-3" /> Copy
-                          </button>
-                        </div>
-                        <p className="font-mono text-indigo-700 text-[11px]">{item.bankDetails?.accNumber || 'Not Set'}</p>
-                      </td>
-
-                      {/* Weekly Cycle */}
-                      <td className="whitespace-nowrap px-4 py-3.5">
-                        <span className="font-bold text-slate-900">{item.periodLabel || item.weekLabel}</span>
-                        <p className="text-[11px] text-slate-400 font-mono">{item.weekKey}</p>
-                      </td>
-
-                      {/* Saturday Release Date */}
-                      <td className="whitespace-nowrap px-4 py-3.5">
-                        <span className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/70 px-2.5 py-1 text-xs font-semibold text-indigo-900">
-                          <Calendar className="h-3.5 w-3.5 text-indigo-600" />
-                          {item.saturdayLabel || item.saturdayRelease}
-                        </span>
-                      </td>
-
-                      {/* Fulfillment Breakdown */}
-                      <td className="whitespace-nowrap px-4 py-3.5 text-xs">
-                        <span className="font-semibold text-slate-800">{item.totalOrders} total orders</span>
-                        <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-0.5">
-                          <span className="font-bold text-emerald-700">{item.deliveredCount} delivered</span> ·{' '}
-                          <span className="text-amber-700">{item.pendingDeliveryCount} in transit</span>
-                        </div>
-                      </td>
-
-                      {/* Gross & Platform Fee */}
-                      <td className="whitespace-nowrap px-4 py-3.5 text-xs">
-                        <p className="font-semibold text-slate-800">${item.grossSales.toFixed(2)}</p>
-                        <p className="text-[11px] text-rose-600">Fee: -${item.commission.toFixed(2)}</p>
-                      </td>
-
-                      {/* Mature Balance Ready to Pay */}
-                      <td className="whitespace-nowrap px-4 py-3.5">
-                        {item.matureAmount > 0 ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2.5 py-1 font-mono text-xs font-black text-emerald-900 border border-emerald-300 shadow-2xs">
-                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
-                            +${item.matureAmount.toFixed(2)}
-                          </span>
-                        ) : (
-                          <span className="font-mono text-xs text-slate-400">$0.00</span>
-                        )}
-                      </td>
-
-                      {/* Remaining Pending Delivery */}
-                      <td className="whitespace-nowrap px-4 py-3.5">
-                        {item.immatureAmount > 0 ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 font-mono text-xs font-semibold text-amber-800 border border-amber-200">
-                            ${item.immatureAmount.toFixed(2)}
-                          </span>
-                        ) : (
-                          <span className="font-mono text-xs text-slate-400">$0.00</span>
-                        )}
-                      </td>
-
-                      {/* Status */}
-                      <td className="whitespace-nowrap px-4 py-3.5">
-                        {item.isActionable ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700 border border-emerald-200">
-                            Ready for Release
-                          </span>
-                        ) : item.immatureAmount > 0 ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 border border-amber-200">
-                            Pending Delivery
-                          </span>
-                        ) : (
-                          <Badge tone="neutral">{item.payoutStatus}</Badge>
-                        )}
-                        {item.paidAmount > 0 && (
-                          <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">
-                            Partially Paid: ${item.paidAmount.toFixed(2)}
-                          </p>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="whitespace-nowrap px-4 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              loadMonthOrders(item.supplierId, item.monthKey, item.weekKey, 'pending-weeks')
-                            }
-                            className="h-8 text-xs"
-                          >
-                            Inspect Orders
-                          </Button>
-
-                          {item.isActionable && (
-                            <Button
-                              size="sm"
-                              onClick={() => openPayoutModalFromWeek(item)}
-                              className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1"
-                            >
-                              <DollarSign className="h-3.5 w-3.5" /> Release Payout
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* ========================================================== */}
-      {/* TAB 2: SUPPLIERS DIRECTORY & ARCHIVE                       */}
-      {/* ========================================================== */}
-      {viewMode === 'directory' && activeTab === 'directory' && (
         <div className="space-y-5">
           {/* Top Metric Stat Cards */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -864,7 +537,7 @@ Status: VERIFIED & COMPLETED
                   <div className="flex items-center gap-1.5">
                     <p className="text-xs font-semibold text-emerald-800">Mature Payable</p>
                     <span className="rounded bg-emerald-200 px-1.5 py-0.2 text-[9px] font-bold text-emerald-900">
-                      Delivered
+                      Ready
                     </span>
                   </div>
                   <p className="text-xl font-bold text-emerald-700">${directorySummary.totalMaturePayable.toFixed(2)}</p>
@@ -911,7 +584,7 @@ Status: VERIFIED & COMPLETED
                   type="text"
                   value={directorySearch}
                   onChange={(e) => setDirectorySearch(e.target.value)}
-                  placeholder="Search by Supplier ID, Name, Business, Bank…"
+                  placeholder="Search by Supplier ID, Name, Business, Bank, or Cycle…"
                   className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100"
                 />
               </div>
@@ -919,129 +592,260 @@ Status: VERIFIED & COMPLETED
               <select
                 value={directoryFilter}
                 onChange={(e) => setDirectoryFilter(e.target.value)}
-                className="h-10 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                className="h-10 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 font-medium focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100 cursor-pointer"
               >
-                <option value="all">All Payout Statuses</option>
-                <option value="mature">🟢 Has Mature Payout Ready</option>
-                <option value="settled">⚪ All Payouts Settled</option>
+                <option value="all">All Suppliers & Finances ({suppliers.length})</option>
+                <option value="mature">🟢 Pending Payouts (Mature Ready to Release)</option>
+                <option value="holding">🟡 In Transit / Pending Delivery</option>
+                <option value="settled">⚪ Settled (All Payouts Settled)</option>
+                <option value="weekly">📅 Weekly Payout Cycles Stream ({pendingWeeks.length})</option>
               </select>
             </div>
 
             <span className="text-xs font-medium text-slate-500">
-              Showing <strong className="text-slate-800">{filteredSuppliers.length}</strong> suppliers
+              Showing <strong className="text-slate-800">{directoryFilter === 'weekly' ? filteredPendingWeeks.length : filteredSuppliers.length}</strong> {directoryFilter === 'weekly' ? 'weekly cycles' : 'suppliers'}
             </span>
           </Card>
 
-          {/* Suppliers Financial Overview Table */}
-          <Card className="overflow-hidden shadow-soft">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1050px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-semibold text-slate-500">
-                    <th className="px-4 py-3.5">Supplier ID</th>
-                    <th className="px-4 py-3.5">Supplier & Business</th>
-                    <th className="px-4 py-3.5">Bank Account Details</th>
-                    <th className="px-4 py-3.5">Orders Summary</th>
-                    <th className="px-4 py-3.5">Gross / Platform Fee</th>
-                    <th className="px-4 py-3.5">Mature Balance (Delivered)</th>
-                    <th className="px-4 py-3.5">Pending Delivery</th>
-                    <th className="px-4 py-3.5">Total Paid</th>
-                    <th className="px-4 py-3.5 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {loadingDirectory && (
-                    <tr>
-                      <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-500">
-                        Loading supplier finances…
-                      </td>
+          {/* VIEW: WEEKLY PAYOUT CYCLES TABLE (WHEN WEEKLY FILTER IS SELECTED) */}
+          {directoryFilter === 'weekly' ? (
+            <Card className="overflow-hidden shadow-soft">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[700px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-semibold text-slate-500">
+                      <th className="px-4 py-3.5">Supplier</th>
+                      <th className="px-4 py-3.5">Weekly Cycle</th>
+                      <th className="px-4 py-3.5">Payable Amount (Ready)</th>
+                      <th className="px-4 py-3.5">Status</th>
+                      <th className="px-4 py-3.5 text-right">Actions</th>
                     </tr>
-                  )}
-                  {!loadingDirectory && filteredSuppliers.length === 0 && (
-                    <tr>
-                      <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-500">
-                        No suppliers found.
-                      </td>
-                    </tr>
-                  )}
-                  {filteredSuppliers.map((s) => (
-                    <tr key={s.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="whitespace-nowrap px-4 py-3.5">
-                        <button
-                          type="button"
-                          onClick={() => loadSupplierHistory(s.id)}
-                          className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-1 rounded transition-colors"
-                          title="Click to view weekly payout cycles"
-                        >
-                          {s.supplierDisplayId}
-                        </button>
-                      </td>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {loadingPendingWeeks && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-12 text-center text-sm text-slate-500">
+                          Loading pending weekly payout streams…
+                        </td>
+                      </tr>
+                    )}
+                    {!loadingPendingWeeks && filteredPendingWeeks.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-12 text-center text-sm text-slate-500">
+                          No pending weekly cycles found matching your criteria.
+                        </td>
+                      </tr>
+                    )}
+                    {filteredPendingWeeks.map((item) => (
+                      <tr
+                        key={item.id}
+                        className={`hover:bg-slate-50/60 transition-colors ${
+                          item.isActionable ? 'bg-emerald-50/15' : ''
+                        }`}
+                      >
+                        {/* 1. Supplier Details */}
+                        <td className="whitespace-nowrap px-4 py-3.5">
+                          <div className="flex items-center gap-2">
+                            <span className="rounded bg-indigo-50 px-2 py-0.5 font-mono text-xs font-bold text-indigo-700 border border-indigo-200">
+                              {item.supplierDisplayId}
+                            </span>
+                            <span className="font-semibold text-slate-900">{item.supplierName}</span>
+                          </div>
+                          <p className="mt-0.5 text-xs text-slate-500">{item.businessName}</p>
+                        </td>
 
-                      <td className="whitespace-nowrap px-4 py-3.5">
-                        <p className="font-semibold text-slate-900">{s.fullName}</p>
-                        <p className="text-xs text-slate-500">{s.businessName || s.email}</p>
-                      </td>
-
-                      <td className="whitespace-nowrap px-4 py-3.5 text-xs">
-                        <p className="font-medium text-slate-800">{s.bankDetails.provider}</p>
-                        <p className="font-mono text-slate-500">{s.bankDetails.accNumber}</p>
-                      </td>
-
-                      <td className="whitespace-nowrap px-4 py-3.5 text-xs">
-                        <span className="font-semibold text-slate-800">{s.totalOrders} total</span>
-                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
-                          <span className="text-emerald-700">{s.deliveredCount} del</span> ·{' '}
-                          <span className="text-amber-700">{s.pendingCount} pend</span> ·{' '}
-                          <span className="text-rose-600">{s.cancelledCount} ret</span>
-                        </div>
-                      </td>
-
-                      <td className="whitespace-nowrap px-4 py-3.5 text-xs">
-                        <p className="font-semibold text-slate-800">${s.grossSales.toFixed(2)}</p>
-                        <p className="text-[11px] text-slate-500">Fee: ${s.commissionTotal.toFixed(2)}</p>
-                      </td>
-
-                      <td className="whitespace-nowrap px-4 py-3.5">
-                        {s.matureAmount > 0 ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 font-mono text-xs font-bold text-emerald-700 border border-emerald-200">
-                            ${s.matureAmount.toFixed(2)}
+                        {/* 2. Weekly Cycle & Release Date */}
+                        <td className="whitespace-nowrap px-4 py-3.5">
+                          <span className="font-bold text-slate-900 block">{item.periodLabel || item.weekLabel}</span>
+                          <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 mt-0.5">
+                            <Calendar className="h-3 w-3 text-indigo-500" />
+                            Release: <strong className="text-indigo-900">{item.saturdayLabel || item.saturdayRelease}</strong>
                           </span>
-                        ) : (
-                          <span className="font-mono text-xs text-slate-400">$0.00</span>
-                        )}
-                      </td>
+                        </td>
 
-                      <td className="whitespace-nowrap px-4 py-3.5">
-                        {s.immatureAmount > 0 ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 font-mono text-xs font-semibold text-amber-800 border border-amber-200">
-                            ${s.immatureAmount.toFixed(2)}
-                          </span>
-                        ) : (
-                          <span className="font-mono text-xs text-slate-400">$0.00</span>
-                        )}
-                      </td>
+                        {/* 3. Mature Balance Ready to Pay */}
+                        <td className="whitespace-nowrap px-4 py-3.5">
+                          {item.matureAmount > 0 ? (
+                            <div>
+                              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2.5 py-1 font-mono text-sm font-black text-emerald-900 border border-emerald-300 shadow-2xs">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
+                                ${item.matureAmount.toFixed(2)}
+                              </span>
+                              <div className="text-[11px] text-slate-500 mt-1">
+                                <span className="font-semibold text-emerald-700">{item.deliveredCount} delivered</span>
+                                {item.immatureAmount > 0 && (
+                                  <span> • <span className="text-amber-700">${item.immatureAmount.toFixed(2)} pending</span></span>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <span className="font-mono text-xs font-semibold text-slate-400">$0.00</span>
+                              {item.immatureAmount > 0 && (
+                                <p className="text-[11px] text-amber-700 mt-0.5">${item.immatureAmount.toFixed(2)} in transit</p>
+                              )}
+                            </div>
+                          )}
+                        </td>
 
-                      <td className="whitespace-nowrap px-4 py-3.5 font-mono text-xs font-semibold text-slate-700">
-                        ${s.paidTotal.toFixed(2)}
-                      </td>
+                        {/* 4. Status */}
+                        <td className="whitespace-nowrap px-4 py-3.5">
+                          {item.isActionable ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-200">
+                              Ready for Release
+                            </span>
+                          ) : item.immatureAmount > 0 ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 border border-amber-200">
+                              Pending Delivery
+                            </span>
+                          ) : (
+                            <Badge tone="neutral">{item.payoutStatus}</Badge>
+                          )}
+                          {item.paidAmount > 0 && (
+                            <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">
+                              Paid: ${item.paidAmount.toFixed(2)}
+                            </p>
+                          )}
+                        </td>
 
-                      <td className="whitespace-nowrap px-4 py-3.5 text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => loadSupplierHistory(s.id)}
-                          className="h-8 gap-1 text-xs"
-                        >
-                          Weekly Cycles
-                          <ArrowRight className="h-3.5 w-3.5" />
-                        </Button>
-                      </td>
+                        {/* 5. Actions: Details + Release Payout */}
+                        <td className="whitespace-nowrap px-4 py-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedWeekDetail(item)}
+                              className="h-8 text-xs gap-1 border-slate-300 hover:border-indigo-400 hover:bg-indigo-50/50 hover:text-indigo-700 cursor-pointer shadow-2xs"
+                              title="View all payout, banking, and fulfillment details"
+                            >
+                              <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                              <span>Details</span>
+                            </Button>
+
+                            {item.isActionable && (
+                              <Button
+                                size="sm"
+                                onClick={() => openPayoutModalFromWeek(item)}
+                                className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1 cursor-pointer shadow-2xs"
+                                title="Release bank transfer to supplier"
+                              >
+                                <DollarSign className="h-3.5 w-3.5" />
+                                <span>Release Payout</span>
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          ) : (
+            /* VIEW: SUPPLIERS FINANCIAL DIRECTORY TABLE (DEFAULT & OTHER FILTERS) */
+            <Card className="overflow-hidden shadow-soft">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[700px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-semibold text-slate-500">
+                      <th className="px-4 py-3.5">Supplier</th>
+                      <th className="px-4 py-3.5">Mature Balance (Ready)</th>
+                      <th className="px-4 py-3.5">Pending Delivery</th>
+                      <th className="px-4 py-3.5">Total Paid Out</th>
+                      <th className="px-4 py-3.5 text-center">Weekly Cycle</th>
+                      <th className="px-4 py-3.5 text-right">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {loadingDirectory && (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-12 text-center text-sm text-slate-500">
+                          Loading supplier finances…
+                        </td>
+                      </tr>
+                    )}
+                    {!loadingDirectory && filteredSuppliers.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-12 text-center text-sm text-slate-500">
+                          No suppliers found matching the selected filter.
+                        </td>
+                      </tr>
+                    )}
+                    {filteredSuppliers.map((s) => (
+                      <tr key={s.id} className="hover:bg-slate-50/60 transition-colors">
+                        {/* 1. Supplier Details */}
+                        <td className="whitespace-nowrap px-4 py-3.5">
+                          <div className="flex items-center gap-2">
+                            <span className="rounded bg-indigo-50 px-2 py-0.5 font-mono text-xs font-bold text-indigo-700 border border-indigo-200">
+                              {s.supplierDisplayId}
+                            </span>
+                            <span className="font-semibold text-slate-900">{s.fullName}</span>
+                          </div>
+                          <p className="mt-0.5 text-xs text-slate-500">{s.businessName || s.email}</p>
+                        </td>
+
+                        {/* 2. Mature Balance Ready to Pay */}
+                        <td className="whitespace-nowrap px-4 py-3.5">
+                          {s.matureAmount > 0 ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2.5 py-1 font-mono text-xs font-black text-emerald-900 border border-emerald-300 shadow-2xs">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" />
+                              ${s.matureAmount.toFixed(2)}
+                            </span>
+                          ) : (
+                            <span className="font-mono text-xs text-slate-400">$0.00</span>
+                          )}
+                        </td>
+
+                        {/* 3. Pending Delivery */}
+                        <td className="whitespace-nowrap px-4 py-3.5">
+                          {s.immatureAmount > 0 ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 font-mono text-xs font-semibold text-amber-800 border border-amber-200">
+                              ${s.immatureAmount.toFixed(2)}
+                            </span>
+                          ) : (
+                            <span className="font-mono text-xs text-slate-400">$0.00</span>
+                          )}
+                        </td>
+
+                        {/* 4. Total Paid */}
+                        <td className="whitespace-nowrap px-4 py-3.5 font-mono text-xs font-bold text-slate-800">
+                          ${s.paidTotal.toFixed(2)}
+                        </td>
+
+                        {/* 5. Dedicated Weekly Cycle Column */}
+                        <td className="whitespace-nowrap px-4 py-3.5 text-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => loadSupplierHistory(s.id)}
+                            className="h-8 gap-1.5 text-xs border-indigo-200 text-indigo-700 bg-indigo-50/50 hover:bg-indigo-600 hover:text-white transition cursor-pointer shadow-2xs font-semibold"
+                            title="View weekly settlement cycles & historical batches"
+                          >
+                            <span>Weekly Cycle</span>
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </Button>
+                        </td>
+
+                        {/* 6. Actions Column: Details Only */}
+                        <td className="whitespace-nowrap px-4 py-3.5 text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedSupplierDetail(s)}
+                            className="h-8 gap-1 text-xs border-slate-300 hover:border-indigo-400 hover:bg-indigo-50/50 hover:text-indigo-700 cursor-pointer shadow-2xs font-semibold"
+                            title="View all banking, financial, and order details"
+                          >
+                            <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                            <span>Details</span>
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
         </div>
       )}
 
@@ -1662,6 +1466,377 @@ Status: VERIFIED & COMPLETED
       )}
 
       {/* ========================================================== */}
+      {/* MODAL: WEEKLY PAYOUT DETAILS                               */}
+      {/* ========================================================== */}
+      {selectedWeekDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <Card className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-indigo-50 px-2 py-0.5 font-mono text-xs font-bold text-indigo-700 border border-indigo-200">
+                    {selectedWeekDetail.supplierDisplayId}
+                  </span>
+                  <h3 className="text-lg font-bold text-slate-900">{selectedWeekDetail.supplierName}</h3>
+                </div>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {selectedWeekDetail.businessName} {selectedWeekDetail.supplierEmail && `· ${selectedWeekDetail.supplierEmail}`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedWeekDetail(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Cycle Header */}
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 p-3 border border-slate-200/80">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-indigo-600" />
+                <span className="font-bold text-slate-800 text-sm">
+                  {selectedWeekDetail.periodLabel || selectedWeekDetail.weekLabel}
+                </span>
+                <span className="text-xs text-slate-500">
+                  (Release: <strong className="text-indigo-900">{selectedWeekDetail.saturdayLabel || selectedWeekDetail.saturdayRelease}</strong>)
+                </span>
+              </div>
+              <div>
+                {selectedWeekDetail.isActionable ? (
+                  <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-300">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Ready for Release
+                  </span>
+                ) : selectedWeekDetail.immatureAmount > 0 ? (
+                  <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 border border-amber-300">
+                    <Clock className="h-3.5 w-3.5" /> Pending Delivery
+                  </span>
+                ) : (
+                  <Badge tone="neutral">{selectedWeekDetail.payoutStatus || 'Settled'}</Badge>
+                )}
+              </div>
+            </div>
+
+            {/* Financial Cards Grid */}
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3">
+                <span className="text-[10px] uppercase font-bold text-emerald-700 block">Mature Ready to Pay</span>
+                <strong className="text-lg font-mono font-black text-emerald-800">
+                  ${Number(selectedWeekDetail.matureAmount || 0).toFixed(2)}
+                </strong>
+                <span className="text-[10px] text-emerald-600 block mt-0.5">Delivered Orders</span>
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-3">
+                <span className="text-[10px] uppercase font-bold text-amber-700 block">Holding / In Transit</span>
+                <strong className="text-lg font-mono font-bold text-amber-800">
+                  ${Number(selectedWeekDetail.immatureAmount || 0).toFixed(2)}
+                </strong>
+                <span className="text-[10px] text-amber-600 block mt-0.5">Pending Orders</span>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Gross Sales</span>
+                <strong className="text-base font-mono font-semibold text-slate-800">
+                  ${Number(selectedWeekDetail.grossSales || 0).toFixed(2)}
+                </strong>
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  Fee: -${Number(selectedWeekDetail.commission || 0).toFixed(2)}
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Net Earnings</span>
+                <strong className="text-base font-mono font-bold text-slate-900">
+                  ${Number(selectedWeekDetail.netEarnings || 0).toFixed(2)}
+                </strong>
+                {selectedWeekDetail.paidAmount > 0 && (
+                  <span className="text-[10px] text-emerald-600 font-semibold block mt-0.5">
+                    Paid: ${Number(selectedWeekDetail.paidAmount).toFixed(2)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Orders Fulfillment Breakdown */}
+            <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3.5">
+              <p className="text-xs font-bold text-slate-800 mb-2">Order Fulfillment Breakdown</p>
+              <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                <div className="rounded-lg bg-slate-50 p-2">
+                  <span className="text-slate-500 block text-[11px]">Total Orders</span>
+                  <span className="font-bold text-slate-900 text-sm">{selectedWeekDetail.totalOrders || 0}</span>
+                </div>
+                <div className="rounded-lg bg-emerald-50 p-2">
+                  <span className="text-emerald-700 block text-[11px]">Delivered</span>
+                  <span className="font-bold text-emerald-800 text-sm">{selectedWeekDetail.deliveredCount || 0}</span>
+                </div>
+                <div className="rounded-lg bg-amber-50 p-2">
+                  <span className="text-amber-700 block text-[11px]">In Transit</span>
+                  <span className="font-bold text-amber-800 text-sm">{selectedWeekDetail.pendingCount || 0}</span>
+                </div>
+                <div className="rounded-lg bg-rose-50 p-2">
+                  <span className="text-rose-600 block text-[11px]">Returned/Cancelled</span>
+                  <span className="font-bold text-rose-700 text-sm">{selectedWeekDetail.cancelledCount || 0}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Registered Bank Account Details Box */}
+            <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/30 p-3.5">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-900">
+                  Registered Bank Account
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const b = selectedWeekDetail.bankDetails
+                    const text = `Bank: ${b?.provider || 'Bank'} | Acc: ${b?.accNumber || 'N/A'} | Title: ${b?.cardDate || selectedWeekDetail.supplierName}`
+                    handleCopyText(text, 'Bank Account Details')
+                  }}
+                  className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 text-xs font-semibold text-indigo-700 shadow-2xs border border-indigo-200 hover:bg-indigo-50 cursor-pointer"
+                >
+                  <Copy className="h-3 w-3" /> Copy Details
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Bank / Provider:</span>
+                  <strong className="text-slate-900">{selectedWeekDetail.bankDetails?.provider || 'Not Set'}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Account / IBAN:</span>
+                  <strong className="text-slate-900 font-mono">{selectedWeekDetail.bankDetails?.accNumber || 'N/A'}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Account Title:</span>
+                  <strong className="text-slate-900">{selectedWeekDetail.bankDetails?.cardDate || selectedWeekDetail.supplierName}</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const sId = selectedWeekDetail.supplierId
+                  const mKey = selectedWeekDetail.monthKey
+                  const wKey = selectedWeekDetail.weekKey
+                  setSelectedWeekDetail(null)
+                  loadMonthOrders(sId, mKey, wKey, 'pending_weeks')
+                }}
+                className="gap-1.5 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 cursor-pointer"
+              >
+                <Eye className="h-3.5 w-3.5" />
+                <span>Inspect Individual Orders</span>
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedWeekDetail(null)}
+                  className="text-xs text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  Close
+                </Button>
+
+                {selectedWeekDetail.isActionable && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const itemToDisburse = selectedWeekDetail
+                      setSelectedWeekDetail(null)
+                      openPayoutModalFromWeek(itemToDisburse)
+                    }}
+                    className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs cursor-pointer shadow-2xs font-semibold"
+                  >
+                    <DollarSign className="h-3.5 w-3.5" />
+                    <span>Release Payout</span>
+                  </Button>
+                )}
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ========================================================== */}
+      {/* MODAL: SUPPLIER FINANCIAL DETAILS (FROM DIRECTORY)         */}
+      {/* ========================================================== */}
+      {selectedSupplierDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <Card className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-indigo-50 px-2 py-0.5 font-mono text-xs font-bold text-indigo-700 border border-indigo-200">
+                    {selectedSupplierDetail.supplierDisplayId}
+                  </span>
+                  <h3 className="text-lg font-bold text-slate-900">{selectedSupplierDetail.fullName}</h3>
+                </div>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {selectedSupplierDetail.businessName || 'Supplier'} · {selectedSupplierDetail.email}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedSupplierDetail(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Financial Summary Grid */}
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3">
+                <span className="text-[10px] uppercase font-bold text-emerald-700 block">Mature Balance Ready</span>
+                <strong className="text-lg font-mono font-black text-emerald-800">
+                  ${Number(selectedSupplierDetail.matureAmount || 0).toFixed(2)}
+                </strong>
+                <span className="text-[10px] text-emerald-600 block mt-0.5">Delivered</span>
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-3">
+                <span className="text-[10px] uppercase font-bold text-amber-700 block">Pending Delivery</span>
+                <strong className="text-lg font-mono font-bold text-amber-800">
+                  ${Number(selectedSupplierDetail.immatureAmount || 0).toFixed(2)}
+                </strong>
+                <span className="text-[10px] text-amber-600 block mt-0.5">In Transit</span>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Total Paid Out</span>
+                <strong className="text-base font-mono font-bold text-slate-900">
+                  ${Number(selectedSupplierDetail.paidTotal || 0).toFixed(2)}
+                </strong>
+                <span className="text-[10px] text-slate-400 block mt-0.5">All Cycles</span>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Gross Sales</span>
+                <strong className="text-base font-mono font-semibold text-slate-800">
+                  ${Number(selectedSupplierDetail.grossSalesTotal || 0).toFixed(2)}
+                </strong>
+                <span className="text-[10px] text-slate-400 block mt-0.5">Lifetime</span>
+              </div>
+            </div>
+
+            {/* Orders Summary */}
+            <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3.5">
+              <p className="text-xs font-bold text-slate-800 mb-2">Lifetime Orders Breakdown</p>
+              <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                <div className="rounded-lg bg-slate-50 p-2">
+                  <span className="text-slate-500 block text-[11px]">Total Orders</span>
+                  <span className="font-bold text-slate-900 text-sm">{selectedSupplierDetail.totalOrders || 0}</span>
+                </div>
+                <div className="rounded-lg bg-emerald-50 p-2">
+                  <span className="text-emerald-700 block text-[11px]">Delivered</span>
+                  <span className="font-bold text-emerald-800 text-sm">{selectedSupplierDetail.deliveredCount || 0}</span>
+                </div>
+                <div className="rounded-lg bg-amber-50 p-2">
+                  <span className="text-amber-700 block text-[11px]">In Transit</span>
+                  <span className="font-bold text-amber-800 text-sm">{selectedSupplierDetail.pendingCount || 0}</span>
+                </div>
+                <div className="rounded-lg bg-rose-50 p-2">
+                  <span className="text-rose-600 block text-[11px]">Returned/Cancelled</span>
+                  <span className="font-bold text-rose-700 text-sm">{selectedSupplierDetail.cancelledCount || 0}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Registered Bank Account Details Box */}
+            <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/30 p-3.5">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-900">
+                  Registered Bank Account
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const b = selectedSupplierDetail.bank || selectedSupplierDetail.bankDetails
+                    const text = `Bank: ${b?.provider || 'Bank'} | Acc: ${b?.accNumber || 'N/A'} | Title: ${b?.cardDate || selectedSupplierDetail.fullName}`
+                    handleCopyText(text, 'Bank Account Details')
+                  }}
+                  className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 text-xs font-semibold text-indigo-700 shadow-2xs border border-indigo-200 hover:bg-indigo-50 cursor-pointer"
+                >
+                  <Copy className="h-3 w-3" /> Copy Details
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Bank / Provider:</span>
+                  <strong className="text-slate-900">
+                    {(selectedSupplierDetail.bank || selectedSupplierDetail.bankDetails)?.provider || 'Not Set'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Account / IBAN:</span>
+                  <strong className="text-slate-900 font-mono">
+                    {(selectedSupplierDetail.bank || selectedSupplierDetail.bankDetails)?.accNumber || 'N/A'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Account Title:</span>
+                  <strong className="text-slate-900">
+                    {(selectedSupplierDetail.bank || selectedSupplierDetail.bankDetails)?.cardDate || selectedSupplierDetail.fullName}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const sId = selectedSupplierDetail.id
+                  setSelectedSupplierDetail(null)
+                  loadSupplierHistory(sId)
+                }}
+                className="gap-1.5 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 cursor-pointer font-semibold"
+              >
+                <span>View Weekly Cycles &amp; History</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setEditingSupplier(selectedSupplierDetail)
+                    setEditModalOpen(true)
+                  }}
+                  className="gap-1.5 text-xs border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer font-semibold shadow-2xs"
+                  title="Edit supplier business & bank account details"
+                >
+                  <Pencil className="h-3.5 w-3.5 text-slate-600" />
+                  <span>Edit Details</span>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedSupplierDetail(null)}
+                  className="text-xs text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ========================================================== */}
       {/* MODAL: DISBURSE SUPPLIER PAYOUT (BANK-TO-BANK + RECEIPT)   */}
       {/* ========================================================== */}
       {payoutModalOpen && (
@@ -1881,6 +2056,22 @@ Status: VERIFIED & COMPLETED
         onClose={() => setOrderDrawerOpen(false)}
         title="Order Details & Shipping Label"
       />
+
+      {/* Edit Supplier Account & Bank Details Modal */}
+      {editModalOpen && (
+        <EditAccountModal
+          isOpen={editModalOpen}
+          account={editingSupplier}
+          onClose={() => {
+            setEditModalOpen(false)
+            setEditingSupplier(null)
+          }}
+          onSuccess={() => {
+            loadDirectory()
+            loadPendingWeeks()
+          }}
+        />
+      )}
     </AdminLayout>
   )
 }

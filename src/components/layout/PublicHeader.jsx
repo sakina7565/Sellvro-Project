@@ -4,7 +4,7 @@ import { LogOut, User, LayoutDashboard } from 'lucide-react'
 import Logo from '../ui/Logo.jsx'
 import Button from '../ui/Button.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { getRedirectForUser } from '../../lib/authRedirect.js'
+import { getDashboardPathForUser } from '../../lib/authRedirect.js'
 
 /**
  * Top navigation bar shown on the public landing page.
@@ -17,7 +17,7 @@ function PublicHeader() {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
 
-  const homePath = getRedirectForUser(user) || '/login'
+  const homePath = getDashboardPathForUser(user) || '/user/dashboard'
   const displayName = user?.fullName || 'Account'
 
   const handleLogout = async () => {

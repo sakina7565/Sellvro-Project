@@ -11,7 +11,16 @@ import { createNotification } from '../utils/notifications.js'
 export const submitOrderReview = async (req, res) => {
   try {
     const { id } = req.params
-    const { productRating, deliveryRating, deliveredOnTime, comment } = req.body
+    const {
+      productQualityRating,
+      productPerformanceRating,
+      supplierServicesRating,
+      supplierPerformanceRating,
+      productRating,
+      deliveryRating,
+      deliveredOnTime,
+      comment,
+    } = req.body
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(404).json({ message: 'Order not found.' })
@@ -45,9 +54,14 @@ export const submitOrderReview = async (req, res) => {
       return res.status(400).json({ message: 'This order has already been reviewed.' })
     }
 
-    const pRating = Math.min(5, Math.max(1, Number(productRating) || 5))
-    const dRating = Math.min(5, Math.max(1, Number(deliveryRating) || 5))
-    const onTime = deliveredOnTime !== undefined ? Boolean(deliveredOnTime) : true
+    const pQuality = Math.min(5, Math.max(1, Number(productQualityRating) || Number(productRating) || 5))
+    const pPerf = Math.min(5, Math.max(1, Number(productPerformanceRating) || Number(productRating) || 5))
+    const sServices = Math.min(5, Math.max(1, Number(supplierServicesRating) || Number(deliveryRating) || 5))
+    const sPerf = Math.min(5, Math.max(1, Number(supplierPerformanceRating) || Number(deliveryRating) || 5))
+
+    const pRating = Math.min(5, Math.max(1, Number(productRating) || Number(((pQuality + pPerf) / 2).toFixed(1))))
+    const dRating = Math.min(5, Math.max(1, Number(deliveryRating) || Number(((sServices + sPerf) / 2).toFixed(1))))
+    const onTime = deliveredOnTime !== undefined ? Boolean(deliveredOnTime) : (sPerf >= 3)
     const reviewerName = req.user.fullName || 'Verified Buyer'
 
     // Create Review
@@ -57,6 +71,10 @@ export const submitOrderReview = async (req, res) => {
       supplier: order.supplier?._id || order.supplier,
       user: req.user._id,
       reviewerName,
+      productQualityRating: pQuality,
+      productPerformanceRating: pPerf,
+      supplierServicesRating: sServices,
+      supplierPerformanceRating: sPerf,
       productRating: pRating,
       deliveryRating: dRating,
       deliveredOnTime: onTime,
