@@ -19,9 +19,9 @@ const TABLE_HEAD = [
   'QTY',
   'CARRIER',
   'TRACKING',
-  'BATCH (6 PM CUTOFF)',
+  'BATCH / DISPATCH',
   'CUSTOMIZATIONS',
-  'WMS PROOFS & CUSTODY',
+  'CUSTODY & PROOFS',
   'STATUS',
   'DATE',
   'ACTIONS',
@@ -370,12 +370,23 @@ function SupplierViewOrdersPage() {
                       )}
                     </td>
 
-                    {/* 6. Batch (6 PM Cutoff) */}
+                    {/* 6. Batch / Dispatch Mode */}
                     <td className="whitespace-nowrap px-4 py-3.5">
-                      <span className="font-mono text-xs font-bold text-rose-500">
-                        {order.wmsBatchNumber || 'CBF-WMS-PAK1035'}
-                      </span>
-                      <p className="text-[10px] text-slate-400">Daily Cutoff: 6:00 PM</p>
+                      {order.isWmsOrder ? (
+                        <>
+                          <span className="font-mono text-xs font-bold text-rose-500">
+                            {order.wmsBatchNumber || 'CBF-WMS-PAK1035'}
+                          </span>
+                          <p className="text-[10px] text-slate-400">Daily Cutoff: 6:00 PM</p>
+                        </>
+                      ) : (
+                        <>
+                          <span className="inline-block rounded bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-800 border border-blue-200">
+                            Self-Handover
+                          </span>
+                          <p className="text-[10px] text-slate-500">Supplier Direct</p>
+                        </>
+                      )}
                     </td>
 
                     {/* 7. Customizations (Customer & Shipping Address - Matching Screenshot) */}
@@ -403,7 +414,7 @@ function SupplierViewOrdersPage() {
                       </div>
                     </td>
 
-                    {/* 8. WMS Proofs & Custody */}
+                    {/* 8. Custody & Proofs */}
                     <td className="whitespace-nowrap px-4 py-3.5">
                       <div className="flex flex-col gap-1">
                         {order.shippingLabelUrl ? (
@@ -419,20 +430,20 @@ function SupplierViewOrdersPage() {
                         ) : (
                           <span className="text-[11px] text-slate-500 flex items-center gap-1">
                             <Clock className="h-3 w-3 text-slate-400" />
-                            {order.isDispatched ? 'Dispatched' : 'Awaiting Upload'}
+                            {order.isDispatched ? 'Dispatched' : 'Awaiting Label'}
                           </span>
                         )}
                         <span
                           className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold ${
-                            order.warehouseLocation === 'wms_hub' || order.isWmsOrder
+                            order.isWmsOrder
                               ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                              : 'bg-slate-100 text-slate-700 border border-slate-200'
+                              : 'bg-blue-50 text-blue-800 border border-blue-200'
                           }`}
                         >
-                          {order.warehouseLocation === 'wms_hub' || order.isWmsOrder ? (
+                          {order.isWmsOrder ? (
                             <><Warehouse className="h-3 w-3 text-emerald-600" /> WMS Hub</>
                           ) : (
-                            <><Building2 className="h-3 w-3" /> Supplier Facility</>
+                            <><Building2 className="h-3 w-3 text-blue-600" /> Supplier Facility</>
                           )}
                         </span>
                       </div>

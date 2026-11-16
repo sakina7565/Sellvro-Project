@@ -360,18 +360,87 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
           note: 'Order successfully created & verified.',
         },
       ],
-    // WMS fulfillment details
-    isWmsOrder: Boolean(this.isWmsOrder || this.warehouseLocation === 'wms_hub'),
-    wmsBatchNumber: this.wmsBatchNumber || '',
-    wmsRequestNumber: this.wmsRequestNumber || '',
-    wmsStatus: this.wmsStatus || (this.warehouseLocation === 'wms_hub' ? 'pushed' : 'not_applicable'),
-    wmsFulfillmentId: this.wmsFulfillmentId || this.wmsRequestNumber || '',
-    wmsTrackingStatus: this.wmsTrackingStatus || '',
-    wmsTrackingStatusDetail: this.wmsTrackingStatusDetail || '',
-    wmsDispatchProofUrl: this.wmsDispatchProofUrl || '',
+    // Fulfillment classification (Warehouse vs Self-Fulfillment)
+    fulfillmentType: Boolean(
+      productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))
+    ) && this.isWmsOrder !== false && this.warehouseLocation !== 'supplier_warehouse'
+      ? 'warehouse'
+      : 'self',
+    fulfillmentLabel: Boolean(
+      productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))
+    ) && this.isWmsOrder !== false && this.warehouseLocation !== 'supplier_warehouse'
+      ? 'Sellvro WMS Warehouse'
+      : 'Self-Fulfillment',
+    // WMS fulfillment details (only present for WMS-managed orders)
+    isWmsOrder: Boolean(
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ),
+    wmsBatchNumber: (
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ) ? (this.wmsBatchNumber || '') : '',
+    wmsRequestNumber: (
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ) ? (this.wmsRequestNumber || '') : '',
+    wmsStatus: (
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ) ? (this.wmsStatus || (this.warehouseLocation === 'wms_hub' ? 'pushed' : 'not_applicable')) : 'not_applicable',
+    wmsFulfillmentId: (
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ) ? (this.wmsFulfillmentId || this.wmsRequestNumber || '') : '',
+    wmsTrackingStatus: (
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ) ? (this.wmsTrackingStatus || '') : '',
+    wmsTrackingStatusDetail: (
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ) ? (this.wmsTrackingStatusDetail || '') : '',
+    wmsDispatchProofUrl: (
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ) ? (this.wmsDispatchProofUrl || '') : '',
     isDispatched: Boolean(this.isDispatched),
     dispatchedAt: this.dispatchedAt || null,
-    wmsPushedAt: this.wmsPushedAt || null,
+    wmsPushedAt: (
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ) ? (this.wmsPushedAt || null) : null,
     isReviewed: Boolean(this.isReviewed),
     reviewId: this.review?.toString?.() || '',
     promisedHandlingTime: this.promisedHandlingTime || '24 Hours (1 business day)',

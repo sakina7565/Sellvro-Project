@@ -503,8 +503,8 @@ function OrderDetailDrawer({
                 </div>
               </div>
 
-              {/* Sellvro WMS Fulfillment Status Card */}
-              {order.isWmsOrder && (
+              {/* Dynamic Fulfillment Mode Card (WMS Warehouse vs Self-Fulfillment) */}
+              {order.isWmsOrder ? (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 shadow-xs">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
@@ -585,11 +585,55 @@ function OrderDetailDrawer({
                       type="button"
                       onClick={handleLiveTrack}
                       disabled={trackingLive}
-                      className="inline-flex items-center gap-1 rounded-md bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-800 transition disabled:opacity-60 shadow-2xs"
+                      className="inline-flex items-center gap-1 rounded-md bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-800 transition disabled:opacity-60 shadow-2xs cursor-pointer"
                     >
                       <RefreshCw className={`h-3 w-3 ${trackingLive ? 'animate-spin' : ''}`} />
                       {trackingLive ? 'Syncing...' : 'Live WMS Tracking'}
                     </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Building2 className="h-4 w-4 text-blue-700" />
+                      <p className="text-xs font-bold uppercase tracking-wide text-blue-950">
+                        Self-Fulfillment (Supplier Facility Direct)
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-blue-100 border border-blue-300 px-2.5 py-0.5 text-[11px] font-bold text-blue-800">
+                      🏭 Self-Fulfilled
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2.5 text-xs">
+                    <div>
+                      <span className="block text-[11px] text-slate-500">Physical Stock Location:</span>
+                      <strong className="text-slate-900">Supplier Private Facility</strong>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] text-slate-500">Fulfillment Mode:</span>
+                      <strong className="text-blue-900">Direct Courier Handover</strong>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] text-slate-500">Custody Status:</span>
+                      <span className="inline-flex items-center gap-1 font-bold text-slate-800">
+                        <span className="h-2 w-2 rounded-full bg-blue-600" />
+                        {order.warehouseLocation === 'in_transit'
+                          ? 'In Courier Transit'
+                          : order.warehouseLocation === 'delivered'
+                            ? 'Delivered to Customer'
+                            : 'In Supplier Warehouse'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] text-slate-500">Promised Handling Time:</span>
+                      <strong className="text-emerald-700">{order.promisedHandlingTime || 'Within 24 Hours'}</strong>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-2.5 border-t border-blue-200/70 text-[11px] text-blue-950 font-medium">
+                    📦 Product is stored at your own facility. Pack the items, attach shipping label, and hand over to courier partner.
                   </div>
                 </div>
               )}
@@ -735,7 +779,7 @@ function OrderDetailDrawer({
                         className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100"
                       >
                         <option value="supplier_warehouse">🏭 At Supplier Warehouse</option>
-                        <option value="wms_hub">🏢 At WMS Central Hub</option>
+                        {order.isWmsOrder && <option value="wms_hub">🏢 At WMS Central Hub</option>}
                         <option value="in_transit">🚚 In Courier Transit</option>
                         <option value="delivered">✅ Delivered to Customer</option>
                       </select>
@@ -751,22 +795,22 @@ function OrderDetailDrawer({
                     >
                       {saving ? 'Updating…' : 'Save Status & Custody Location'}
                     </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      fullWidth
-                      disabled={pushingWms}
-                      onClick={handlePushWms}
-                      className="border-emerald-300 text-emerald-800 hover:bg-emerald-50"
-                    >
-                      <Warehouse className="h-3.5 w-3.5 mr-1 text-emerald-600" />
-                      {pushingWms
-                        ? 'Pushing to WMS…'
-                        : order.isWmsOrder
-                          ? 'Re-Sync with WMS Warehouse'
-                          : 'Push Order to WMS Warehouse'}
-                    </Button>
+                    {order.isWmsOrder && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        fullWidth
+                        disabled={pushingWms}
+                        onClick={handlePushWms}
+                        className="border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+                      >
+                        <Warehouse className="h-3.5 w-3.5 mr-1 text-emerald-600" />
+                        {pushingWms
+                          ? 'Pushing to WMS…'
+                          : 'Re-Sync with WMS Warehouse'}
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}

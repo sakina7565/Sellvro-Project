@@ -208,13 +208,13 @@ async function pushOrderToWmsApi({
       try {
         const wmsByEmail = await findWmsUserByEmail(supplier.email)
         if (wmsByEmail?.id) clientId = wmsByEmail.id
-      } catch (_) {}
+      } catch (_) { }
     }
     if (!clientId && supplierCode) {
       try {
         const wmsByCode = await findWmsUserByUniqueName(supplierCode)
         if (wmsByCode?.id) clientId = wmsByCode.id
-      } catch (_) {}
+      } catch (_) { }
     }
     if (!clientId) {
       clientId = 36
@@ -637,21 +637,24 @@ export const createOrder = async (req, res) => {
 
     const supplierUser = await User.findById(product.supplier)
 
-    // 🚀 Push order to WMS with genuine carrier and real tracking (or empty if pending)
-    let wmsResult = await pushOrderToWmsApi({
-      orderNo,
-      product,
-      quantity,
-      unitPrice,
-      total,
-      shippingAddress,
-      shippingLabelUrl,
-      brandLabel,
-      labelNotes,
-      supplier: supplierUser,
-      carrier: requestedCarrier,
-      trackingNumber: userTrackingNumber,
-    })
+    // 🚀 Only push order to WMS if product is warehouse-fulfilled (not self-fulfillment)
+    let wmsResult = null
+    if (isAtWms) {
+      wmsResult = await pushOrderToWmsApi({
+        orderNo,
+        product,
+        quantity,
+        unitPrice,
+        total,
+        shippingAddress,
+        shippingLabelUrl,
+        brandLabel,
+        labelNotes,
+        supplier: supplierUser,
+        carrier: requestedCarrier,
+        trackingNumber: userTrackingNumber,
+      })
+    }
 
     const assignedCarrier = requestedCarrier || wmsResult?.carrier || 'FedEx'
     const assignedTracking = userTrackingNumber || (wmsResult?.trackingNumber && !wmsResult.trackingNumber.startsWith('SLV-') ? wmsResult.trackingNumber : '')
@@ -676,15 +679,15 @@ export const createOrder = async (req, res) => {
       handlingHoursPromised: parseHandlingHours(product.handlingTime),
       trackingStatus: hasRealTracking ? 'processing' : (isAtWms ? 'processing' : 'placed'),
       estimatedDelivery: isAtWms ? '2 - 4 Business Days (WMS Fast-Track)' : '3 - 5 Business Days',
-      isWmsOrder: true,
-      wmsBatchNumber: wmsResult?.batchNumber || calculateBatchNumber(supplierUser?.wmsClientId || supplierUser?.supplierCode || 'WMS-PAK1035'),
-      wmsRequestNumber: wmsResult?.requestNumber || `1-${calculateBatchNumber(supplierUser?.wmsClientId || supplierUser?.supplierCode || 'WMS-PAK1035')}`,
-      wmsFulfillmentId: wmsResult?.fulfillmentId || wmsResult?.requestNumber || orderNo,
-      wmsStatus: wmsResult?.wmsStatus || 'pending',
-      wmsTrackingStatus: wmsResult?.wmsTrackingStatus || 'awaiting_pickup',
+      isWmsOrder: isAtWms,
+      wmsBatchNumber: isAtWms ? (wmsResult?.batchNumber || calculateBatchNumber(supplierUser?.wmsClientId || supplierUser?.supplierCode || 'WMS-PAK1035')) : '',
+      wmsRequestNumber: isAtWms ? (wmsResult?.requestNumber || `1-${calculateBatchNumber(supplierUser?.wmsClientId || supplierUser?.supplierCode || 'WMS-PAK1035')}`) : '',
+      wmsFulfillmentId: isAtWms ? (wmsResult?.fulfillmentId || wmsResult?.requestNumber || orderNo) : '',
+      wmsStatus: isAtWms ? (wmsResult?.wmsStatus || 'pending') : 'not_applicable',
+      wmsTrackingStatus: isAtWms ? (wmsResult?.wmsTrackingStatus || 'awaiting_pickup') : '',
       isDispatched: Boolean(wmsResult?.isDispatched),
-      wmsPushedAt: wmsResult?.pushedAt || new Date(),
-      wmsResponse: wmsResult?.wmsResponse || {},
+      wmsPushedAt: isAtWms ? (wmsResult?.pushedAt || new Date()) : null,
+      wmsResponse: isAtWms ? (wmsResult?.wmsResponse || {}) : {},
       trackingTimeline: [
         {
           status: 'placed',
@@ -697,14 +700,14 @@ export const createOrder = async (req, res) => {
         },
         ...(isAtWms
           ? [
-              {
-                status: 'processing',
-                title: 'Order Registered in WMS Warehouse',
-                location: initialWarehouseLabel,
-                timestamp: new Date(),
-                note: `Order registered in WMS inventory (Batch: ${wmsResult?.batchNumber || 'CBF-ACTIVE'}). Warehouse stock verified & ready for courier pick-up.`,
-              },
-            ]
+            {
+              status: 'processing',
+              title: 'Order Registered in WMS Warehouse',
+              location: initialWarehouseLabel,
+              timestamp: new Date(),
+              note: `Order registered in WMS inventory (Batch: ${wmsResult?.batchNumber || 'CBF-ACTIVE'}). Warehouse stock verified & ready for courier pick-up.`,
+            },
+          ]
           : []),
       ],
       brandLabel,
@@ -1232,14 +1235,14 @@ export const getPublicOrderTracking = async (req, res) => {
         Array.isArray(order.trackingTimeline) && order.trackingTimeline.length > 0
           ? order.trackingTimeline
           : [
-              {
-                status: order.trackingStatus || 'placed',
-                title: 'Order Placed & Label Attached',
-                location: order.warehouseLocationLabel || 'Warehouse',
-                timestamp: order.createdAt,
-                note: 'Order confirmed and registered in shipping system.',
-              },
-            ],
+            {
+              status: order.trackingStatus || 'placed',
+              title: 'Order Placed & Label Attached',
+              location: order.warehouseLocationLabel || 'Warehouse',
+              timestamp: order.createdAt,
+              note: 'Order confirmed and registered in shipping system.',
+            },
+          ],
     }
 
     return res.json({
@@ -1675,7 +1678,7 @@ export const cancelOrder = async (req, res) => {
       orderNo: order.orderNo,
       sku: product?.sku,
       quantity: order.quantity,
-    }).catch(() => {})
+    }).catch(() => { })
 
     await order.save()
 
@@ -1686,7 +1689,7 @@ export const cancelOrder = async (req, res) => {
       title: `Order #${order.orderNo} Cancelled & Refunded`,
       message: `Your order was cancelled before courier handover. Full amount of $${Number(order.total || 0).toFixed(2)} has been refunded to your Sellvro Wallet (Ref: ${refundTxId || '26-W'}).`,
       link: '/user/orders',
-    }).catch(() => {})
+    }).catch(() => { })
 
     if (order.supplier) {
       await createNotification({
@@ -1695,7 +1698,7 @@ export const cancelOrder = async (req, res) => {
         title: `Order #${order.orderNo} Cancelled Prior to Handover`,
         message: `Order #${order.orderNo} was cancelled before courier dispatch. Pending payout removed and warehouse inventory restored.`,
         link: '/supplier/view-orders',
-      }).catch(() => {})
+      }).catch(() => { })
     }
 
     return res.json({
@@ -1775,7 +1778,7 @@ export const updateUserOrderTracking = async (req, res) => {
       orderNo: order.orderNo,
       carrier,
       trackingNumber,
-    }).catch(() => {})
+    }).catch(() => { })
 
     return res.json({
       success: true,
