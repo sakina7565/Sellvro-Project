@@ -11,7 +11,6 @@ import {
   approveWalletRequest,
   rejectWalletRequest,
   transferRealPayment,
-  quickCreditWallet,
 } from '../controllers/walletController.js'
 import { protect, authorize, requireApproved } from '../middleware/auth.js'
 import { productUpload } from '../middleware/upload.js'
@@ -45,6 +44,5 @@ router.get('/requests', protect, authorize('admin'), listAllWalletRequests)
 router.patch('/requests/:id/approve', protect, authorize('admin'), approveWalletRequest)
 router.patch('/requests/:id/reject', protect, authorize('admin'), rejectWalletRequest)
 router.post('/requests/:id/transfer-payment', protect, authorize('admin'), transferRealPayment)
-router.post('/quick-credit', protect, authorize('user', 'admin'), quickCreditWallet)
 
 export default router

@@ -82,7 +82,6 @@ export default function UserCheckoutPage() {
 
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [creditingWallet, setCreditingWallet] = useState(false)
 
   // Load wallet balance
   useEffect(() => {
@@ -166,26 +165,6 @@ export default function UserCheckoutPage() {
 
   const adjustQty = (delta) => {
     setQuantity((prev) => Math.min(maxQty, Math.max(1, prev + delta)))
-  }
-
-  const handleQuickTopup = async () => {
-    setCreditingWallet(true)
-    setError('')
-    try {
-      const needed = Math.max(500, Math.ceil(total - walletBalance + 50))
-      const res = await walletApi.quickCredit(needed)
-      const newBal = res.walletBalance ?? res.balance ?? (walletBalance + needed)
-      setWalletBalance(newBal)
-      if (user) {
-        updateUser({ ...user, walletBalance: newBal })
-      }
-      return newBal
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to credit test balance.'))
-      return null
-    } finally {
-      setCreditingWallet(false)
-    }
   }
 
   const handleCarrierChange = (e) => {
@@ -306,7 +285,7 @@ export default function UserCheckoutPage() {
 
     if (walletBalance < total) {
       setError(
-        `Insufficient wallet balance. Total due is $${total.toFixed(2)}, but you currently have $${Number(walletBalance || 0).toFixed(2)}. Click 1-Click Top-Up or deposit funds.`,
+        `Insufficient wallet balance. Total due is $${total.toFixed(2)}, but you currently have $${Number(walletBalance || 0).toFixed(2)}. Deposit funds from your Wallet page.`,
       )
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
@@ -827,14 +806,6 @@ export default function UserCheckoutPage() {
                     ⚠️ Balance is short by <strong>${(total - Number(walletBalance || 0)).toFixed(2)}</strong>.
                   </span>
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleQuickTopup}
-                      disabled={creditingWallet}
-                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-500 disabled:opacity-50 transition cursor-pointer"
-                    >
-                      {creditingWallet ? 'Adding…' : '⚡ 1-Click Top-Up ($500)'}
-                    </button>
                     <Link
                       to="/user/wallet"
                       className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 transition"

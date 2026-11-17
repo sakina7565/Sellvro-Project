@@ -847,8 +847,8 @@ export const createAccount = async (req, res) => {
     if (role === 'admin' || role === 'staff') {
       const roleId = adminRoleId && adminRoleId !== 'super_admin' ? adminRoleId : null
 
-      if (req.user?.adminRoleId && !roleId) {
-        return res.status(403).json({ message: 'Only super administrators can create super admin accounts.' })
+      if (req.user?.adminRoleId) {
+        return res.status(403).json({ message: 'Only Super Admins can create admin or staff accounts.' })
       }
 
       let roleName = null
@@ -944,6 +944,10 @@ export const updateAccount = async (req, res) => {
     const user = await User.findById(id).select('+password')
     if (!user) {
       return res.status(404).json({ message: 'Account not found.' })
+    }
+
+    if (user.role === 'admin' && req.user?.adminRoleId) {
+      return res.status(403).json({ message: 'Only Super Admins can modify admin or staff accounts.' })
     }
 
     if (email?.trim() && email.toLowerCase().trim() !== user.email) {
@@ -1080,6 +1084,9 @@ export const deleteAccount = async (req, res) => {
     }
 
     if (user.role === 'admin') {
+      if (req.user?.adminRoleId) {
+        return res.status(403).json({ message: 'Only Super Admins can delete admin or staff accounts.' })
+      }
       if (user._id.toString() === req.user._id.toString()) {
         return res.status(400).json({ message: 'You cannot delete your own account.' })
       }

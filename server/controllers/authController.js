@@ -621,7 +621,14 @@ export const switchBack = async (req, res) => {
 
 export const adminRegister = async (req, res) => {
   try {
-    const { fullName, email, password, confirmPassword, adminType, adminRoleId } = req.body
+    // Only the very first admin may self-register (bootstrap); after that only a logged-in Super Admin can create admins.
+    const adminCount = await User.countDocuments({ role: 'admin' })
+    const isSuperAdmin = req.user?.role === 'admin' && !req.user.adminRoleId
+    if (adminCount > 0 && !isSuperAdmin) {
+      return res.status(403).json({ message: 'Admin registration is closed. Ask a Super Admin to create your account.' })
+    }
+
+    const { fullName, email, password, confirmPassword, adminType, adminRoleId } = req.body || {}
 
     if (!fullName || !email || !password) {
       return res.status(400).json({ message: 'Full name, email, and password are required.' })
@@ -658,9 +665,14 @@ export const adminRegister = async (req, res) => {
       adminRoleId: roleId,
     })
 
+    const safeUser = await buildSafeUser(user)
+    if (isSuperAdmin) {
+      // Super Admin created a colleague: keep the creator's own session.
+      return res.status(201).json({ message: 'Admin account registered successfully.', user: safeUser })
+    }
+
     const token = signToken(user._id)
     setAuthCookie(res, token)
-    const safeUser = await buildSafeUser(user)
 
     return res.status(201).json({
       message: 'Admin account registered successfully.',
@@ -881,32 +893,41 @@ export const changePassword = async (req, res) => {
   }
 }
 
+// Same public OAuth client ID the frontend falls back to (client IDs are not secrets).
+const GOOGLE_CLIENT_ID =
+  process.env.GOOGLE_CLIENT_ID ||
+  process.env.VITE_GOOGLE_CLIENT_ID ||
+  '366677857468-va47f432ro1haif68t6glvdpp895tq36.apps.googleusercontent.com'
+
+// Asks Google who owns this access token; rejects tokens issued to other apps or unverified emails.
+async function verifyGoogleAccessToken(accessToken) {
+  const response = await fetch(
+    `https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`,
+  )
+  if (!response.ok) return null
+  const info = await response.json()
+  if (info.aud !== GOOGLE_CLIENT_ID && info.azp !== GOOGLE_CLIENT_ID) return null
+  if (!info.email || String(info.email_verified) !== 'true') return null
+  return { email: info.email, sub: info.sub }
+}
+
 export const googleAuth = async (req, res) => {
   try {
-    const { credential, role = 'user', email, name, googleId, picture } = req.body
+    const { accessToken, name, picture } = req.body || {}
 
-    let userEmail = email
-    let userName = name
-    let userGoogleId = googleId
-
-    if (credential) {
-      try {
-        const decoded = jwt.decode(credential)
-        if (decoded?.email) {
-          userEmail = decoded.email
-          userName = decoded.name || decoded.given_name || userEmail.split('@')[0]
-          userGoogleId = decoded.sub
-        }
-      } catch (e) {
-        console.error('Google token decode error:', e)
-      }
+    if (!accessToken) {
+      return res.status(400).json({ message: 'Google sign-in token is missing. Please try again.' })
     }
 
-    if (!userEmail) {
-      return res.status(400).json({ message: 'Could not obtain email address from Google.' })
+    const verified = await verifyGoogleAccessToken(String(accessToken))
+    if (!verified) {
+      return res.status(401).json({ message: 'Google sign-in could not be verified. Please try again.' })
     }
 
-    userEmail = userEmail.toLowerCase().trim()
+    // Identity comes only from Google's answer; the body name is used just to prefill registration.
+    const userEmail = verified.email.toLowerCase().trim()
+    const userName = name
+    const userGoogleId = verified.sub
     let user = await User.findOne({ email: userEmail })
 
     if (user) {

@@ -1039,10 +1039,6 @@ function RegisterPage() {
           <Link to="/admin/login" className="font-semibold text-slate-600 hover:text-slate-900">
             Admin Sign In
           </Link>
-          {' · '}
-          <Link to="/admin/register" className="font-semibold text-slate-600 hover:text-slate-900">
-            Register Admin
-          </Link>
         </p>
       </div>
     </AuthLayout>

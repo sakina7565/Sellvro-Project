@@ -42,9 +42,27 @@ export const getCurrencies = async (_req, res) => {
   }
 }
 
-export const getWalletSettings = async (_req, res) => {
+const SECRET_SETTING_KEYS = new Set(['apiKey', 'clientSecret', 'secretKey'])
+
+// Deep-copies a plain object without payment-provider credentials (ObjectIds/Dates pass through).
+export function stripSettingSecrets(value) {
+  if (Array.isArray(value)) return value.map(stripSettingSecrets)
+  if (value && typeof value === 'object' && !(value instanceof Date) && !value._bsontype) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key]) => !SECRET_SETTING_KEYS.has(key))
+        .map(([key, v]) => [key, stripSettingSecrets(v)]),
+    )
+  }
+  return value
+}
+
+export const getWalletSettings = async (req, res) => {
   try {
     const setting = await WalletSetting.getOrCreate()
+    if (req.user?.role !== 'admin') {
+      return res.json({ data: stripSettingSecrets(setting.toObject()) })
+    }
     return res.json({ data: setting })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to load wallet settings.' })
@@ -343,23 +361,5 @@ export const transferRealPayment = async (req, res) => {
     })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Payment transfer execution failed.' })
-  }
-}
-
-export const quickCreditWallet = async (req, res) => {
-  try {
-    const amount = Number(req.body.amount || 500)
-    const user = await User.findById(req.user._id)
-    if (!user) return res.status(404).json({ message: 'User not found' })
-    user.walletBalance = Number(((user.walletBalance || 0) + amount).toFixed(2))
-    await user.save()
-    return res.json({
-      success: true,
-      message: `$${amount.toFixed(2)} credited to your wallet balance.`,
-      walletBalance: user.walletBalance,
-      balance: user.walletBalance,
-    })
-  } catch (err) {
-    return res.status(500).json({ message: err.message || 'Failed to credit wallet.' })
   }
 }

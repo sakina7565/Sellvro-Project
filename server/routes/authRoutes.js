@@ -14,7 +14,7 @@ import {
   googleAuth,
   changePassword,
 } from '../controllers/authController.js'
-import { protect } from '../middleware/auth.js'
+import { protect, optionalProtect } from '../middleware/auth.js'
 import { authLimiter } from '../middleware/authLimiter.js'
 import { productUpload } from '../middleware/upload.js'
 
@@ -35,7 +35,7 @@ const router = Router()
 
 router.post('/register', authLimiter, uploadIdCard, register)
 router.post('/login', authLimiter, login)
-router.post('/admin/register', authLimiter, adminRegister)
+router.post('/admin/register', authLimiter, optionalProtect, adminRegister)
 router.post('/admin/login', authLimiter, adminLogin)
 router.get('/roles', getPublicRoles)
 router.post('/logout', logout)
