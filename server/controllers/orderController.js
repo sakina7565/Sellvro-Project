@@ -68,6 +68,12 @@ function validateShippingAddress(shipping) {
 }
 
 export const createOrder = async (req, res) => {
+  let debitedBuyer = false
+  let decrementedStock = false
+  let buyerTotal = 0
+  let targetProductId = null
+  let orderQuantity = 0
+
   try {
     const productId = req.body.productId || req.body.product
     const quantity = Number(req.body.quantity || 1)
@@ -75,11 +81,11 @@ export const createOrder = async (req, res) => {
       req.body.shippingAddress || req.body.shipping || req.body,
     )
 
-    if (!productId) {
-      return res.status(400).json({ message: 'Product is required.' })
+    if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({ message: 'A valid product ID is required.' })
     }
-    if (!Number.isFinite(quantity) || quantity < 1) {
-      return res.status(400).json({ message: 'Quantity must be at least 1.' })
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      return res.status(400).json({ message: 'Quantity must be a positive integer.' })
     }
 
     const shippingError = validateShippingAddress(shippingAddress)
@@ -120,36 +126,60 @@ export const createOrder = async (req, res) => {
     }
 
     const unitPrice = Number(product.price)
-    const total = unitPrice * quantity
+    const total = Number((unitPrice * quantity).toFixed(2))
     const commissionPercent = Number(product.commission || 0)
     const commission = Number(((total * commissionPercent) / 100).toFixed(2))
 
-    const buyer = await User.findById(req.user._id)
-    if (!buyer) {
-      return res.status(401).json({ message: 'User not found.' })
-    }
+    buyerTotal = total
+    targetProductId = product._id
+    orderQuantity = quantity
 
-    if ((buyer.walletBalance || 0) < total) {
+    // 1. Atomic debit of buyer's wallet balance
+    const updatedBuyer = await User.findOneAndUpdate(
+      { _id: req.user._id, walletBalance: { $gte: total } },
+      { $inc: { walletBalance: -total } },
+      { new: true },
+    )
+
+    if (!updatedBuyer) {
+      const buyerCheck = await User.findById(req.user._id)
+      if (!buyerCheck) {
+        return res.status(401).json({ message: 'User not found.' })
+      }
       return res.status(400).json({
-        message: `Insufficient wallet balance. Need $${total.toFixed(2)}, have $${Number(buyer.walletBalance || 0).toFixed(2)}.`,
+        message: `Insufficient wallet balance. Need $${total.toFixed(2)}, have $${Number(buyerCheck.walletBalance || 0).toFixed(2)}.`,
       })
     }
+    debitedBuyer = true
 
-    buyer.walletBalance = Number((buyer.walletBalance - total).toFixed(2))
-    product.quantity -= quantity
+    // 2. Atomic decrement of product inventory
+    const updatedProduct = await Product.findOneAndUpdate(
+      { _id: productId, quantity: { $gte: quantity }, status: 'active' },
+      { $inc: { quantity: -quantity } },
+      { new: true },
+    )
+
+    if (!updatedProduct) {
+      // Revert buyer wallet balance
+      await User.findByIdAndUpdate(req.user._id, { $inc: { walletBalance: total } })
+      debitedBuyer = false
+      return res.status(409).json({ message: 'Insufficient stock or product unavailable.' })
+    }
+    decrementedStock = true
+
     const orderNo = await uniqueOrderNo()
 
     // Determine initial warehouse custody location (WMS Central Hub vs Supplier Warehouse)
-    const isAtWms = product.inWarehouse === true || product.fulfillBy === 'warehouse'
+    const isAtWms = updatedProduct.inWarehouse === true || updatedProduct.fulfillBy === 'warehouse'
     const initialWarehouseLocation = isAtWms ? 'wms_hub' : 'supplier_warehouse'
     const initialWarehouseLabel = isAtWms ? 'At WMS Central Hub' : 'At Supplier Warehouse'
 
     const order = await Order.create({
       orderNo,
-      user: buyer._id,
-      supplier: product.supplier,
-      product: product._id,
-      productName: product.name,
+      user: updatedBuyer._id,
+      supplier: updatedProduct.supplier,
+      product: updatedProduct._id,
+      productName: updatedProduct.name,
       quantity,
       unitPrice,
       total,
@@ -179,25 +209,22 @@ export const createOrder = async (req, res) => {
       shippingAddress,
     })
 
-    await buyer.save()
-    await product.save()
-
     // Dispatch notifications to buyer, supplier and admin
     createNotification({
-      recipient: buyer._id,
+      recipient: updatedBuyer._id,
       targetRole: 'user',
       type: 'order',
       title: `Order ${orderNo} Placed`,
-      message: `Your order for ${quantity}x ${product.name} ($${total.toFixed(2)}) has been placed.`,
+      message: `Your order for ${quantity}x ${updatedProduct.name} ($${total.toFixed(2)}) has been placed.`,
       link: '/user/orders',
     })
 
     createNotification({
-      recipient: product.supplier,
+      recipient: updatedProduct.supplier,
       targetRole: 'supplier',
       type: 'order',
       title: `New Order Received (${orderNo})`,
-      message: `A new order has been placed for ${quantity}x ${product.name} ($${total.toFixed(2)}).`,
+      message: `A new order has been placed for ${quantity}x ${updatedProduct.name} ($${total.toFixed(2)}).`,
       link: '/supplier/orders',
     })
 
@@ -205,7 +232,7 @@ export const createOrder = async (req, res) => {
       targetRole: 'admin',
       type: 'order',
       title: `Order Placed (#${orderNo})`,
-      message: `${buyer.fullName || 'User'} placed an order for ${product.name} totaling $${total.toFixed(2)}.`,
+      message: `${updatedBuyer.fullName || 'User'} placed an order for ${updatedProduct.name} totaling $${total.toFixed(2)}.`,
       link: '/admin/orders',
     })
 
@@ -213,10 +240,16 @@ export const createOrder = async (req, res) => {
     return res.status(201).json({
       message: 'Order placed. Wallet debited.',
       order: populated.toSafeObject(),
-      walletBalance: buyer.walletBalance,
+      walletBalance: updatedBuyer.walletBalance,
     })
   } catch (error) {
     console.error('Create order error:', error)
+    if (decrementedStock && targetProductId) {
+      await Product.findByIdAndUpdate(targetProductId, { $inc: { quantity: orderQuantity } }).catch(() => {})
+    }
+    if (debitedBuyer && buyerTotal > 0) {
+      await User.findByIdAndUpdate(req.user._id, { $inc: { walletBalance: buyerTotal } }).catch(() => {})
+    }
     return res.status(500).json({ message: error.message || 'Failed to create order.' })
   }
 }
@@ -292,9 +325,17 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     const next = String(req.body.status || '').trim().toLowerCase()
-    const allowed = ['placed', 'pending', 'cancelled', 'in_process']
+    const allowed = ['placed', 'pending', 'cancelled', 'in_process', 'delivered', 'returned']
     if (!allowed.includes(next)) {
       return res.status(400).json({ message: 'Invalid order status.' })
+    }
+
+    // Terminal states cannot transition to other statuses
+    if (order.status === 'cancelled') {
+      return res.status(400).json({ message: 'Cannot modify an order that has already been cancelled.' })
+    }
+    if (order.status === 'delivered' && next !== 'returned') {
+      return res.status(400).json({ message: 'Delivered orders cannot be moved back or cancelled (only returned).' })
     }
 
     const isAdmin = req.user.role === 'admin'
@@ -304,11 +345,51 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(403).json({ message: 'Not allowed to update this order.' })
     }
 
+    // Handle cancellation: refund buyer wallet & restore inventory stock
+    if (next === 'cancelled') {
+      if (!order.isRefunded) {
+        const buyerId = order.user?._id || order.user
+        const productId = order.product?._id || order.product
+
+        if (buyerId && order.total > 0) {
+          await User.findByIdAndUpdate(buyerId, { $inc: { walletBalance: Number(order.total.toFixed(2)) } })
+        }
+        if (productId && order.quantity > 0) {
+          await Product.findByIdAndUpdate(productId, { $inc: { quantity: order.quantity } })
+        }
+
+        order.isRefunded = true
+        order.refundedAt = new Date()
+        order.payoutStatus = 'cancelled'
+
+        if (!Array.isArray(order.trackingTimeline)) {
+          order.trackingTimeline = []
+        }
+        order.trackingTimeline.push({
+          status: 'cancelled',
+          title: 'Order Cancelled & Refunded',
+          location: 'System',
+          timestamp: new Date(),
+          note: `Order cancelled by ${isAdmin ? 'Admin' : 'Supplier'}. $${Number(order.total).toFixed(2)} refunded to buyer wallet, and stock restored.`,
+        })
+
+        createNotification({
+          recipient: buyerId,
+          targetRole: 'user',
+          type: 'order',
+          title: `Order ${order.orderNo} Cancelled`,
+          message: `Your order ${order.orderNo} has been cancelled. $${Number(order.total).toFixed(2)} has been refunded to your wallet.`,
+          link: '/user/orders',
+        })
+      }
+      order.trackingStatus = 'cancelled'
+    }
+
     order.status = next
     await order.save()
 
     return res.json({
-      message: 'Order status updated.',
+      message: next === 'cancelled' ? 'Order cancelled. Buyer refunded and stock restored.' : 'Order status updated.',
       order: order.toSafeObject(),
     })
   } catch (error) {
@@ -346,18 +427,61 @@ export const updateOrderTracking = async (req, res) => {
     if (trackingStatus) {
       const allowedTracking = ['placed', 'processing', 'in_transit', 'out_for_delivery', 'delivered', 'cancelled']
       if (allowedTracking.includes(trackingStatus.toLowerCase())) {
-        order.trackingStatus = trackingStatus.toLowerCase()
-        if (trackingStatus === 'cancelled') {
+        const nextTracking = trackingStatus.toLowerCase()
+
+        if (nextTracking === 'cancelled') {
+          if (order.status === 'cancelled') {
+            return res.status(400).json({ message: 'Order is already cancelled.' })
+          }
+          if (order.status === 'delivered') {
+            return res.status(400).json({ message: 'Cannot cancel an order that is already delivered.' })
+          }
+
+          // Refund buyer & restock
+          if (!order.isRefunded) {
+            const buyerId = order.user?._id || order.user
+            const productId = order.product?._id || order.product
+
+            if (buyerId && order.total > 0) {
+              await User.findByIdAndUpdate(buyerId, { $inc: { walletBalance: Number(order.total.toFixed(2)) } })
+            }
+            if (productId && order.quantity > 0) {
+              await Product.findByIdAndUpdate(productId, { $inc: { quantity: order.quantity } })
+            }
+
+            order.isRefunded = true
+            order.refundedAt = new Date()
+            order.payoutStatus = 'cancelled'
+
+            createNotification({
+              recipient: buyerId,
+              targetRole: 'user',
+              type: 'order',
+              title: `Order ${order.orderNo} Cancelled`,
+              message: `Your order ${order.orderNo} has been cancelled. $${Number(order.total).toFixed(2)} has been refunded to your wallet.`,
+              link: '/user/orders',
+            })
+          }
           order.status = 'cancelled'
-        } else if (trackingStatus === 'processing' || trackingStatus === 'in_transit' || trackingStatus === 'out_for_delivery') {
+        } else if (nextTracking === 'processing' || nextTracking === 'in_transit' || nextTracking === 'out_for_delivery') {
+          if (order.status === 'cancelled') {
+            return res.status(400).json({ message: 'Cannot progress tracking for a cancelled order.' })
+          }
           order.status = 'in_process'
+        } else if (nextTracking === 'delivered') {
+          if (order.status === 'cancelled') {
+            return res.status(400).json({ message: 'Cannot mark a cancelled order as delivered.' })
+          }
+          order.status = 'delivered'
         }
 
+        order.trackingStatus = nextTracking
+
         // Auto sync warehouseLocation if tracking status progresses
-        if (trackingStatus === 'in_transit' || trackingStatus === 'out_for_delivery') {
+        if (nextTracking === 'in_transit' || nextTracking === 'out_for_delivery') {
           order.warehouseLocation = 'in_transit'
           order.warehouseLocationLabel = 'In Courier Transit'
-        } else if (trackingStatus === 'delivered') {
+        } else if (nextTracking === 'delivered') {
           order.warehouseLocation = 'delivered'
           order.warehouseLocationLabel = 'Delivered to Customer'
         }

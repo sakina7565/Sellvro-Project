@@ -238,17 +238,39 @@ export const updateMyProduct = async (req, res) => {
       })
     }
 
+    const wasActive = product.status === 'active'
+    const isMaterialChange =
+      (fields.name && fields.name !== product.name) ||
+      (fields.price !== undefined && Number(fields.price) !== Number(product.price)) ||
+      (fields.category && fields.category !== product.category) ||
+      (fields.description && fields.description !== product.description) ||
+      uploaded.length > 0 ||
+      (req.body.existingImages !== undefined && JSON.stringify(fields.images) !== JSON.stringify(product.images))
+
     const resubmit = req.body.status === 'pending_approval' || req.body.resubmit === 'true'
     Object.assign(product, fields)
-    if (resubmit || product.status === 'rejected') {
+    if (resubmit || product.status === 'rejected' || (wasActive && isMaterialChange)) {
       product.status = 'pending_approval'
     }
 
     await product.save()
     await product.populate('supplier', 'fullName email')
 
+    if (wasActive && isMaterialChange) {
+      createNotification({
+        targetRole: 'admin',
+        type: 'product',
+        title: 'Product Edited — Re-approval Required',
+        message: `${req.user.fullName || 'A supplier'} edited active product "${product.name}". It has been submitted for re-moderation.`,
+        link: '/admin/products',
+      })
+    }
+
     return res.json({
-      message: 'Product updated.',
+      message:
+        wasActive && isMaterialChange
+          ? 'Product changes saved and submitted for admin re-approval.'
+          : 'Product updated.',
       product: product.toSafeObject(),
     })
   } catch (error) {

@@ -48,21 +48,24 @@ const envOrigins = (process.env.CLIENT_URL || '')
 
 const allowedOrigins = [...new Set([...defaultOrigins, ...envOrigins])]
 
-app.use(
-  cors({
-    origin(origin, callback) {
-      // Allow non-browser tools (no Origin) and configured frontends
-      if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
-        return callback(null, true)
-      }
-      return callback(new Error(`CORS blocked for origin: ${origin}`))
-    },
-    credentials: true,
-  }),
-)
+const apiCors = cors({
+  origin(origin, callback) {
+    // Allow non-browser tools (no Origin) and configured frontends
+    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      return callback(null, true)
+    }
+    return callback(new Error(`CORS blocked for origin: ${origin}`))
+  },
+  credentials: true,
+})
+
+// Static uploads allow cross-origin resource sharing for product/receipt media
+app.use('/uploads', cors(), express.static(UPLOADS_DIR))
+
+// Apply strict CORS and body parsers to /api routes
+app.use('/api', apiCors)
 app.use(cookieParser())
 app.use(express.json())
-app.use('/uploads', express.static(UPLOADS_DIR))
 
 app.get('/api/health', (_req, res) => {
   res.json({

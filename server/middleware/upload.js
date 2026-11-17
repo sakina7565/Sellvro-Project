@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import crypto from 'crypto'
 import { fileURLToPath } from 'url'
 import multer from 'multer'
 
@@ -14,8 +15,9 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
   filename: (_req, file, cb) => {
-    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')
-    cb(null, `${Date.now()}-${safe}`)
+    const ext = path.extname(file.originalname).toLowerCase()
+    const uuid = crypto.randomUUID()
+    cb(null, `${Date.now()}-${uuid}${ext}`)
   },
 })
 

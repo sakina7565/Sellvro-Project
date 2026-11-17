@@ -215,25 +215,37 @@ export const listAllWalletRequests = async (_req, res) => {
 
 export const approveWalletRequest = async (req, res) => {
   try {
-    const request = await WalletRequest.findById(req.params.id).populate('user', 'fullName email role')
+    const adminNote = req.body?.adminNote ? String(req.body.adminNote).trim() : ''
+    const updatePayload = { status: 'approved' }
+    if (adminNote) updatePayload.adminNote = adminNote
+
+    // Atomic guard: only transition from 'pending'
+    const request = await WalletRequest.findOneAndUpdate(
+      { _id: req.params.id, status: 'pending' },
+      { $set: updatePayload },
+      { new: true },
+    ).populate('user', 'fullName email role')
+
     if (!request) {
-      return res.status(404).json({ message: 'Wallet request not found.' })
-    }
-    if (request.status !== 'pending') {
-      return res.status(400).json({ message: `Request is already ${request.status}.` })
+      const existing = await WalletRequest.findById(req.params.id)
+      if (!existing) {
+        return res.status(404).json({ message: 'Wallet request not found.' })
+      }
+      return res.status(400).json({ message: `Request is already ${existing.status}.` })
     }
 
-    const user = await User.findById(request.user._id || request.user)
+    const userId = request.user?._id || request.user
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $inc: { walletBalance: Number(request.amount.toFixed(2)) } },
+      { new: true },
+    )
+
     if (!user) {
+      // Rollback request status if user not found
+      await WalletRequest.findByIdAndUpdate(request._id, { $set: { status: 'pending' } })
       return res.status(404).json({ message: 'User not found.' })
     }
-
-    user.walletBalance = Number(((user.walletBalance || 0) + request.amount).toFixed(2))
-    request.status = 'approved'
-    if (req.body?.adminNote) request.adminNote = String(req.body.adminNote).trim()
-
-    await user.save()
-    await request.save()
 
     const [safe] = await withBusinessName([request])
     return res.json({
@@ -248,17 +260,24 @@ export const approveWalletRequest = async (req, res) => {
 
 export const rejectWalletRequest = async (req, res) => {
   try {
-    const request = await WalletRequest.findById(req.params.id).populate('user', 'fullName email role')
-    if (!request) {
-      return res.status(404).json({ message: 'Wallet request not found.' })
-    }
-    if (request.status !== 'pending') {
-      return res.status(400).json({ message: `Request is already ${request.status}.` })
-    }
+    const adminNote = req.body?.adminNote ? String(req.body.adminNote).trim() : ''
+    const updatePayload = { status: 'rejected' }
+    if (adminNote) updatePayload.adminNote = adminNote
 
-    request.status = 'rejected'
-    if (req.body?.adminNote) request.adminNote = String(req.body.adminNote).trim()
-    await request.save()
+    // Atomic guard: only transition from 'pending'
+    const request = await WalletRequest.findOneAndUpdate(
+      { _id: req.params.id, status: 'pending' },
+      { $set: updatePayload },
+      { new: true },
+    ).populate('user', 'fullName email role')
+
+    if (!request) {
+      const existing = await WalletRequest.findById(req.params.id)
+      if (!existing) {
+        return res.status(404).json({ message: 'Wallet request not found.' })
+      }
+      return res.status(400).json({ message: `Request is already ${existing.status}.` })
+    }
 
     const [safe] = await withBusinessName([request])
     return res.json({

@@ -46,7 +46,7 @@ const orderSchema = new mongoose.Schema(
     commissionPercent: { type: Number, default: 0, min: 0 },
     status: {
       type: String,
-      enum: ['placed', 'pending', 'cancelled', 'in_process'],
+      enum: ['placed', 'pending', 'cancelled', 'in_process', 'delivered', 'returned'],
       default: 'placed',
     },
     brandLabel: { type: String, trim: true, default: '' },
@@ -65,7 +65,7 @@ const orderSchema = new mongoose.Schema(
     },
     payoutStatus: {
       type: String,
-      enum: ['pending', 'processed'],
+      enum: ['pending', 'processed', 'cancelled'],
       default: 'pending',
     },
     payoutTid: {
@@ -76,6 +76,14 @@ const orderSchema = new mongoose.Schema(
     payoutId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Payout',
+      default: null,
+    },
+    isRefunded: {
+      type: Boolean,
+      default: false,
+    },
+    refundedAt: {
+      type: Date,
       default: null,
     },
     shippingAddress: {
@@ -180,6 +188,8 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
     payoutStatus: this.payoutStatus,
     payoutTid: this.payoutTid || '',
     payoutId: this.payoutId?.toString?.() || '',
+    isRefunded: Boolean(this.isRefunded),
+    refundedAt: this.refundedAt || null,
     shippingAddress: {
       fullName: shipping.fullName || '',
       phone: shipping.phone || '',

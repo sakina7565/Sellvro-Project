@@ -237,13 +237,13 @@ router.post('/categories', requirePermission('admin.categories.manage'), createC
 router.patch('/categories/:id', requirePermission('admin.categories.manage'), updateCategory)
 router.delete('/categories/:id', requirePermission('admin.categories.manage'), deleteCategory)
 
-router.get('/countries', listCountries)
-router.post('/countries', createCountry)
-router.delete('/countries/:id', deleteCountry)
+router.get('/countries', requirePermission('admin.settings.country', 'admin.suppliers.view'), listCountries)
+router.post('/countries', requirePermission('admin.settings.country'), createCountry)
+router.delete('/countries/:id', requirePermission('admin.settings.country'), deleteCountry)
 
-router.get('/locations', listLocations)
-router.post('/locations', createLocation)
-router.delete('/locations/:id', deleteLocation)
+router.get('/locations', requirePermission('admin.settings.location', 'admin.suppliers.view'), listLocations)
+router.post('/locations', requirePermission('admin.settings.location'), createLocation)
+router.delete('/locations/:id', requirePermission('admin.settings.location'), deleteLocation)
 
 
 
@@ -369,7 +369,7 @@ router.delete(
 )
 router.post(
   '/impersonate/:id',
-  requirePermission('admin.suppliers.view', 'admin.users.view'),
+  requireSuperAdmin,
   impersonateAccount,
 )
 
