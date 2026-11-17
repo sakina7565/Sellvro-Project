@@ -2,9 +2,37 @@ import mongoose from 'mongoose'
 import Order from '../models/Order.js'
 import Payout from '../models/Payout.js'
 import User from '../models/User.js'
+import Category from '../models/Category.js'
 import BusinessProfile from '../models/BusinessProfile.js'
 import { createNotification } from '../utils/notifications.js'
 import { getNextPayoutNo } from '../services/sequenceService.js'
+
+async function getCategoryRatesMap() {
+  try {
+    const cats = await Category.find({}, 'name commissionRate').lean()
+    const map = {}
+    cats.forEach((c) => {
+      if (c.name) map[c.name.trim().toLowerCase()] = Number(c.commissionRate ?? 8)
+    })
+    return map
+  } catch {
+    return {}
+  }
+}
+
+function resolveOrderCommission(order, catRateMap = {}) {
+  const tot = Number(order.total || 0)
+  let comm = Number(order.commission || 0)
+  let commPct = Number(order.commissionPercent || 0)
+
+  if (comm <= 0 && tot > 0) {
+    const catName = (order.product?.category || order.category || '').trim().toLowerCase()
+    const rate = catRateMap[catName] !== undefined ? catRateMap[catName] : 8
+    commPct = rate
+    comm = Number(((tot * rate) / 100).toFixed(2))
+  }
+  return { commission: comm, commissionPercent: commPct }
+}
 
 /**
  * Build admin payout rows: one pending row per supplier with unpaid order earnings,
@@ -375,10 +403,12 @@ export const getPendingWeeklyPayouts = async (_req, res) => {
     const profiles = await BusinessProfile.find({ user: { $in: supplierIds } })
     const profileMap = Object.fromEntries(profiles.map((p) => [p.user.toString(), p]))
 
+    const catRateMap = await getCategoryRatesMap()
+
     const allOrders = await Order.find({
       supplier: { $in: supplierIds },
       status: { $ne: 'cancelled' },
-    }).sort({ createdAt: -1 })
+    }).populate('product', 'category commission').sort({ createdAt: -1 })
 
     const supplierMap = Object.fromEntries(suppliers.map((s) => [s._id.toString(), s]))
     const weekGroups = {}
@@ -441,8 +471,8 @@ export const getPendingWeeklyPayouts = async (_req, res) => {
 
       const isDeliv = isOrderMature(o)
       const oTotal = Number(o.total || 0)
-      const oComm = Number(o.commission || 0)
-      const net = oTotal - oComm
+      const { commission: oComm } = resolveOrderCommission(o, catRateMap)
+      const net = Number((oTotal - oComm).toFixed(2))
 
       wg.grossSales += oTotal
       wg.commission += oComm
@@ -524,9 +554,10 @@ export const getSuppliersFinancialOverview = async (_req, res) => {
     const profiles = await BusinessProfile.find({ user: { $in: supplierIds } })
     const profileMap = Object.fromEntries(profiles.map((p) => [p.user.toString(), p]))
 
+    const catRateMap = await getCategoryRatesMap()
     const allOrders = await Order.find({
       supplier: { $in: supplierIds },
-    })
+    }).populate('product', 'category commission')
 
     const allPayouts = await Payout.find({
       supplier: { $in: supplierIds },
@@ -552,8 +583,8 @@ export const getSuppliersFinancialOverview = async (_req, res) => {
       supOrders.forEach((o) => {
         if (o.status === 'cancelled') return
         const orderTotal = Number(o.total || 0)
-        const orderComm = Number(o.commission || 0)
-        const netOrder = orderTotal - orderComm
+        const { commission: orderComm } = resolveOrderCommission(o, catRateMap)
+        const netOrder = Number((orderTotal - orderComm).toFixed(2))
 
         grossSales += orderTotal
         commissionTotal += orderComm
@@ -632,7 +663,8 @@ export const getSupplierMonthlyHistory = async (req, res) => {
     }
 
     const profile = await BusinessProfile.findOne({ user: supplierId })
-    const orders = await Order.find({ supplier: supplierId }).sort({ createdAt: -1 })
+    const catRateMap = await getCategoryRatesMap()
+    const orders = await Order.find({ supplier: supplierId }).populate('product', 'category commission').sort({ createdAt: -1 })
     const payouts = await Payout.find({ supplier: supplierId }).sort({ processedAt: -1, createdAt: -1 })
 
     const now = Date.now()
@@ -674,8 +706,8 @@ export const getSupplierMonthlyHistory = async (req, res) => {
 
       if (!isCancelled) {
         const oTot = Number(o.total || 0)
-        const oComm = Number(o.commission || 0)
-        const net = oTot - oComm
+        const { commission: oComm } = resolveOrderCommission(o, catRateMap)
+        const net = Number((oTot - oComm).toFixed(2))
         g.grossSales += oTot
         g.commission += oComm
         g.netEarnings += net
@@ -759,8 +791,8 @@ export const getSupplierMonthlyHistory = async (req, res) => {
 
         if (o.status !== 'cancelled') {
           const oTot = Number(o.total || 0)
-          const oComm = Number(o.commission || 0)
-          const net = oTot - oComm
+          const { commission: oComm } = resolveOrderCommission(o, catRateMap)
+          const net = Number((oTot - oComm).toFixed(2))
           w.grossSales += oTot
           w.commission += oComm
           w.netEarnings += net
@@ -869,10 +901,11 @@ export const getSupplierMonthOrders = async (req, res) => {
     }
 
     const profile = await BusinessProfile.findOne({ user: supplierId })
+    const catRateMap = await getCategoryRatesMap()
 
     const orders = await Order.find({ supplier: supplierId })
       .populate('user', 'fullName email clientId')
-      .populate('product', 'name sku image')
+      .populate('product', 'name sku image category commission')
       .sort({ createdAt: -1 })
 
     // Filter orders matching monthKey (and optionally weekKey)
@@ -895,7 +928,7 @@ export const getSupplierMonthOrders = async (req, res) => {
 
     const formattedOrders = monthOrders.map((o) => {
       const orderTotal = Number(o.total || 0)
-      const comm = Number(o.commission || 0)
+      const { commission: comm, commissionPercent: commPct } = resolveOrderCommission(o, catRateMap)
       const net = Number((orderTotal - comm).toFixed(2))
 
       grossTotal += orderTotal
@@ -912,6 +945,8 @@ export const getSupplierMonthOrders = async (req, res) => {
 
       return {
         ...o.toSafeObject(),
+        commission: comm,
+        commissionPercent: commPct,
         isMature,
         matureStatusLabel: isMature ? 'Delivered (Mature)' : 'In Transit / Holding',
         weekInfo: wInfo,
@@ -1035,8 +1070,12 @@ export const executeSupplierPayout = async (req, res) => {
       targetOrders = allSupOrders.filter((o) => isOrderMature(o))
     }
 
+    const catRateMap = await getCategoryRatesMap()
     const calculatedAmount = Number(
-      targetOrders.reduce((sum, o) => sum + (o.total - o.commission), 0).toFixed(2),
+      targetOrders.reduce((sum, o) => {
+        const { commission: comm } = resolveOrderCommission(o, catRateMap)
+        return sum + (Number(o.total || 0) - comm)
+      }, 0).toFixed(2),
     )
     const payoutAmount = amount !== undefined && Number(amount) > 0 ? Number(amount) : calculatedAmount
 

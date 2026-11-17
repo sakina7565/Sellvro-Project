@@ -78,6 +78,15 @@ function BuyProductCard({ product }) {
 
         {/* Info */}
         <div className="px-4 pt-3.5 pb-2">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="font-mono text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/80 rounded px-1.5 py-0.2 shrink-0">
+              PID: {product.productId || product.sku}
+            </span>
+            <span className="text-[10px] font-mono text-slate-400 truncate">
+              {product.sku}
+            </span>
+          </div>
+
           <h3 className="line-clamp-2 text-sm font-semibold text-slate-900 transition-colors group-hover:text-primary-600">
             {product.name}
           </h3>

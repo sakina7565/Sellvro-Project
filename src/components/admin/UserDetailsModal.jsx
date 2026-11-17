@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import Badge from '../ui/Badge.jsx'
 import Button from '../ui/Button.jsx'
+import UserAvatar from '../ui/UserAvatar.jsx'
 import { mediaUrl } from '../../lib/api.js'
 import { formatIbanSpaces } from '../../utils/ibanValidator.js'
 
@@ -91,10 +92,8 @@ export default function UserDetailsModal({
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-slate-50 px-6 py-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 ring-4 ring-indigo-50/50">
-                <User className="h-6 w-6" />
-              </div>
+            <div className="flex items-center gap-3.5">
+              <UserAvatar name={name} email={email} src={user.avatar} size="lg" />
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-lg font-bold text-slate-900">{name}</h3>

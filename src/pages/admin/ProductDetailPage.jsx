@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { Check, SquarePen, ArrowLeft, Percent, DollarSign, Sparkles } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import Card from '../../components/ui/Card.jsx'
-import { adminApi, getErrorMessage } from '../../lib/api.js'
+import { adminApi, mediaUrl, getErrorMessage } from '../../lib/api.js'
 
 function ProductDetailPage() {
   const { id } = useParams()
@@ -70,11 +70,11 @@ function ProductDetailPage() {
     }
   }
 
-  const images = Array.isArray(product?.images) && product.images.length > 0
+  const images = (Array.isArray(product?.images) && product.images.length > 0
     ? product.images
     : product?.image
       ? [product.image]
-      : []
+      : []).map((img) => (img ? mediaUrl(img) : ''))
 
   const activePhoto = images[activeImageIndex] || images[0] || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80'
   const isApproved = product?.status === 'approved' || product?.status === 'active'
@@ -97,7 +97,14 @@ function ProductDetailPage() {
         {/* Top Header matching Picture 1 */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div>
-            <p className="text-xs font-semibold text-slate-400">Product Listing</p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-semibold text-slate-400">Product Listing</p>
+              {product && (
+                <span className="font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded px-2 py-0.5 text-xs">
+                  PID: {product.productId || product.sku}
+                </span>
+              )}
+            </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mt-0.5">
               Product Details
             </h1>
@@ -222,7 +229,14 @@ function ProductDetailPage() {
                 </div>
 
                 <div className="flex items-center justify-between py-1 border-b border-slate-50">
-                  <span className="font-semibold text-slate-800">Sku :</span>
+                  <span className="font-semibold text-slate-800">Product ID :</span>
+                  <span className="font-mono text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                    {product.productId || product.sku}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between py-1 border-b border-slate-50">
+                  <span className="font-semibold text-slate-800">SKU :</span>
                   <span className="font-mono text-slate-700 font-bold">{product.sku}</span>
                 </div>
 

@@ -21,6 +21,7 @@ import EmptyState from '../../components/admin/EmptyState.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Button from '../../components/ui/Button.jsx'
 import Badge from '../../components/ui/Badge.jsx'
+import ProductImage from '../../components/ui/ProductImage.jsx'
 import { productApi, getErrorMessage } from '../../lib/api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import {
@@ -336,9 +337,23 @@ function SupplierProductsPage() {
 
                 return (
                   <tr key={product.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors">
-                    {/* Product Name */}
-                    <td className="whitespace-nowrap px-4 py-4 font-medium text-slate-800 max-w-[200px] truncate">
-                      {product.name}
+                    {/* Product Name & Image */}
+                    <td className="whitespace-nowrap px-4 py-4 font-medium text-slate-800">
+                      <div className="flex items-center gap-3">
+                        <ProductImage
+                          src={product.image || product.images?.[0]}
+                          alt={product.name}
+                          size="sm"
+                        />
+                        <div className="min-w-0 max-w-[200px]">
+                          <p className="truncate font-semibold text-slate-900" title={product.name}>
+                            {product.name}
+                          </p>
+                          <span className="font-mono text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/80 rounded px-1.5 py-0.2">
+                            PID: {product.productId || product.sku}
+                          </span>
+                        </div>
+                      </div>
                     </td>
 
                     {/* SKU */}
@@ -540,10 +555,17 @@ function SupplierProductsPage() {
 
             return (
               <div key={product.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-2.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-bold text-slate-900 text-sm">{product.name}</p>
-                    <p className="text-xs font-mono text-slate-500 font-semibold">{product.sku}</p>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <ProductImage
+                      src={product.image || product.images?.[0]}
+                      alt={product.name}
+                      size="sm"
+                    />
+                    <div>
+                      <p className="font-bold text-slate-900 text-sm">{product.name}</p>
+                      <p className="text-xs font-mono text-indigo-700 font-bold">PID: {product.productId || product.sku} • SKU: {product.sku}</p>
+                    </div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <Badge tone={PRODUCT_STATUS_TONE[product.status] || 'neutral'}>

@@ -22,6 +22,7 @@ import mongoose from 'mongoose'
 import Order from '../models/Order.js'
 import Product from '../models/Product.js'
 import User from '../models/User.js'
+import Category from '../models/Category.js'
 import WalletRequest from '../models/WalletRequest.js'
 import { createNotification } from '../utils/notifications.js'
 import { getNextOrderNo, getNextWalletTxId } from '../services/sequenceService.js'
@@ -567,7 +568,22 @@ export const createOrder = async (req, res) => {
 
     const unitPrice = Number(product.price)
     const total = unitPrice * quantity
-    const commissionPercent = Number(product.commission || 0)
+
+    // Categorical platform fee / commission
+    let commissionPercent = Number(product.commission || 0)
+    if (!commissionPercent && product.category) {
+      try {
+        const catDoc = await Category.findOne({
+          name: new RegExp(`^${product.category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+        })
+        if (catDoc && catDoc.commissionRate !== undefined && catDoc.commissionRate !== null) {
+          commissionPercent = Number(catDoc.commissionRate)
+        }
+      } catch (err) {
+        console.warn('[Create Order] Error resolving category commission:', err.message)
+      }
+    }
+    if (!commissionPercent) commissionPercent = 8
     const commission = Number(((total * commissionPercent) / 100).toFixed(2))
 
     let buyer = null

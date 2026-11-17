@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import { ChevronDown, ChevronUp, Globe, LogOut, X } from 'lucide-react'
 import Logo from '../ui/Logo.jsx'
+import UserAvatar from '../ui/UserAvatar.jsx'
 import { useDisputeNotifications } from '../../context/DisputeNotificationContext.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 
@@ -183,9 +184,12 @@ function Sidebar({ navItems, homeTo, isOpen = false, onClose = () => {} }) {
         {/* Logout section at the bottom of sidebar */}
         <div className="shrink-0 border-t border-slate-100 px-3 py-3">
           {user && (
-            <div className="mb-2 px-3 py-1">
-              <p className="truncate text-sm font-semibold text-slate-800">{user.fullName}</p>
-              <p className="truncate text-xs text-slate-400">{user.email}</p>
+            <div className="mb-2.5 flex items-center gap-2.5 rounded-xl bg-slate-50 p-2 border border-slate-100">
+              <UserAvatar name={user.fullName} email={user.email} src={user.avatar} size="sm" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-slate-800">{user.fullName}</p>
+                <p className="truncate text-[11px] text-slate-400">{user.email}</p>
+              </div>
             </div>
           )}
           {user?.role === 'admin' && (

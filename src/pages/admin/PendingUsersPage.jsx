@@ -10,6 +10,7 @@ import DetailRow from '../../components/admin/DetailRow.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Badge from '../../components/ui/Badge.jsx'
 import IconAction from '../../components/ui/IconAction.jsx'
+import UserAvatar from '../../components/ui/UserAvatar.jsx'
 import PendingAccountDetailsModal from '../../components/admin/PendingAccountDetailsModal.jsx'
 import EditAccountModal from '../../components/admin/EditAccountModal.jsx'
 import { adminApi } from '../../lib/api.js'
@@ -143,9 +144,7 @@ function PendingUsersPage() {
                         className="group flex items-center gap-3 text-left transition-colors cursor-pointer focus:outline-hidden"
                         title="Click to view complete pending profile & verification details"
                       >
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-50 text-teal-700 font-bold text-xs ring-2 ring-teal-100 group-hover:bg-teal-600 group-hover:text-white transition-all shadow-2xs">
-                          {(user.fullName || 'U').slice(0, 2).toUpperCase()}
-                        </div>
+                        <UserAvatar name={user.fullName} email={user.email} src={user.avatar} size="md" />
                         <div>
                           <div className="flex items-center gap-2">
                             <p className="font-semibold text-slate-800 group-hover:text-teal-600 transition-colors">

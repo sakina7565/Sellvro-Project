@@ -8,8 +8,8 @@ function MobileCard({ title, subtitle, badge, actions, children }) {
     <div className="p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-semibold text-slate-800">{title}</p>
-          {subtitle && <p className="text-xs text-slate-400">{subtitle}</p>}
+          <div className="font-semibold text-slate-800">{title}</div>
+          {subtitle && <div className="text-xs text-slate-400">{subtitle}</div>}
         </div>
         {badge}
       </div>

@@ -12,6 +12,7 @@ import Card from '../../components/ui/Card.jsx'
 import Badge from '../../components/ui/Badge.jsx'
 import Button from '../../components/ui/Button.jsx'
 import IconAction from '../../components/ui/IconAction.jsx'
+import UserAvatar from '../../components/ui/UserAvatar.jsx'
 import AddAccountModal from '../../components/admin/AddAccountModal.jsx'
 import EditAccountModal from '../../components/admin/EditAccountModal.jsx'
 import DeleteAccountModal from '../../components/admin/DeleteAccountModal.jsx'
@@ -148,9 +149,12 @@ function AllUsersPage() {
                       </Link>
                     </td>
                     <td className="whitespace-nowrap px-5 py-4 font-medium text-slate-800">
-                      <div>
-                        <p className="font-semibold text-slate-900">{user.fullName}</p>
-                        <p className="text-xs text-slate-400">{user.email}</p>
+                      <div className="flex items-center gap-3">
+                        <UserAvatar name={user.fullName} email={user.email} src={user.avatar} size="sm" />
+                        <div>
+                          <p className="font-semibold text-slate-900">{user.fullName}</p>
+                          <p className="text-xs text-slate-400">{user.email}</p>
+                        </div>
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-5 py-4 font-semibold text-slate-800">

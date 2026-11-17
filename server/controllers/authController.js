@@ -922,8 +922,9 @@ export const googleAuth = async (req, res) => {
       if (user.status === 'rejected') {
         return res.status(403).json({ message: 'Your account application was rejected.' })
       }
-      if (!user.googleId && userGoogleId) {
-        user.googleId = userGoogleId
+      if ((!user.googleId && userGoogleId) || (picture && !user.avatar)) {
+        if (!user.googleId && userGoogleId) user.googleId = userGoogleId
+        if (picture && !user.avatar) user.avatar = picture
         await user.save()
       }
 

@@ -28,6 +28,7 @@ import Pagination from '../../components/admin/Pagination.jsx'
 import MobileCard from '../../components/admin/MobileCard.jsx'
 import DetailRow from '../../components/admin/DetailRow.jsx'
 import EmptyState from '../../components/admin/EmptyState.jsx'
+import UserAvatar from '../../components/ui/UserAvatar.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Badge from '../../components/ui/Badge.jsx'
 import Button from '../../components/ui/Button.jsx'
@@ -532,36 +533,39 @@ function AllSuppliersPage() {
                     >
                       {/* 1. Supplier Column */}
                       <td className="whitespace-nowrap px-5 py-4 font-medium text-slate-800">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold text-slate-900">{supplier.fullName}</p>
-                            {isWms ? (
-                              <span
-                                className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-extrabold text-emerald-800 border border-emerald-200"
-                                title="Connected with Sellvro WMS 3PL Fulfillment"
-                              >
-                                <Warehouse className="h-2.5 w-2.5 text-emerald-700" />
-                                WMS 3PL
-                              </span>
-                            ) : (
-                              <span
-                                className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200"
-                                title="Marketplace Direct Vendor"
-                              >
-                                <Store className="h-2.5 w-2.5 text-slate-500" />
-                                Marketplace
-                              </span>
-                            )}
+                        <div className="flex items-center gap-3">
+                          <UserAvatar name={supplier.fullName} email={supplier.email} src={supplier.avatar} size="sm" />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-slate-900">{supplier.fullName}</p>
+                              {isWms ? (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-extrabold text-emerald-800 border border-emerald-200"
+                                  title="Connected with Sellvro WMS 3PL Fulfillment"
+                                >
+                                  <Warehouse className="h-2.5 w-2.5 text-emerald-700" />
+                                  WMS 3PL
+                                </span>
+                              ) : (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200"
+                                  title="Marketplace Direct Vendor"
+                                >
+                                  <Store className="h-2.5 w-2.5 text-slate-500" />
+                                  Marketplace
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-400">{supplier.email}</p>
+                            <Link
+                              to={`/admin/supplier/payouts?supplierId=${supplier.id}`}
+                              className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline bg-indigo-50/70 px-1.5 py-0.5 rounded border border-indigo-100"
+                              title="Click supplier ID to view monthly finance history, maturity & payouts"
+                            >
+                              <Wallet className="h-3 w-3" />
+                              <span>ID: {formatSupplierId(supplier)}</span>
+                            </Link>
                           </div>
-                          <p className="text-xs text-slate-400">{supplier.email}</p>
-                          <Link
-                            to={`/admin/supplier/payouts?supplierId=${supplier.id}`}
-                            className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline bg-indigo-50/70 px-1.5 py-0.5 rounded border border-indigo-100"
-                            title="Click supplier ID to view monthly finance history, maturity & payouts"
-                          >
-                            <Wallet className="h-3 w-3" />
-                            <span>ID: {formatSupplierId(supplier)}</span>
-                          </Link>
                         </div>
                       </td>
 

@@ -60,6 +60,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       sparse: true,
     },
+    avatar: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     displayId: {
       type: String,
       trim: true,
@@ -190,6 +195,7 @@ userSchema.methods.toSafeObject = function toSafeObject(options = {}) {
     userDisplayId: displayId,
     fullName: this.fullName,
     email: this.email,
+    avatar: this.avatar || '',
     role: this.role,
     status: this.status,
     walletBalance: this.walletBalance ?? 0,

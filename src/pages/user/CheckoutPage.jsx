@@ -92,7 +92,7 @@ export default function UserCheckoutPage() {
       .then((data) => {
         if (active) setWalletBalance(data.balance ?? data.walletBalance ?? 0)
       })
-      .catch(() => {})
+      .catch(() => { })
     return () => {
       active = false
     }
@@ -593,11 +593,10 @@ export default function UserCheckoutPage() {
                 <button
                   type="button"
                   onClick={() => setLabelMode('generate')}
-                  className={`flex-1 rounded-lg py-2 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                    labelMode === 'generate'
+                  className={`flex-1 rounded-lg py-2 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${labelMode === 'generate'
                       ? 'bg-white text-blue-700 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
-                  }`}
+                    }`}
                 >
                   <Sparkles className="h-3.5 w-3.5 text-blue-600" />
                   1-Click Auto-Generate Courier Label
@@ -605,11 +604,10 @@ export default function UserCheckoutPage() {
                 <button
                   type="button"
                   onClick={() => setLabelMode('upload')}
-                  className={`flex-1 rounded-lg py-2 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                    labelMode === 'upload'
+                  className={`flex-1 rounded-lg py-2 text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${labelMode === 'upload'
                       ? 'bg-white text-blue-700 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
-                  }`}
+                    }`}
                 >
                   <Upload className="h-3.5 w-3.5 text-blue-600" />
                   Upload Customer's Label (PDF / Image)
@@ -823,7 +821,7 @@ export default function UserCheckoutPage() {
                 </div>
               </div>
 
-              {walletBalance < total ? (
+              {/* {walletBalance < total ? (
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
                   <span>
                     ⚠️ Balance is short by <strong>${(total - Number(walletBalance || 0)).toFixed(2)}</strong>.
@@ -850,7 +848,7 @@ export default function UserCheckoutPage() {
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                   <span>Sufficient wallet balance. Amount will be deducted upon order placement.</span>
                 </div>
-              )}
+              )} */}
             </Card>
           </div>
 

@@ -677,10 +677,17 @@ function ProductDetailPage() {
         <div className="lg:col-span-5 space-y-5">
           {/* 1. Main Product Title & Ratings */}
           <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/80 rounded px-2 py-0.5">
+                Product ID: {product.productId || product.sku}
+              </span>
+              <span className="font-mono text-xs font-semibold text-slate-500">
+                SKU: {product.sku}
+              </span>
+            </div>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#111827] leading-snug">
               {product.name}
               {product.brand ? ` by ${product.brand}` : ''}
-              {product.sku ? ` (${product.sku})` : ''}
             </h1>
 
             {/* Live Ratings & Delivery Score Bar */}

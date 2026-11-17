@@ -24,6 +24,7 @@ import DetailRow from '../../components/admin/DetailRow.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Badge from '../../components/ui/Badge.jsx'
 import Button from '../../components/ui/Button.jsx'
+import ProductImage from '../../components/ui/ProductImage.jsx'
 import BarcodeModal from '../../components/admin/BarcodeModal.jsx'
 import CreateDisputeModal from '../../components/admin/CreateDisputeModal.jsx'
 import { adminApi, categoryApi, getErrorMessage } from '../../lib/api.js'
@@ -36,8 +37,8 @@ import {
 } from '../../lib/productStatus.js'
 
 const TABLE_HEAD = [
-  'Product title',
-  'SKU',
+  'Product',
+  'Product ID & SKU',
   'Category',
   'Stock & Sold',
   'Price & Fee',
@@ -550,14 +551,37 @@ function ProductsListPage() {
 
                 return (
                   <tr key={product.id} className="border-b border-slate-50 transition-colors hover:bg-slate-50/60 last:border-0">
-                    {/* Product Title */}
+                    {/* Product Image & Title */}
                     <td className="whitespace-nowrap px-5 py-4 font-medium text-slate-800">
-                      {product.name}
+                      <div className="flex items-center gap-3">
+                        <ProductImage
+                          src={product.image || product.images?.[0]}
+                          alt={product.name}
+                          size="md"
+                        />
+                        <div className="min-w-0 max-w-[220px]">
+                          <p className="truncate font-semibold text-slate-900" title={product.name}>
+                            {product.name}
+                          </p>
+                          <div className="mt-0.5 flex items-center gap-1.5">
+                            <span className="font-mono text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/80 rounded px-1.5 py-0.2">
+                              PID: {product.productId || product.sku}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     </td>
 
-                    {/* SKU */}
-                    <td className="whitespace-nowrap px-5 py-4 font-bold text-slate-900 font-mono">
-                      {product.sku}
+                    {/* Product ID & SKU */}
+                    <td className="whitespace-nowrap px-5 py-4 font-mono">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-indigo-700 font-mono text-xs">
+                          {product.productId || product.sku}
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-sans">
+                          SKU: {product.sku}
+                        </span>
+                      </div>
                     </td>
 
                     {/* Category */}
@@ -711,7 +735,7 @@ function ProductsListPage() {
               <MobileCard
                 key={product.id}
                 title={product.name}
-                subtitle={product.sku}
+                subtitle={`PID: ${product.productId || product.sku} • SKU: ${product.sku}`}
                 badge={
                   <Badge tone={PRODUCT_STATUS_TONE[product.status] || 'neutral'}>
                     {PRODUCT_STATUS_LABEL[product.status] || product.status}
