@@ -57,7 +57,7 @@ const disputeSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['user_complaint', 'supplier_dispute', 'other'],
+      enum: ['user_complaint', 'supplier_dispute', 'order_cancellation', 'other'],
       default: 'other',
     },
     message: {
@@ -267,14 +267,54 @@ disputeSchema.methods.toSafeObject = function toSafeObject(options = {}) {
     order: orderDoc?.orderNo || (orderDoc?._id ? orderDoc._id.toString() : '—'),
     orderId: orderDoc?._id?.toString?.() || orderDoc?.toString?.() || '',
     orderNo: orderDoc?.orderNo || '',
-    product: productDoc?.name || '—',
-    productId: productDoc?._id?.toString?.() || productDoc?.toString?.() || '',
+    product: productDoc?.name || (orderDoc?.productName || '—'),
+    productId: productDoc?._id?.toString?.() || productDoc?.toString?.() || orderDoc?.product?._id?.toString?.() || '',
     productSku: productDoc?.sku || '',
     requests: this.message,
     message: this.message,
     type: this.type,
     status: this.status,
     resolutionNote: this.resolutionNote,
+    orderDetails: orderDoc && typeof orderDoc === 'object' && orderDoc.orderNo ? {
+      id: orderDoc._id?.toString() || '',
+      orderNo: orderDoc.orderNo || '',
+      trackingNumber: orderDoc.trackingNumber || 'Pending Courier Handover',
+      carrier: orderDoc.carrier || 'FedEx',
+      status: orderDoc.status || '',
+      total: Number(orderDoc.total || 0),
+      unitPrice: Number(orderDoc.unitPrice || 0),
+      quantity: Number(orderDoc.quantity || 1),
+      commission: Number(orderDoc.commission || 0),
+      productName: orderDoc.productName || productDoc?.name || '—',
+      productSku: productDoc?.sku || '',
+      productImage: productDoc?.image || orderDoc.productImage || '',
+      warehouseLocationLabel: orderDoc.warehouseLocationLabel || 'At Supplier Warehouse',
+      paymentMethod: orderDoc.paymentMethod || 'wallet',
+      shippingAddress: orderDoc.shippingAddress || {},
+      user: orderDoc.user ? {
+        id: orderDoc.user._id?.toString() || orderDoc.user.toString() || '',
+        name: orderDoc.user.fullName || 'Customer',
+        email: orderDoc.user.email || '',
+        phone: orderDoc.user.phone || '',
+        displayId: orderDoc.user.displayId || '',
+      } : null,
+      supplier: orderDoc.supplier ? {
+        id: orderDoc.supplier._id?.toString() || orderDoc.supplier.toString() || '',
+        name: orderDoc.supplier.fullName || 'Supplier',
+        email: orderDoc.supplier.email || '',
+        phone: orderDoc.supplier.phone || '',
+        displayId: orderDoc.supplier.displayId || '',
+        storeName: orderDoc.supplier.storeName || '',
+      } : null,
+      createdAt: orderDoc.createdAt,
+      cancellationRequest: orderDoc.cancellationRequest || null,
+      isWithin12Hours: orderDoc.createdAt
+        ? (Date.now() - new Date(orderDoc.createdAt).getTime()) <= 12 * 60 * 60 * 1000
+        : false,
+      hoursElapsed: orderDoc.createdAt
+        ? Number(((Date.now() - new Date(orderDoc.createdAt).getTime()) / (1000 * 60 * 60)).toFixed(1))
+        : 0,
+    } : null,
     date: this.createdAt
       ? new Date(this.createdAt).toLocaleDateString('en-US', {
           month: 'short',

@@ -414,31 +414,34 @@ export async function createWmsProduct({
     // Resilient Fallback to WMS Bridge HTTP endpoint
     try {
       const bridgeUrl = process.env.WMS_BRIDGE_URL || 'https://wmsbysellvro.com/wms_bridge.php'
-      const response = await fetch(`${bridgeUrl}?action=register_supplier`, {
+      const response = await fetch(`${bridgeUrl}?action=create_product`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          companyName,
-          companyEmail,
-          companyPhone,
-          companyAddress,
-          registrationEntity,
-          registrationNo,
-          ownerName,
-          ownerEmail,
-          ownerPhone,
-          ownerAddress,
-          password,
-          idCardUrl,
+          supplierId,
+          categoryId,
+          name,
+          sku,
+          image,
+          description,
+          weight,
+          weightUnit,
+          length,
+          width,
+          height,
+          dimensionUnit,
+          brand,
+          inWarehouse,
+          fulfillBy,
+          status,
         }),
       })
       const result = await response.json().catch(() => null)
       if (result?.status) {
         return {
-          id: result.user_id,
-          name: ownerName || name,
-          email: ownerEmail || email,
-          user_unique_name: result.user_unique_name,
+          id: result.product_id || result.id,
+          name,
+          sku,
           status: 'pending',
         }
       }
@@ -675,7 +678,7 @@ export async function createWmsFulfillmentRequest({
       if (invRows && invRows.length > 0 && invRows[0].location_id) {
         targetLocationId = invRows[0].location_id
       }
-    } catch (_) {}
+    } catch (_) { }
   }
   if (!targetLocationId) targetLocationId = 2 // default to Section B
 
@@ -725,13 +728,13 @@ export async function createWmsFulfillmentRequest({
     await queryWms(
       'UPDATE batches SET total_rows = total_rows + 1, total_customizations = total_customizations + 1, updated_at = NOW() WHERE id = ?',
       [batchId]
-    ).catch(() => {})
+    ).catch(() => { })
   }
   if (masterBatchId) {
     await queryWms(
       'UPDATE master_batches SET total_rows = total_rows + 1, total_customizations = total_customizations + 1, updated_at = NOW() WHERE id = ?',
       [masterBatchId]
-    ).catch(() => {})
+    ).catch(() => { })
   }
 
   // 7. Atomic Inventory Deduction & Inventory Log Record
@@ -747,7 +750,7 @@ export async function createWmsFulfillmentRequest({
       await queryWms(
         'INSERT INTO inventory_logs (inventory_id, sku, previous_quantity, new_quantity, difference, change_type, remarks, created_at) VALUES (?, ?, ?, ?, ?, "sale", ?, NOW())',
         [inv[0].id, cleanSku, prevQty, newQty, -qty, `Marketplace Order: ${requestNumber}`]
-      ).catch(() => {})
+      ).catch(() => { })
     }
   } catch (invErr) {
     console.warn('[WMS Inventory Update Notice]:', invErr.message)

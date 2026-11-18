@@ -31,6 +31,7 @@ function getOrderCategorizedStatus(order) {
   if (!order) return 'awaiting_dispatch'
   const st = (order.trackingStatus || order.status || '').toLowerCase()
   if (st === 'cancelled' || order.status === 'cancelled' || order.isRefunded) return 'cancelled'
+  if (st === 'cancellation_pending' || order.cancellationRequest?.status === 'pending') return 'cancellation_pending'
   if (st === 'returned' || order.status === 'returned') return 'returned'
   if (st === 'delivered' || order.warehouseLocation === 'delivered' || order.status === 'delivered') return 'delivered'
   if (st === 'order_due' || order.status === 'order_due') return 'order_due'
@@ -53,6 +54,7 @@ function getOrderCategorizedStatus(order) {
 
 function TrackingStatusBadge({ status, trackingStatus }) {
   const st = (trackingStatus || status || '').toLowerCase()
+  if (st === 'cancellation_pending') return <Badge tone="warning" className="bg-amber-100 text-amber-900 border-amber-300">Cancel Pending</Badge>
   if (st === 'cancelled') return <Badge tone="danger">Cancelled</Badge>
   if (st === 'returned') return <Badge tone="danger" className="bg-rose-100 text-rose-800 border-rose-300">Returned</Badge>
   if (st === 'delivered') return <Badge tone="success">Delivered</Badge>
@@ -411,6 +413,11 @@ function SupplierViewOrdersPage() {
                         <div className="mt-1.5 rounded bg-amber-100/70 px-1.5 py-1 text-[10px] font-bold text-amber-950 border border-amber-300">
                           📦 Parcel Instructions: {order.labelNotes || order.brandLabel || 'Handle with care'}
                         </div>
+                        {order.customizationDetails && (
+                          <div className="mt-1.5 rounded bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-950 border border-indigo-200">
+                            ✨ Customization: <span className="font-normal text-indigo-900">{order.customizationDetails}</span>
+                          </div>
+                        )}
                       </div>
                     </td>
 

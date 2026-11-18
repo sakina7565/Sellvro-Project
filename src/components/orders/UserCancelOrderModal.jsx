@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { AlertCircle, Ban, CheckCircle2, RotateCcw, Wallet, X } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { AlertCircle, Ban, Clock, ShieldAlert, Wallet, X } from 'lucide-react'
 import Button from '../ui/Button.jsx'
 import { getErrorMessage, orderApi } from '../../lib/api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -17,18 +17,48 @@ export default function UserCancelOrderModal({
 
   if (!open || !order) return null
 
+  // 12-Hour Cancellation Window calculation
+  const { isExpired, hoursElapsed, hoursRemaining, minutesRemaining } = useMemo(() => {
+    if (!order.createdAt) return { isExpired: false, hoursElapsed: 0, hoursRemaining: 12, minutesRemaining: 0 }
+    const orderTime = new Date(order.createdAt).getTime()
+    const diffMs = Date.now() - orderTime
+    const totalMinutesElapsed = Math.floor(diffMs / (1000 * 60))
+    const totalMinutesLimit = 12 * 60 // 720 minutes
+    const isPast12h = totalMinutesElapsed >= totalMinutesLimit
+    const remainingMins = Math.max(0, totalMinutesLimit - totalMinutesElapsed)
+    const remHours = Math.floor(remainingMins / 60)
+    const remMins = remainingMins % 60
+    return {
+      isExpired: isPast12h,
+      hoursElapsed: (diffMs / (1000 * 60 * 60)).toFixed(1),
+      hoursRemaining: remHours,
+      minutesRemaining: remMins,
+    }
+  }, [order.createdAt])
+
   const handleCancel = async () => {
     setError('')
+    const trimmedReason = reason.trim()
+    if (!trimmedReason || trimmedReason.length < 5) {
+      setError('Please provide a valid cancellation reason (minimum 5 characters).')
+      return
+    }
+
+    if (isExpired) {
+      setError('The strict 12-hour cancellation window has expired. This order cannot be cancelled.')
+      return
+    }
+
     setLoading(true)
     try {
-      const res = await orderApi.cancel(order.id, reason.trim())
+      const res = await orderApi.requestCancel(order.id, trimmedReason)
       if (typeof res.walletBalance === 'number' && user) {
         updateUser({ ...user, walletBalance: res.walletBalance })
       }
-      onSuccess?.(res.message || 'Order successfully cancelled and refunded.')
+      onSuccess?.(res.message || 'Cancellation request submitted and sent to admin for approval.')
       onClose()
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to cancel order.'))
+      setError(getErrorMessage(err, 'Failed to submit cancellation request.'))
     } finally {
       setLoading(false)
     }
@@ -53,7 +83,7 @@ export default function UserCancelOrderModal({
               <Ban className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">Cancel Order</h3>
+              <h3 className="text-base font-bold text-slate-900">Request Order Cancellation</h3>
               <p className="text-xs text-slate-500 font-mono font-bold">#{order.orderNo}</p>
             </div>
           </div>
@@ -75,6 +105,24 @@ export default function UserCancelOrderModal({
             </div>
           )}
 
+          {/* 12-Hour Policy Status Banner */}
+          <div className={`rounded-xl border p-3 flex items-start gap-2.5 ${isExpired ? 'border-rose-300 bg-rose-50 text-rose-900' : 'border-amber-300 bg-amber-50/80 text-amber-900'}`}>
+            <Clock className={`h-4 w-4 shrink-0 mt-0.5 ${isExpired ? 'text-rose-600' : 'text-amber-600'}`} />
+            <div className="text-xs">
+              <div className="font-bold flex items-center justify-between">
+                <span>Strict 12-Hour Cancellation Policy</span>
+                <span className={`font-mono text-[11px] px-1.5 py-0.5 rounded ${isExpired ? 'bg-rose-200 text-rose-800' : 'bg-amber-200 text-amber-800'}`}>
+                  {isExpired ? 'Window Closed' : `${hoursRemaining}h ${minutesRemaining}m remaining`}
+                </span>
+              </div>
+              <p className="mt-1 leading-relaxed text-slate-600">
+                {isExpired
+                  ? `Placed ${hoursElapsed}h ago. Orders can only be cancelled within 12 hours of placement to protect suppliers from dispatch losses.`
+                  : 'Order cancellations must be approved by the platform administrator within 12 hours of placement.'}
+              </p>
+            </div>
+          </div>
+
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="flex items-center justify-between text-xs text-slate-500">
               <span>Product:</span>
@@ -85,29 +133,32 @@ export default function UserCancelOrderModal({
               <span className="font-medium text-slate-700">{order.warehouseLocationLabel || 'At Warehouse'}</span>
             </div>
             <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700">Instant Wallet Refund:</span>
+              <span className="text-xs font-bold text-slate-700">Refund upon Admin Approval:</span>
               <span className="text-base font-black text-emerald-600">${totalAmount}</span>
             </div>
           </div>
 
-          <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-900 flex items-start gap-2">
-            <Wallet className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+          <div className="rounded-lg bg-sky-50 border border-sky-200 p-3 text-xs text-sky-900 flex items-start gap-2">
+            <ShieldAlert className="h-4 w-4 text-sky-600 shrink-0 mt-0.5" />
             <p className="leading-relaxed">
-              Order abi tak warehouse ya courier company ke pass se dispatch nahi hua hai, is liye aap isay cancel kar sakte hain. Full amount <strong>${totalAmount}</strong> foran aapke Sellvro Wallet me refund kar diya jayega.
+              Your cancellation request will be submitted to Admin for authenticity review. Upon approval within the 12-hour window, 100% refund of <strong>${totalAmount}</strong> will be automatically credited to your wallet.
             </p>
           </div>
 
           <div>
-            <label htmlFor="cancelReason" className="block text-xs font-semibold text-slate-700 mb-1">
-              Cancellation Reason (Optional)
+            <label htmlFor="cancelReason" className="block text-xs font-bold text-slate-700 mb-1">
+              Cancellation Reason <span className="text-rose-600">* (Mandatory)</span>
             </label>
-            <input
+            <textarea
               id="cancelReason"
+              rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. Changed mind, wrong shipping address, duplicate order"
-              className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-rose-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-100"
+              placeholder="Please explain why you need to cancel this order (e.g. ordered incorrect size, changed mind, wrong address)..."
+              disabled={isExpired}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-rose-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-100 disabled:opacity-50"
             />
+            <p className="mt-1 text-[11px] text-slate-400">Admin reviews the cancellation reason before approval.</p>
           </div>
         </div>
 
@@ -121,10 +172,11 @@ export default function UserCancelOrderModal({
             tone="danger"
             size="sm"
             onClick={handleCancel}
+            disabled={isExpired || loading}
             loading={loading}
-            className="bg-rose-600 hover:bg-rose-700 text-white"
+            className="bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-50"
           >
-            Confirm & Refund (${totalAmount})
+            Submit Cancellation Request
           </Button>
         </div>
       </div>

@@ -21,6 +21,7 @@ import {
   AlertCircle,
   HelpCircle,
   Package,
+  RotateCcw,
 } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
@@ -38,7 +39,7 @@ import { formatWalletTxId } from '../../lib/idFormatters.js'
 const FILTERS = [
   { label: 'From date', type: 'date' },
   { label: 'To date', type: 'date' },
-  { label: 'All Requests', options: ['New Request', 'Approved', 'Rejected'] },
+  { label: 'All Requests', options: ['New Request', 'Approved', 'Rejected', 'Order Refunds'] },
 ]
 
 const TABLE_HEAD = [
@@ -133,6 +134,7 @@ export default function WalletsRequestsPage() {
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState('')
   const [activeFilter, setActiveFilter] = useState('All Requests')
+  const [transactionType, setTransactionType] = useState('all') // 'all' | 'deposits' | 'refunds'
   const [inspectRequest, setInspectRequest] = useState(null)
   const [copyFeedback, setCopyFeedback] = useState('')
 
@@ -212,34 +214,76 @@ export default function WalletsRequestsPage() {
   }, [])
 
   const filteredRequests = useMemo(() => {
-    if (activeFilter === 'New Request') {
-      return requests.filter((r) => r.status === 'pending')
-    }
-    if (activeFilter === 'Approved') {
-      return requests.filter((r) => r.status === 'approved')
-    }
-    if (activeFilter === 'Rejected') {
-      return requests.filter((r) => r.status === 'rejected')
-    }
-    return requests
-  }, [requests, activeFilter])
+    return requests.filter((r) => {
+      const isRef = Boolean(
+        r.isRefund ||
+        r.paymentMethod === 'wallet_refund' ||
+        (r.refundType && r.refundType !== 'none') ||
+        String(r.bankTid || '').toUpperCase().startsWith('REFUND-')
+      )
+
+      // Filter by Transaction Type (All, Deposits, Refunds)
+      if (transactionType === 'deposits' && isRef) return false
+      if (transactionType === 'refunds' && !isRef) return false
+
+      // Filter by Status / Request Type
+      if (activeFilter === 'New Request') {
+        return r.status === 'pending'
+      }
+      if (activeFilter === 'Approved') {
+        return r.status === 'approved'
+      }
+      if (activeFilter === 'Rejected') {
+        return r.status === 'rejected'
+      }
+      if (activeFilter === 'Order Refunds') {
+        return isRef
+      }
+      return true
+    })
+  }, [requests, activeFilter, transactionType])
 
   const summary = useMemo(
-    () => [
-      { label: 'Total Requests', value: requests.length, icon: Wallet, tone: 'blue' },
-      {
-        label: 'New Requests',
-        value: requests.filter((r) => r.status === 'pending' || r.statusLabel === 'New Request').length,
-        icon: Coins,
-        tone: 'yellow',
-      },
-      {
-        label: 'Approved Requests',
-        value: requests.filter((r) => r.status === 'approved' || r.statusLabel === 'Approved').length,
-        icon: CheckCircle2,
-        tone: 'teal',
-      },
-    ],
+    () => {
+      const pending = requests.filter((r) => r.status === 'pending' || r.statusLabel === 'New Request')
+      const approved = requests.filter(
+        (r) =>
+          (r.status === 'approved' || r.statusLabel === 'Approved') &&
+          !r.isRefund &&
+          r.paymentMethod !== 'wallet_refund' &&
+          !String(r.bankTid || '').toUpperCase().startsWith('REFUND-')
+      )
+      const refunds = requests.filter(
+        (r) =>
+          r.isRefund ||
+          r.paymentMethod === 'wallet_refund' ||
+          (r.refundType && r.refundType !== 'none') ||
+          String(r.bankTid || '').toUpperCase().startsWith('REFUND-')
+      )
+      const totalRefundedSum = refunds.reduce((sum, r) => sum + Number(r.amount || 0), 0)
+
+      return [
+        { label: 'Total Transactions', value: requests.length, icon: Wallet, tone: 'blue' },
+        {
+          label: 'New Deposit Requests',
+          value: pending.length,
+          icon: Coins,
+          tone: 'yellow',
+        },
+        {
+          label: 'Approved Deposits',
+          value: approved.length,
+          icon: CheckCircle2,
+          tone: 'teal',
+        },
+        {
+          label: 'Order Cancellation Refunds',
+          value: `${refunds.length} ($${totalRefundedSum.toFixed(2)})`,
+          icon: RotateCcw,
+          tone: 'purple',
+        },
+      ]
+    },
     [requests],
   )
 
@@ -447,14 +491,56 @@ export default function WalletsRequestsPage() {
       )}
 
       <Card className="overflow-hidden border border-slate-200 bg-white shadow-soft">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+        <div className="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-bold text-slate-900">User Deposit Requests</h2>
+            <h2 className="text-base font-bold text-slate-900">Payment &amp; Wallet Transactions</h2>
             <p className="text-xs text-slate-500">
-              Verified deposit slips, transaction IDs, and exact net USD credited to user wallet.
+              Verified deposit slips, real payouts, and automatic order cancellation wallet refunds.
             </p>
           </div>
-          <span className="text-xs text-slate-500 font-medium">{filteredRequests.length} records</span>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Quick Filter Tabs */}
+            <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setTransactionType('all')}
+                className={`rounded-lg px-3 py-1.5 transition cursor-pointer ${
+                  transactionType === 'all'
+                    ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                All ({requests.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTransactionType('deposits')}
+                className={`rounded-lg px-3 py-1.5 transition cursor-pointer ${
+                  transactionType === 'deposits'
+                    ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                Deposits ({requests.filter((r) => !r.isRefund && r.paymentMethod !== 'wallet_refund' && !String(r.bankTid || '').toUpperCase().startsWith('REFUND-')).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTransactionType('refunds')}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition cursor-pointer ${
+                  transactionType === 'refunds'
+                    ? 'bg-purple-600 text-white shadow-2xs font-bold'
+                    : 'text-purple-700 hover:text-purple-900'
+                }`}
+              >
+                <RotateCcw className="h-3 w-3" />
+                Refunds ({requests.filter((r) => r.isRefund || r.paymentMethod === 'wallet_refund' || (r.refundType && r.refundType !== 'none') || String(r.bankTid || '').toUpperCase().startsWith('REFUND-')).length})
+              </button>
+            </div>
+            <span className="text-xs text-slate-400 font-medium hidden sm:inline">
+              {filteredRequests.length} records
+            </span>
+          </div>
         </div>
 
         <div className="hidden overflow-x-auto md:block">
@@ -472,162 +558,229 @@ export default function WalletsRequestsPage() {
               {!loading && filteredRequests.length === 0 && (
                 <tr>
                   <td colSpan={TABLE_HEAD.length} className="px-5 py-14 text-center text-sm text-slate-500">
-                    No wallet requests found for selected filter.
+                    No transactions found for selected filter.
                   </td>
                 </tr>
               )}
-              {filteredRequests.map((request) => (
-                <tr key={request.id} className="hover:bg-slate-50/60 transition">
-                  {/* 1. User / Account */}
-                  <td className="whitespace-nowrap px-4 py-3.5">
-                    <p className="font-semibold text-slate-800">{request.user}</p>
-                    <p className="text-xs text-slate-400">{request.email}</p>
-                    {request.business && (
-                      <span className="text-[11px] text-indigo-600 block mt-0.5 truncate max-w-[180px]">
-                        {request.business}
-                      </span>
-                    )}
-                  </td>
+              {filteredRequests.map((request) => {
+                const isRefund = Boolean(
+                  request.isRefund ||
+                  request.paymentMethod === 'wallet_refund' ||
+                  (request.refundType && request.refundType !== 'none') ||
+                  String(request.bankTid || '').toUpperCase().startsWith('REFUND-')
+                )
+                const suppReversed = Number(request.supplierAmount || Math.max(0, request.amount - (request.commissionRefunded || 0))).toFixed(2)
+                const commRefunded = Number(request.commissionRefunded || 0).toFixed(2)
 
-                  {/* 2. Deposit & Credit */}
-                  <td className="whitespace-nowrap px-4 py-3.5">
-                    <span className="font-extrabold text-emerald-600 text-sm block">
-                      +${Number(request.amount).toFixed(2)} USD
-                    </span>
-                    <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
-                      <span className="font-medium text-slate-700">
-                        {request.depositAmount != null
-                          ? `${Number(request.depositAmount).toLocaleString()} ${request.depositCurrency || 'USD'}`
-                          : `$${Number(request.amount).toFixed(2)}`}
-                      </span>
-                      {request.depositCurrency && request.depositCurrency !== 'USD' && (
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          (Rate: {request.exchangeRate})
+                return (
+                  <tr
+                    key={request.id}
+                    className={`hover:bg-slate-50/60 transition ${isRefund ? 'bg-purple-50/25' : ''}`}
+                  >
+                    {/* 1. User / Account */}
+                    <td className="whitespace-nowrap px-4 py-3.5">
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-semibold text-slate-800">{request.user}</p>
+                        {isRefund && (
+                          <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-bold text-purple-800 border border-purple-200">
+                            <RotateCcw className="h-2.5 w-2.5" /> Order Refund
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400">{request.email}</p>
+                      {isRefund && (request.orderNo || request.bankTid) ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 font-mono mt-0.5">
+                          Order #{request.orderNo || request.bankTid.replace(/^REFUND-/, '')}
                         </span>
+                      ) : (
+                        request.business && (
+                          <span className="text-[11px] text-indigo-600 block mt-0.5 truncate max-w-[180px]">
+                            {request.business}
+                          </span>
+                        )
                       )}
-                    </div>
-                  </td>
+                    </td>
 
-                  {/* 3. TID / Slip */}
-                  <td className="whitespace-nowrap px-4 py-3.5">
-                    <span className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 font-mono text-[11px] font-bold text-indigo-700 ring-1 ring-inset ring-indigo-200 mb-1">
-                      {formatWalletTxId(request)}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                        {request.bankTid}
+                    {/* 2. Deposit & Credit */}
+                    <td className="whitespace-nowrap px-4 py-3.5">
+                      <span className="font-extrabold text-emerald-600 text-sm block">
+                        +${Number(request.amount).toFixed(2)} USD
                       </span>
-                      {request.receiptImage && (
-                        <a
-                          href={mediaUrl(request.receiptImage)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition"
-                          title="View uploaded deposit receipt"
+                      {isRefund ? (
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          <span className="font-medium text-emerald-700 block">100% Wallet Refund</span>
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                            <span>Supplier: -${suppReversed}</span>
+                            <span>•</span>
+                            <span>Comm: -${commRefunded}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
+                          <span className="font-medium text-slate-700">
+                            {request.depositAmount != null
+                              ? `${Number(request.depositAmount).toLocaleString()} ${request.depositCurrency || 'USD'}`
+                              : `$${Number(request.amount).toFixed(2)}`}
+                          </span>
+                          {request.depositCurrency && request.depositCurrency !== 'USD' && (
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              (Rate: {request.exchangeRate})
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* 3. TID / Slip */}
+                    <td className="whitespace-nowrap px-4 py-3.5">
+                      <span className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 font-mono text-[11px] font-bold text-indigo-700 ring-1 ring-inset ring-indigo-200 mb-1">
+                        {formatWalletTxId(request)}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                          {request.bankTid}
+                        </span>
+                        {request.receiptImage && !isRefund && (
+                          <a
+                            href={mediaUrl(request.receiptImage)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition"
+                            title="View uploaded deposit receipt"
+                          >
+                            <ExternalLink className="h-3 w-3" /> Slip
+                          </a>
+                        )}
+                      </div>
+                      <span className="block text-[11px] text-slate-400 mt-1">
+                        {request.createdAt
+                          ? new Date(request.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : request.date}
+                      </span>
+                    </td>
+
+                    {/* 4. Status */}
+                    <td className="whitespace-nowrap px-4 py-3.5">
+                      <div>
+                        {isRefund ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-200">
+                            <Check className="h-3 w-3" /> Approved (Refunded)
+                          </span>
+                        ) : (
+                          <RequestStatus status={request.status} />
+                        )}
+                        {request.realTransferStatus === 'completed' && !isRefund && (
+                          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 mt-1 block w-fit border border-emerald-200">
+                            <Check className="h-2.5 w-2.5" /> Transferred
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* 5. Actions */}
+                    <td className="whitespace-nowrap px-4 py-3.5 text-right">
+                      <div className="flex items-center justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenInspect(request)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-indigo-50/70 hover:border-indigo-400 hover:text-indigo-700 transition cursor-pointer"
+                          title="View complete transaction details"
                         >
-                          <ExternalLink className="h-3 w-3" /> Slip
-                        </a>
-                      )}
-                    </div>
-                    <span className="block text-[11px] text-slate-400 mt-1">
-                      {request.createdAt
-                        ? new Date(request.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                        : request.date}
-                    </span>
-                  </td>
-
-                  {/* 4. Status */}
-                  <td className="whitespace-nowrap px-4 py-3.5">
-                    <div>
-                      <RequestStatus status={request.status} />
-                      {request.realTransferStatus === 'completed' && (
-                        <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 mt-1 block w-fit border border-emerald-200">
-                          <Check className="h-2.5 w-2.5" /> Transferred
-                        </span>
-                      )}
-                    </div>
-                  </td>
-
-                  {/* 5. Actions */}
-                  <td className="whitespace-nowrap px-4 py-3.5 text-right">
-                    <div className="flex items-center justify-end">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenInspect(request)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-indigo-50/70 hover:border-indigo-400 hover:text-indigo-700 transition cursor-pointer"
-                        title="View complete deposit and transaction details"
-                      >
-                        <Eye className="h-3.5 w-3.5 text-indigo-600" />
-                        <span>View Details</span>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                          <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                          <span>View Details</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
 
         {/* Mobile View */}
         <div className="grid grid-cols-1 gap-4 p-4 md:hidden">
-          {filteredRequests.map((request) => (
-            <MobileCard
-              key={request.id}
-              title={request.user}
-              subtitle={request.email}
-              badge={<RequestStatus status={request.status} />}
-              actions={
-                <div className="flex flex-wrap items-center gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenInspect(request)}
-                    className="inline-flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer shadow-2xs"
-                  >
-                    <Eye className="h-3.5 w-3.5 text-primary-600" />
-                    <span>View Details</span>
-                  </button>
-                </div>
-              }
-            >
-              <DetailRow label="Transaction ID" value={formatWalletTxId(request)} full />
-              <DetailRow
-                label="Deposit Method"
-                value={request.paymentMethod ? request.paymentMethod.replace(/_/g, ' ').toUpperCase() : 'OFFICIAL ACCOUNT'}
-                full
-              />
-              <DetailRow
-                label="Deposit Amount"
-                value={
-                  request.depositAmount != null
-                    ? `${Number(request.depositAmount).toLocaleString()} ${request.depositCurrency || 'USD'}`
-                    : `$${Number(request.amount).toFixed(2)}`
+          {filteredRequests.map((request) => {
+            const isRefund = Boolean(
+              request.isRefund ||
+              request.paymentMethod === 'wallet_refund' ||
+              (request.refundType && request.refundType !== 'none') ||
+              String(request.bankTid || '').toUpperCase().startsWith('REFUND-')
+            )
+            return (
+              <MobileCard
+                key={request.id}
+                title={
+                  <div className="flex items-center gap-1.5">
+                    <span>{request.user}</span>
+                    {isRefund && (
+                      <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-bold text-purple-800">
+                        Refund
+                      </span>
+                    )}
+                  </div>
                 }
-              />
-              <DetailRow label="Credit to Wallet" value={`+$${Number(request.amount).toFixed(2)} USD`} />
-              <DetailRow
-                label="Real Transfer"
-                value={
-                  request.realTransferStatus === 'completed'
-                    ? `✓ Transferred (${request.realTransferRef || 'Done'})`
-                    : 'Pending'
+                subtitle={request.email}
+                badge={
+                  isRefund ? (
+                    <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
+                      Refunded
+                    </span>
+                  ) : (
+                    <RequestStatus status={request.status} />
+                  )
                 }
-              />
-              <DetailRow label="TID" value={request.bankTid} />
-              <DetailRow label="Date" value={request.date} />
-              {request.receiptImage && (
-                <div className="col-span-2 pt-1">
-                  <a
-                    href={mediaUrl(request.receiptImage)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-medium text-indigo-700 underline"
-                  >
-                    <ExternalLink className="h-3 w-3" /> View Uploaded Receipt
-                  </a>
-                </div>
-              )}
-            </MobileCard>
-          ))}
+                actions={
+                  <div className="flex flex-wrap items-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenInspect(request)}
+                      className="inline-flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer shadow-2xs"
+                    >
+                      <Eye className="h-3.5 w-3.5 text-primary-600" />
+                      <span>View Details</span>
+                    </button>
+                  </div>
+                }
+              >
+                <DetailRow label="Transaction ID" value={formatWalletTxId(request)} full />
+                <DetailRow
+                  label="Transaction Type"
+                  value={
+                    isRefund
+                      ? `Order Refund (#${request.orderNo || request.bankTid.replace(/^REFUND-/, '')})`
+                      : request.paymentMethod
+                      ? request.paymentMethod.replace(/_/g, ' ').toUpperCase()
+                      : 'OFFICIAL ACCOUNT'
+                  }
+                  full
+                />
+                <DetailRow
+                  label="Amount"
+                  value={
+                    request.depositAmount != null
+                      ? `${Number(request.depositAmount).toLocaleString()} ${request.depositCurrency || 'USD'}`
+                      : `$${Number(request.amount).toFixed(2)}`
+                  }
+                />
+                <DetailRow label="Credit to Wallet" value={`+$${Number(request.amount).toFixed(2)} USD`} />
+                <DetailRow label="TID" value={request.bankTid} />
+                <DetailRow label="Date" value={request.date} />
+                {request.receiptImage && !isRefund && (
+                  <div className="pt-1">
+                    <a
+                      href={mediaUrl(request.receiptImage)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-indigo-700 underline"
+                    >
+                      <ExternalLink className="h-3 w-3" /> View Uploaded Receipt
+                    </a>
+                  </div>
+                )}
+              </MobileCard>
+            )
+          })}
         </div>
 
         <Pagination
@@ -639,236 +792,337 @@ export default function WalletsRequestsPage() {
       </Card>
 
       {/* ── WALLET REQUEST DETAILS MODAL ────────────────────────────────────── */}
-      {inspectRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
-          <div className="relative w-full max-w-2xl rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200 max-h-[92vh] flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/90 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-100 text-primary-700 shadow-2xs">
-                  <Wallet className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-slate-900">Wallet Deposit Request</h3>
-                    <RequestStatus status={inspectRequest.status} />
-                  </div>
-                  <p className="text-xs text-indigo-700 font-mono font-semibold">
-                    Transaction ID: {formatWalletTxId(inspectRequest)}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setInspectRequest(null)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+      {inspectRequest && (() => {
+        const isInspectRefund = Boolean(
+          inspectRequest.isRefund ||
+          inspectRequest.paymentMethod === 'wallet_refund' ||
+          (inspectRequest.refundType && inspectRequest.refundType !== 'none') ||
+          String(inspectRequest.bankTid || '').toUpperCase().startsWith('REFUND-')
+        )
+        const suppReversed = Number(
+          inspectRequest.supplierAmount || Math.max(0, inspectRequest.amount - (inspectRequest.commissionRefunded || 0))
+        ).toFixed(2)
+        const commRefunded = Number(inspectRequest.commissionRefunded || 0).toFixed(2)
 
-            {/* Modal Scrollable Body */}
-            <div className="p-6 space-y-5 overflow-y-auto flex-1">
-              {/* Hero Amount Banner */}
-              <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50/80 via-white to-emerald-50/40 p-4 shadow-xs">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+            <div className="relative w-full max-w-2xl rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200 max-h-[92vh] flex flex-col">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-50/90 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-xl shadow-2xs ${
+                      isInspectRefund
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'bg-primary-100 text-primary-700'
+                    }`}
+                  >
+                    {isInspectRefund ? <RotateCcw className="h-5 w-5" /> : <Wallet className="h-5 w-5" />}
+                  </div>
                   <div>
-                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 block">
-                      Net USD To Credit Wallet
-                    </span>
-                    <div className="text-2xl sm:text-3xl font-extrabold text-emerald-700 mt-0.5">
-                      +${Number(inspectRequest.amount).toFixed(2)} <span className="text-sm font-bold text-emerald-600">USD</span>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-slate-900">
+                        {isInspectRefund ? 'Order Cancellation Refund Record' : 'Wallet Deposit Request'}
+                      </h3>
+                      {isInspectRefund ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-200">
+                          <Check className="h-3 w-3" /> Approved &amp; Refunded
+                        </span>
+                      ) : (
+                        <RequestStatus status={inspectRequest.status} />
+                      )}
+                    </div>
+                    <p className="text-xs text-indigo-700 font-mono font-semibold">
+                      Transaction ID: {formatWalletTxId(inspectRequest)}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setInspectRequest(null)}
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Modal Scrollable Body */}
+              <div className="p-6 space-y-5 overflow-y-auto flex-1">
+                {/* Hero Amount Banner */}
+                <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50/80 via-white to-emerald-50/40 p-4 shadow-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 block">
+                        {isInspectRefund ? 'Total Refund Credited to User Wallet' : 'Net USD To Credit Wallet'}
+                      </span>
+                      <div className="text-2xl sm:text-3xl font-extrabold text-emerald-700 mt-0.5">
+                        +${Number(inspectRequest.amount).toFixed(2)} <span className="text-sm font-bold text-emerald-600">USD</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs font-semibold text-slate-500 block">
+                        {isInspectRefund ? 'Refund Policy Status' : 'Original User Deposit'}
+                      </span>
+                      <span className="text-lg font-bold text-slate-900">
+                        {isInspectRefund
+                          ? '100% Full Refund'
+                          : inspectRequest.depositAmount != null
+                          ? `${Number(inspectRequest.depositAmount).toLocaleString()} ${inspectRequest.depositCurrency || 'USD'}`
+                          : `$${Number(inspectRequest.amount).toFixed(2)}`}
+                      </span>
+                      {isInspectRefund ? (
+                        <span className="block text-[11px] font-medium text-emerald-700 mt-0.5">
+                          ✓ Strict 12-Hour Verified
+                        </span>
+                      ) : (
+                        inspectRequest.depositCurrency && inspectRequest.depositCurrency !== 'USD' && (
+                          <span className="block text-[11px] font-mono text-slate-500 mt-0.5">
+                            Rate: 1 USD = {inspectRequest.exchangeRate} {inspectRequest.depositCurrency}
+                          </span>
+                        )
+                      )}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-xs font-semibold text-slate-500 block">Original User Deposit</span>
-                    <span className="text-lg font-bold text-slate-900">
-                      {inspectRequest.depositAmount != null
-                        ? `${Number(inspectRequest.depositAmount).toLocaleString()} ${inspectRequest.depositCurrency || 'USD'}`
-                        : `$${Number(inspectRequest.amount).toFixed(2)}`}
-                    </span>
-                    {inspectRequest.depositCurrency && inspectRequest.depositCurrency !== 'USD' && (
-                      <span className="block text-[11px] font-mono text-slate-500 mt-0.5">
-                        Rate: 1 USD = {inspectRequest.exchangeRate} {inspectRequest.depositCurrency}
+                </div>
+
+                {/* Dedicated Order Refund Financial Breakdown */}
+                {isInspectRefund && (
+                  <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-4 space-y-3">
+                    <div className="flex items-center justify-between border-b border-purple-200/80 pb-2">
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-purple-900">
+                        <RotateCcw className="h-4 w-4 text-purple-700" />
+                        <span>Order Cancellation Financial Breakdown</span>
+                      </div>
+                      {(inspectRequest.orderNo || inspectRequest.bankTid) && (
+                        <span className="font-mono text-xs font-bold text-purple-900 bg-purple-100 px-2 py-0.5 rounded border border-purple-300">
+                          Order #{inspectRequest.orderNo || inspectRequest.bankTid.replace(/^REFUND-/, '')}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                      <div className="rounded-lg bg-white p-3 border border-purple-100 shadow-2xs">
+                        <span className="text-slate-500 block text-[11px] font-semibold">1. Supplier Amount Reversed</span>
+                        <span className="text-sm font-extrabold text-slate-800 block mt-0.5">
+                          ${suppReversed} USD
+                        </span>
+                        <span className="text-[10px] text-slate-500 mt-1 block">
+                          Pending payable reversed; supplier suffers zero loss.
+                        </span>
+                      </div>
+
+                      <div className="rounded-lg bg-white p-3 border border-purple-100 shadow-2xs">
+                        <span className="text-slate-500 block text-[11px] font-semibold">2. Platform Commission Refunded</span>
+                        <span className="text-sm font-extrabold text-indigo-700 block mt-0.5">
+                          ${commRefunded} USD
+                        </span>
+                        <span className="text-[10px] text-slate-500 mt-1 block">
+                          Marketplace fee reversed and returned to customer.
+                        </span>
+                      </div>
+
+                      <div className="rounded-lg bg-emerald-50 p-3 border border-emerald-200 shadow-2xs">
+                        <span className="text-emerald-800 block text-[11px] font-bold">3. Total User Wallet Refund</span>
+                        <span className="text-base font-extrabold text-emerald-700 block mt-0.5">
+                          +${Number(inspectRequest.amount).toFixed(2)} USD
+                        </span>
+                        <span className="text-[10px] text-emerald-700 mt-1 block font-medium">
+                          100% credited into buyer wallet balance.
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg bg-white/90 p-2.5 text-xs text-slate-700 border border-purple-100 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <span>
+                        <strong>Strict 12-Hour Cancellation Policy:</strong> Request was approved within the allowed 12-hour limit.
                       </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* User & Wallet Profile Information */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+                  <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2 text-xs font-bold uppercase tracking-wider text-slate-700">
+                    <User className="h-4 w-4 text-primary-600" />
+                    <span>Customer &amp; Wallet Account</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">User Full Name</span>
+                      <span className="font-bold text-slate-800 text-sm">{inspectRequest.user || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">User Email</span>
+                      <span className="font-semibold text-slate-800">{inspectRequest.email || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">User Role / Account Type</span>
+                      <span className="inline-flex items-center gap-1 mt-0.5 rounded-full bg-slate-200 px-2.5 py-0.5 font-bold uppercase text-[10px] text-slate-700">
+                        {inspectRequest.role || 'user'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Current Wallet Balance</span>
+                      <span className="font-extrabold text-emerald-700 text-sm block mt-0.5">
+                        ${Number(inspectRequest.walletBalance || 0).toFixed(2)} USD
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Business Name</span>
+                      <span className="font-semibold text-slate-800">{inspectRequest.business || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Phone / Contact</span>
+                      <span className="font-medium text-slate-800">{inspectRequest.phone || '—'}</span>
+                    </div>
+                    {inspectRequest.city && (
+                      <div className="sm:col-span-2">
+                        <span className="text-slate-400 block text-[11px]">Location</span>
+                        <span className="font-medium text-slate-800">
+                          {inspectRequest.city}, {inspectRequest.country || 'Pakistan'}
+                        </span>
+                      </div>
                     )}
                   </div>
                 </div>
-              </div>
 
-              {/* User & Wallet Profile Information */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
-                <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2 text-xs font-bold uppercase tracking-wider text-slate-700">
-                  <User className="h-4 w-4 text-primary-600" />
-                  <span>User &amp; Wallet Account</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">User Full Name</span>
-                    <span className="font-bold text-slate-800 text-sm">{inspectRequest.user || '—'}</span>
+                {/* Transaction & Bank TID Information */}
+                <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-2xs">
+                  <div className="flex items-center gap-2 border-b border-slate-100 pb-2 text-xs font-bold uppercase tracking-wider text-slate-700">
+                    <Coins className="h-4 w-4 text-amber-500" />
+                    <span>Transaction Details &amp; Reference</span>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">User Email</span>
-                    <span className="font-semibold text-slate-800">{inspectRequest.email || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">User Role / Account Type</span>
-                    <span className="inline-flex items-center gap-1 mt-0.5 rounded-full bg-slate-200 px-2.5 py-0.5 font-bold uppercase text-[10px] text-slate-700">
-                      {inspectRequest.role || 'user'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Current Wallet Balance</span>
-                    <span className="font-extrabold text-emerald-700 text-sm block mt-0.5">
-                      ${Number(inspectRequest.walletBalance || 0).toFixed(2)} USD
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Business Name</span>
-                    <span className="font-semibold text-slate-800">{inspectRequest.business || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Phone / Contact</span>
-                    <span className="font-medium text-slate-800">{inspectRequest.phone || '—'}</span>
-                  </div>
-                  {inspectRequest.city && (
-                    <div className="sm:col-span-2">
-                      <span className="text-slate-400 block text-[11px]">Location</span>
-                      <span className="font-medium text-slate-800">
-                        {inspectRequest.city}, {inspectRequest.country || 'Pakistan'}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-slate-400 block text-[11px]">System Reference TID</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyText(inspectRequest.bankTid, 'TID')}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                        >
+                          <Copy className="h-3 w-3" /> Copy
+                        </button>
+                      </div>
+                      <span className="font-mono font-bold text-slate-900 text-sm select-all bg-slate-100 px-2.5 py-1 rounded border border-slate-200 inline-block">
+                        {inspectRequest.bankTid}
                       </span>
                     </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Transaction & Bank TID Information */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-2xs">
-                <div className="flex items-center gap-2 border-b border-slate-100 pb-2 text-xs font-bold uppercase tracking-wider text-slate-700">
-                  <Coins className="h-4 w-4 text-amber-500" />
-                  <span>Deposit Transaction Details</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-slate-400 block text-[11px]">Bank Transaction ID (TID / TxHash)</span>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyText(inspectRequest.bankTid, 'Bank TID')}
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
-                      >
-                        <Copy className="h-3 w-3" /> Copy
-                      </button>
-                    </div>
-                    <span className="font-mono font-bold text-slate-900 text-sm select-all bg-slate-100 px-2.5 py-1 rounded border border-slate-200 inline-block">
-                      {inspectRequest.bankTid}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Request Date &amp; Time</span>
-                    <span className="font-medium text-slate-800 block mt-0.5">
-                      {inspectRequest.createdAt
-                        ? new Date(inspectRequest.createdAt).toLocaleString('en-US', {
-                          dateStyle: 'medium',
-                          timeStyle: 'short',
-                        })
-                        : inspectRequest.date}
-                    </span>
-                  </div>
-                  {inspectRequest.adminNote && (
-                    <div className="sm:col-span-2 rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-xs text-rose-800">
-                      <span className="font-bold block text-[11px] uppercase tracking-wide">Admin Rejection Note:</span>
-                      <p className="mt-0.5">{inspectRequest.adminNote}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Uploaded Slip / Receipt Proof */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                    Payment Receipt / Deposit Slip Proof
-                  </span>
-                  {inspectRequest.receiptImage && (
-                    <a
-                      href={mediaUrl(inspectRequest.receiptImage)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-bold text-primary-700 hover:underline"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" /> Open Full Image
-                    </a>
-                  )}
-                </div>
-
-                {inspectRequest.receiptImage ? (
-                  <div className="flex flex-col items-center">
-                    <a
-                      href={mediaUrl(inspectRequest.receiptImage)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="group relative max-h-72 w-full overflow-hidden rounded-xl border border-slate-200 bg-white p-2 shadow-xs transition hover:border-primary-400 flex items-center justify-center cursor-zoom-in"
-                    >
-                      <img
-                        src={mediaUrl(inspectRequest.receiptImage)}
-                        alt="Deposit Receipt"
-                        className="max-h-64 object-contain rounded-lg transition group-hover:scale-[1.02]"
-                      />
-                      <span className="absolute bottom-3 right-3 rounded-lg bg-slate-900/80 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-xs flex items-center gap-1 shadow-sm opacity-90 group-hover:opacity-100">
-                        <ExternalLink className="h-3 w-3" /> View Large
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Transaction Date &amp; Time</span>
+                      <span className="font-medium text-slate-800 block mt-0.5">
+                        {inspectRequest.createdAt
+                          ? new Date(inspectRequest.createdAt).toLocaleString('en-US', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })
+                          : inspectRequest.date}
                       </span>
-                    </a>
+                    </div>
+                    {inspectRequest.adminNote && (
+                      <div className="sm:col-span-2 rounded-lg bg-indigo-50 border border-indigo-200 p-2.5 text-xs text-indigo-900">
+                        <span className="font-bold block text-[11px] uppercase tracking-wide">Audit Note:</span>
+                        <p className="mt-0.5">{inspectRequest.adminNote}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Uploaded Slip / Verification Proof */}
+                {!isInspectRefund && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                        Payment Receipt / Deposit Slip Proof
+                      </span>
+                      {inspectRequest.receiptImage && (
+                        <a
+                          href={mediaUrl(inspectRequest.receiptImage)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-xs font-bold text-primary-700 hover:underline"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" /> Open Full Image
+                        </a>
+                      )}
+                    </div>
+
+                    {inspectRequest.receiptImage ? (
+                      <div className="flex flex-col items-center">
+                        <a
+                          href={mediaUrl(inspectRequest.receiptImage)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="group relative max-h-72 w-full overflow-hidden rounded-xl border border-slate-200 bg-white p-2 shadow-xs transition hover:border-primary-400 flex items-center justify-center cursor-zoom-in"
+                        >
+                          <img
+                            src={mediaUrl(inspectRequest.receiptImage)}
+                            alt="Deposit Receipt"
+                            className="max-h-64 object-contain rounded-lg transition group-hover:scale-[1.02]"
+                          />
+                          <span className="absolute bottom-3 right-3 rounded-lg bg-slate-900/80 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur-xs flex items-center gap-1 shadow-sm opacity-90 group-hover:opacity-100">
+                            <ExternalLink className="h-3 w-3" /> View Large
+                          </span>
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-xs text-slate-400">
+                        No receipt image uploaded.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Actions Footer */}
+              <div className="border-t border-slate-100 px-6 py-4 bg-slate-50 flex items-center justify-between gap-3 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInspectRequest(null)}
+                  className="text-xs"
+                >
+                  Close
+                </Button>
+
+                {inspectRequest.status === 'pending' ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={busyId === inspectRequest.id}
+                      onClick={() => handleReject(inspectRequest.id)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 transition disabled:opacity-50 cursor-pointer"
+                    >
+                      <X className="h-4 w-4" /> Reject Request
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === inspectRequest.id}
+                      onClick={() => handleApprove(inspectRequest.id, inspectRequest.amount)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition disabled:opacity-50 cursor-pointer"
+                    >
+                      <Check className="h-4 w-4" /> Approve &amp; Credit +${Number(inspectRequest.amount).toFixed(2)} USD
+                    </button>
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-xs text-slate-400">
-                    No receipt image uploaded.
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-500">Status:</span>
+                    {isInspectRefund ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-200">
+                        <Check className="h-3 w-3" /> Settled &amp; Credited
+                      </span>
+                    ) : (
+                      <RequestStatus status={inspectRequest.status} />
+                    )}
                   </div>
                 )}
               </div>
             </div>
-
-            {/* Modal Actions Footer */}
-            <div className="border-t border-slate-100 px-6 py-4 bg-slate-50 flex items-center justify-between gap-3 shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setInspectRequest(null)}
-                className="text-xs"
-              >
-                Close
-              </Button>
-
-              {inspectRequest.status === 'pending' ? (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={busyId === inspectRequest.id}
-                    onClick={() => handleReject(inspectRequest.id)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 transition disabled:opacity-50 cursor-pointer"
-                  >
-                    <X className="h-4 w-4" /> Reject Request
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busyId === inspectRequest.id}
-                    onClick={() => handleApprove(inspectRequest.id, inspectRequest.amount)}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition disabled:opacity-50 cursor-pointer"
-                  >
-                    <Check className="h-4 w-4" /> Approve &amp; Credit +${Number(inspectRequest.amount).toFixed(2)} USD
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-500">Status:</span>
-                  <RequestStatus status={inspectRequest.status} />
-                </div>
-              )}
-            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* DOLLAR RATE, DEPOSIT ACCOUNTS, INTERNATIONAL GATEWAYS & COURIER SETTINGS MODAL */}
       {settingsModalOpen && (

@@ -94,7 +94,7 @@ function SupplierDisputesPage() {
 
     try {
 
-      await disputeApi.create({ ...payload, type: 'supplier_dispute' })
+      await disputeApi.create({ ...payload, type: payload.type || 'supplier_dispute' })
 
       setShowCreate(false)
 

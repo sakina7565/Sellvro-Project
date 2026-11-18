@@ -35,12 +35,23 @@ app.set('trust proxy', 1)
 let dbStatus = 'connecting'
 let dbMessage = 'Connecting to MongoDB Atlas...'
 
+app.disable('x-powered-by')
+
+// Security headers (M6)
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  next()
+})
+
 const defaultOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:5174',
   'https://sellvro.com',
+  'https://www.sellvro.com',
 ]
 
 const envOrigins = (process.env.CLIENT_URL || '')
@@ -50,40 +61,37 @@ const envOrigins = (process.env.CLIENT_URL || '')
 
 const allowedOrigins = [...new Set([...defaultOrigins, ...envOrigins])]
 
-app.use(
-  cors({
-    origin(origin, callback) {
-      // Allow non-browser tools (no Origin) and configured frontends
-      if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
-        return callback(null, true)
-      }
-      return callback(new Error(`CORS blocked for origin: ${origin}`))
-    },
-    credentials: true,
-  }),
-)
+const apiCors = cors({
+  origin(origin, callback) {
+    // Allow non-browser tools (no Origin) and configured frontends
+    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      return callback(null, true)
+    }
+    return callback(new Error(`CORS blocked for origin: ${origin}`))
+  },
+  credentials: true,
+})
+
+// Static uploads allow cross-origin resource sharing for product/receipt media (404 for missing files per M4)
+app.use('/uploads', cors(), express.static(UPLOADS_DIR))
+
+// Apply strict CORS and body parsers to /api routes
+app.use('/api', apiCors)
 app.use(cookieParser())
 app.use(express.json())
-app.use('/uploads', express.static(UPLOADS_DIR))
-app.use('/uploads', (_req, res) => {
-  res.setHeader('Content-Type', 'image/svg+xml')
-  res.setHeader('Cache-Control', 'public, max-age=86400')
-  res.status(200).send(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">
-      <defs>
-        <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#f8fafc"/>
-          <stop offset="100%" stop-color="#e2e8f0"/>
-        </linearGradient>
-      </defs>
-      <rect width="600" height="600" fill="url(#g)"/>
-      <g fill="#94a3b8" transform="translate(180, 180) scale(10)">
-        <path d="M4 3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H4zm0 2h16v8.586l-4.293-4.293a1 1 0 0 0-1.414 0L8.586 15l-1.879-1.879a1 1 0 0 0-1.414 0L4 14.414V5zm16 14H4v-1.758l2-2 1.879 1.879a1 1 0 0 0 1.414 0L15 11.414l5 5V19zm-5.5-11a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/>
-      </g>
-      <text x="300" y="450" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="18" font-weight="700" fill="#475569" text-anchor="middle">Sellvro Verified Catalog</text>
-      <text x="300" y="475" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="500" fill="#94a3b8" text-anchor="middle">Image stored in cloud warehouse</text>
-    </svg>
-  `)
+
+// M2: Handle invalid JSON error & default empty body
+app.use((err, _req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ message: 'Invalid JSON payload received in request body.' })
+  }
+  next(err)
+})
+app.use((req, _res, next) => {
+  if (!req.body || typeof req.body !== 'object') {
+    req.body = {}
+  }
+  next()
 })
 
 app.get('/api/health', (_req, res) => {
@@ -92,26 +100,21 @@ app.get('/api/health', (_req, res) => {
     message: 'Sellvro API is running',
     database: {
       status: dbStatus,
-      message: dbMessage,
     },
-    node: process.version,
     port: PORT,
-    cwd: process.cwd(),
   })
 })
 
-// Database connection guard for all API endpoints
+// M3: Fast 503 database readiness guard for all API endpoints (blocks buffer hang)
 app.use('/api', (req, res, next) => {
   if (req.path === '/health' || req.path === '/healthcheck') {
     return next()
   }
 
-  // If MongoDB is disconnected (0), immediately return helpful response and attempt reconnect
-  if (mongoose.connection.readyState === 0) {
-    connectDB().catch(() => {})
+  if (mongoose.connection.readyState !== 1) {
+    if (mongoose.connection.readyState === 0) connectDB().catch(() => { })
     return res.status(503).json({
-      message:
-        'Database connection is offline. Please ensure your internet connection is active and MongoDB Atlas IP Whitelist allows your IP (or 0.0.0.0/0).',
+      message: 'Database is currently connecting or temporarily unavailable. Please retry shortly.',
     })
   }
 
@@ -129,6 +132,11 @@ app.use('/api/disputes', disputeRoutes)
 app.use('/api/finance', financeRoutes)
 app.use('/api/notifications', notificationRoutes)
 app.use('/api/search', searchRoutes)
+
+// M5: Unknown API routes return JSON 404 (not HTML)
+app.use('/api', (req, res) => {
+  res.status(404).json({ message: `API route not found: ${req.method} ${req.originalUrl || req.url}` })
+})
 
 // Serve production static frontend if dist directory exists (e.g. cPanel single-app deployment)
 const candidateDistPaths = [
@@ -158,7 +166,7 @@ app.use((err, _req, res, _next) => {
 })
 
 // Connect to WMS MySQL
-checkMySQLConnection().catch(() => {})
+checkMySQLConnection().catch(() => { })
 
 // Connect to MongoDB
 connectDB()

@@ -19,7 +19,7 @@ const logFile = path.join(process.cwd(), 'stderr.log')
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`
   process.stderr.write(line)
-  try { fs.appendFileSync(logFile, line) } catch (_) {}
+  try { fs.appendFileSync(logFile, line) } catch (_) { }
 }
 
 // ── Load .env FIRST before reading any env vars ───────────────────────────────

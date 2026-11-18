@@ -13,6 +13,25 @@ const shippingAddressSchema = new mongoose.Schema(
   { _id: false },
 )
 
+const cancellationRequestSchema = new mongoose.Schema(
+  {
+    isRequested: { type: Boolean, default: false },
+    requestedBy: { type: String, enum: ['user', 'supplier', 'none'], default: 'none' },
+    requesterUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    reason: { type: String, trim: true, default: '' },
+    requestedAt: { type: Date, default: null },
+    status: {
+      type: String,
+      enum: ['none', 'pending', 'approved', 'rejected'],
+      default: 'none',
+    },
+    reviewedAt: { type: Date, default: null },
+    reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    rejectionReason: { type: String, trim: true, default: '' },
+  },
+  { _id: false },
+)
+
 const orderSchema = new mongoose.Schema(
   {
     orderNo: {
@@ -56,8 +75,13 @@ const orderSchema = new mongoose.Schema(
         'delivered',
         'cancelled',
         'returned',
+        'cancellation_pending',
       ],
       default: 'awaiting_dispatch',
+    },
+    cancellationRequest: {
+      type: cancellationRequestSchema,
+      default: () => ({ isRequested: false, status: 'none', requestedBy: 'none' }),
     },
     brandLabel: { type: String, trim: true, default: '' },
     orderLabelRef: { type: String, trim: true, default: '' },
@@ -118,6 +142,15 @@ const orderSchema = new mongoose.Schema(
     shippingAddress: {
       type: shippingAddressSchema,
       default: () => ({}),
+    },
+    customizationDetails: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    isCustomized: {
+      type: Boolean,
+      default: false,
     },
     // Live Parcel Tracking Fields
     trackingNumber: {
@@ -443,6 +476,23 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
     ) ? (this.wmsPushedAt || null) : null,
     isReviewed: Boolean(this.isReviewed),
     reviewId: this.review?.toString?.() || '',
+    customizationDetails: this.customizationDetails || '',
+    isCustomized: Boolean(this.isCustomized),
+    cancellationRequest: this.cancellationRequest ? {
+      isRequested: Boolean(this.cancellationRequest.isRequested),
+      requestedBy: this.cancellationRequest.requestedBy || 'none',
+      reason: this.cancellationRequest.reason || '',
+      requestedAt: this.cancellationRequest.requestedAt || null,
+      status: this.cancellationRequest.status || 'none',
+      reviewedAt: this.cancellationRequest.reviewedAt || null,
+      rejectionReason: this.cancellationRequest.rejectionReason || '',
+    } : { isRequested: false, status: 'none', requestedBy: 'none' },
+    isWithin12Hours: this.createdAt
+      ? (Date.now() - new Date(this.createdAt).getTime()) <= 12 * 60 * 60 * 1000
+      : false,
+    hoursSincePlacement: this.createdAt
+      ? Number(((Date.now() - new Date(this.createdAt).getTime()) / (1000 * 60 * 60)).toFixed(1))
+      : 0,
     promisedHandlingTime: this.promisedHandlingTime || '24 Hours (1 business day)',
     handlingHoursPromised: this.handlingHoursPromised || 24,
     actualHandlingHours: this.actualHandlingHours,

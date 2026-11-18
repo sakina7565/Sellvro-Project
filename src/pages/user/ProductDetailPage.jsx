@@ -295,6 +295,15 @@ function ProductDetailPage() {
   const handleBuyNow = () => {
     if (!product || !isAvailable || isOutOfStock) return
     const prodId = product.id || product._id || id
+    if (!isAuthenticated) {
+      navigate('/login', {
+        state: {
+          from: `/checkout/${prodId}`,
+          message: 'Please sign in to your account before placing an order.',
+        },
+      })
+      return
+    }
     navigate(`/checkout/${prodId}`, {
       state: {
         product: { ...product, id: prodId },
@@ -801,6 +810,23 @@ function ProductDetailPage() {
             </div>
           </div>
 
+          {/* Customization Available Banner & Notice */}
+          {Boolean(product.customizationAvailable) && (
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/80 p-3.5 shadow-2xs">
+              <div className="flex items-center gap-2 font-bold text-xs text-indigo-950">
+                <Sparkles className="h-4 w-4 text-indigo-600" />
+                <span>Customization Available for this Item</span>
+                <span className="rounded-full bg-indigo-200/80 px-2 py-0.5 text-[10px] font-extrabold text-indigo-800">
+                  Customizable
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-indigo-800">
+                {product.customizationInstructions ||
+                  'The seller provides custom modifications for this product. You can specify your personalized requirements, text, dimensions, or instructions at checkout.'}
+              </p>
+            </div>
+          )}
+
           {/* 4. Condition & Availability Section */}
           <div className="space-y-3 text-xs text-slate-700">
             {/* Condition Row */}
@@ -858,6 +884,23 @@ function ProductDetailPage() {
             >
               <span>{isOutOfStock ? 'Out of Stock' : 'Order Now'}</span>
             </button>
+
+            {/* Account Balance Information for logged-in user */}
+            {isAuthenticated && user && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Available Wallet Balance:</span>
+                  <span className={`font-bold ${Number(user.walletBalance || 0) >= (Number(product.price || 0) * quantity) ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    ${Number(user.walletBalance || 0).toFixed(2)}
+                  </span>
+                </div>
+                {Number(user.walletBalance || 0) < (Number(product.price || 0) * quantity) && (
+                  <p className="mt-1 text-[11px] text-rose-600 font-semibold">
+                    ⚠️ Short by ${((Number(product.price || 0) * quantity) - Number(user.walletBalance || 0)).toFixed(2)}. Deposit required at checkout.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Add to Cart (White with Blue border) */}
             <button

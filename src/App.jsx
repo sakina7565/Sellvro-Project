@@ -214,19 +214,19 @@ function App() {
       <Route path="/user/store" element={<Navigate to="/" replace />} />
       <Route
         path="/checkout"
-        element={isSupplier ? <Navigate to="/supplier/dashboard" replace /> : <UserCheckoutPage />}
+        element={isSupplier ? <Navigate to="/supplier/dashboard" replace /> : <UserRoute><UserCheckoutPage /></UserRoute>}
       />
       <Route
         path="/checkout/:productId"
-        element={isSupplier ? <Navigate to="/supplier/dashboard" replace /> : <UserCheckoutPage />}
+        element={isSupplier ? <Navigate to="/supplier/dashboard" replace /> : <UserRoute><UserCheckoutPage /></UserRoute>}
       />
       <Route
         path="/user/checkout"
-        element={isSupplier ? <Navigate to="/supplier/dashboard" replace /> : <UserCheckoutPage />}
+        element={isSupplier ? <Navigate to="/supplier/dashboard" replace /> : <UserRoute><UserCheckoutPage /></UserRoute>}
       />
       <Route
         path="/user/checkout/:productId"
-        element={isSupplier ? <Navigate to="/supplier/dashboard" replace /> : <UserCheckoutPage />}
+        element={isSupplier ? <Navigate to="/supplier/dashboard" replace /> : <UserRoute><UserCheckoutPage /></UserRoute>}
       />
       <Route path="/orders/confirmation/:orderId" element={<UserOrderConfirmationPage />} />
       <Route path="/user/orders/confirmation/:orderId" element={<UserOrderConfirmationPage />} />

@@ -20,6 +20,15 @@ function MarketplaceDeals({ products = [], activeCategory = 'All Categories', ac
     e.preventDefault()
     e.stopPropagation()
     const itemId = item._id || item.id
+    if (!isAuthenticated) {
+      navigate('/login', {
+        state: {
+          from: `/checkout/${itemId}`,
+          message: 'Please sign in to your account before placing an order.',
+        },
+      })
+      return
+    }
     navigate(`/checkout/${itemId}`, { state: { product: { ...item, id: itemId } } })
   }
 

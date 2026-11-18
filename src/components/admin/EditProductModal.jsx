@@ -19,6 +19,8 @@ function EditProductModal({ isOpen, onClose, onSuccess, product }) {
     fulfillBy: 'warehouse',
     location: '',
     description: '',
+    customizationAvailable: false,
+    customizationInstructions: '',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -50,6 +52,8 @@ function EditProductModal({ isOpen, onClose, onSuccess, product }) {
         fulfillBy: product.fulfillBy || 'warehouse',
         location: product.location && product.location !== '—' ? product.location : '',
         description: product.description || '',
+        customizationAvailable: Boolean(product.customizationAvailable),
+        customizationInstructions: product.customizationInstructions || '',
       })
       setError('')
     }
@@ -104,6 +108,8 @@ function EditProductModal({ isOpen, onClose, onSuccess, product }) {
         fulfillBy: form.fulfillBy,
         location: form.location.trim(),
         description: form.description.trim(),
+        customizationAvailable: form.customizationAvailable ? 'true' : 'false',
+        customizationInstructions: form.customizationInstructions || '',
       }
 
       const res = await adminApi.updateProduct(product.id, payload)
@@ -334,6 +340,46 @@ function EditProductModal({ isOpen, onClose, onSuccess, product }) {
                 placeholder="e.g. 2 - 3 business days"
               />
             </div>
+          </div>
+
+          {/* Product Customization Option */}
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3.5">
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={Boolean(form.customizationAvailable)}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    customizationAvailable: e.target.checked,
+                  }))
+                }
+                className="mt-0.5 h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div>
+                <span className="block font-bold text-xs text-indigo-950">
+                  Customization Available for this Product
+                </span>
+                <span className="block text-[11px] text-indigo-700">
+                  Allow buyers to specify personalized engraving, custom dimensions, color choices, or custom notes.
+                </span>
+              </div>
+            </label>
+
+            {form.customizationAvailable && (
+              <div className="mt-3 pt-2.5 border-t border-indigo-100">
+                <label className="mb-1 block text-xs font-semibold text-slate-700">
+                  Customization Instructions for Buyer
+                </label>
+                <textarea
+                  rows={2}
+                  value={form.customizationInstructions}
+                  onChange={handleChange('customizationInstructions')}
+                  placeholder="e.g. Enter name to engrave (up to 15 chars), specify custom color..."
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                />
+              </div>
+            )}
           </div>
 
           {/* Description */}

@@ -56,6 +56,11 @@ const userSchema = new mongoose.Schema(
       type: Date,
       select: false,
     },
+    resetPasswordAttempts: {
+      type: Number,
+      default: 0,
+      select: false,
+    },
     googleId: {
       type: String,
       sparse: true,

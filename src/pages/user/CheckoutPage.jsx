@@ -39,7 +39,20 @@ export default function UserCheckoutPage() {
   const { productId } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, updateUser, isAuthenticated } = useAuth()
+  const { user, updateUser, isAuthenticated, loading: authLoading } = useAuth()
+
+  // Enforce Guest User Restriction - redirect unauthenticated visitors to login
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      navigate('/login', {
+        replace: true,
+        state: {
+          from: location.pathname,
+          message: 'Please log in to your account before accessing checkout.',
+        },
+      })
+    }
+  }, [authLoading, isAuthenticated, location.pathname, navigate])
 
   const [product, setProduct] = useState(() => {
     const raw = location.state?.product
@@ -71,6 +84,7 @@ export default function UserCheckoutPage() {
   const [labelMode, setLabelMode] = useState('generate') // 'generate' | 'upload'
   const [userTrackingNumber, setUserTrackingNumber] = useState(() => generateAutomatedTrackingId('tcs'))
   const [parcelInstructions, setParcelInstructions] = useState('Fragile - Handle with care. Open parcel allowed.')
+  const [customizationDetails, setCustomizationDetails] = useState('')
   const [labelFile, setLabelFile] = useState(null)
   const [labelFileName, setLabelFileName] = useState('')
   const [parsingLabel, setParsingLabel] = useState(false)
@@ -285,7 +299,7 @@ export default function UserCheckoutPage() {
 
     if (walletBalance < total) {
       setError(
-        `Insufficient wallet balance. Total due is $${total.toFixed(2)}, but you currently have $${Number(walletBalance || 0).toFixed(2)}. Deposit funds from your Wallet page.`,
+        `Insufficient account balance. Total due is $${total.toFixed(2)}, but your available balance is $${Number(walletBalance || 0).toFixed(2)} (Short by $${(total - Number(walletBalance || 0)).toFixed(2)}). Please deposit funds from your Wallet page before proceeding.`,
       )
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
@@ -348,6 +362,8 @@ export default function UserCheckoutPage() {
         paymentMethod: 'wallet',
         shippingAddress: cleanAddress,
         labelNotes: parcelInstructions.trim() || 'Handle with care',
+        customizationDetails: customizationDetails.trim(),
+        isCustomized: Boolean(customizationDetails.trim()),
         carrier: activeCourierMeta.name,
         trackingNumber: cleanTracking,
       }
@@ -761,6 +777,37 @@ export default function UserCheckoutPage() {
                 <p className="mt-1.5 text-[11px] text-slate-400">
                   Ye instructions parcel label par print hongi aur Supplier aur WMS portal ke dashboard par show hongi.
                 </p>
+
+                {/* Product Customization Section */}
+                {Boolean(product?.customizationAvailable) && (
+                  <div className="mt-5 rounded-2xl border-2 border-indigo-200 bg-indigo-50/70 p-4 shadow-2xs">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 text-indigo-600" />
+                        <span className="font-extrabold text-sm text-indigo-950">
+                          Product Customization Details
+                        </span>
+                      </div>
+                      <span className="rounded-full bg-indigo-200/90 px-2.5 py-0.5 text-[11px] font-bold text-indigo-900">
+                        Customization Available
+                      </span>
+                    </div>
+                    <p className="text-xs text-indigo-800 mb-2.5">
+                      {product?.customizationInstructions ||
+                        'This seller provides personalized customization for this product. Enter your custom text, engraving, dimensions, color preferences, or specific instructions below:'}
+                    </p>
+                    <textarea
+                      rows={3}
+                      value={customizationDetails}
+                      onChange={(e) => setCustomizationDetails(e.target.value)}
+                      placeholder="e.g. Please engrave 'John Doe' on the back, custom size 42, Navy Blue color..."
+                      className="w-full resize-none rounded-xl border border-indigo-200 bg-white p-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 shadow-2xs"
+                    />
+                    <p className="mt-1 text-[11px] text-indigo-600 font-medium">
+                      ✓ Ye customization details order ke sath seller aur warehouse ko receive hongi taake product aapke mutabiq prepare ho sake.
+                    </p>
+                  </div>
+                )}
               </div>
             </Card>
 
@@ -800,26 +847,30 @@ export default function UserCheckoutPage() {
                 </div>
               </div>
 
-              {/* {walletBalance < total ? (
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-                  <span>
-                    ⚠️ Balance is short by <strong>${(total - Number(walletBalance || 0)).toFixed(2)}</strong>.
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      to="/user/wallet"
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 transition"
-                    >
-                      Deposit &rarr;
-                    </Link>
+              {walletBalance < total ? (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-300 bg-rose-50/90 p-3.5 text-xs text-rose-900 shadow-2xs">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-rose-950">Insufficient Account Balance</p>
+                      <p className="mt-0.5 text-rose-800">
+                        Available Balance: <strong>${Number(walletBalance || 0).toFixed(2)}</strong> &bull; Required Amount: <strong>${total.toFixed(2)}</strong>. You are short by <strong>${(total - Number(walletBalance || 0)).toFixed(2)}</strong>.
+                      </p>
+                    </div>
                   </div>
+                  <Link
+                    to="/user/wallet"
+                    className="rounded-lg bg-rose-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-rose-700 transition"
+                  >
+                    Deposit Funds &rarr;
+                  </Link>
                 </div>
               ) : (
-                <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-emerald-800">
+                <div className="mt-3 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 border border-emerald-200">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span>Sufficient wallet balance. Amount will be deducted upon order placement.</span>
+                  <span>Sufficient wallet balance. Amount (${total.toFixed(2)}) will be deducted upon order placement.</span>
                 </div>
-              )} */}
+              )}
             </Card>
           </div>
 
@@ -910,17 +961,52 @@ export default function UserCheckoutPage() {
                 </div>
               </div>
 
-              {/* Place Order Button */}
-              <div className="mt-5">
-                <Button
-                  type="submit"
-                  size="lg"
-                  loading={submitting}
-                  disabled={submitting}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 text-sm shadow-md"
-                >
-                  Pay from Wallet & Place Order — ${total.toFixed(2)}
-                </Button>
+              {/* Place Order Button & Insufficient Balance Guard */}
+              <div className="mt-5 space-y-2.5">
+                {walletBalance < total && (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900">
+                    <div className="flex items-center gap-1.5 font-bold text-rose-950">
+                      <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+                      <span>Insufficient Account Balance</span>
+                    </div>
+                    <div className="mt-1 space-y-0.5 text-[11px] text-rose-800">
+                      <div className="flex justify-between">
+                        <span>Available Balance:</span>
+                        <strong className="text-slate-900">${Number(walletBalance || 0).toFixed(2)}</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Required Amount:</span>
+                        <strong className="text-rose-700">${total.toFixed(2)}</strong>
+                      </div>
+                      <div className="flex justify-between border-t border-rose-200 pt-0.5 font-semibold text-rose-900">
+                        <span>Short by:</span>
+                        <span>${(total - Number(walletBalance || 0)).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {walletBalance < total ? (
+                  <Button
+                    as={Link}
+                    to="/user/wallet"
+                    size="lg"
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 text-sm shadow-md flex items-center justify-center gap-2"
+                  >
+                    <Wallet className="h-4 w-4" />
+                    <span>Deposit Funds to Place Order</span>
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    size="lg"
+                    loading={submitting}
+                    disabled={submitting}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 text-sm shadow-md"
+                  >
+                    Pay from Wallet & Place Order — ${total.toFixed(2)}
+                  </Button>
+                )}
               </div>
 
               <div className="mt-3 text-center">

@@ -123,6 +123,30 @@ const walletRequestSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    // Associated Order & Refund Details for Cancelled Orders
+    order: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Order',
+      default: null,
+    },
+    orderNo: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    refundType: {
+      type: String,
+      enum: ['order_cancellation', 'dispute_refund', 'none'],
+      default: 'none',
+    },
+    supplierAmount: {
+      type: Number,
+      default: 0,
+    },
+    commissionRefunded: {
+      type: Number,
+      default: 0,
+    },
   },
   { timestamps: true },
 )
@@ -197,6 +221,13 @@ walletRequestSchema.methods.toSafeObject = function toSafeObject(businessName = 
         ? 'New Request'
         : this.status.charAt(0).toUpperCase() + this.status.slice(1),
     adminNote: this.adminNote,
+    // Order Refund Properties
+    order: this.order ? (this.order._id || this.order).toString() : null,
+    orderNo: this.orderNo || '',
+    refundType: this.refundType || (this.paymentMethod === 'wallet_refund' ? 'order_cancellation' : 'none'),
+    supplierAmount: Number(this.supplierAmount || 0),
+    commissionRefunded: Number(this.commissionRefunded || 0),
+    isRefund: this.paymentMethod === 'wallet_refund' || (Boolean(this.refundType) && this.refundType !== 'none'),
     date: this.createdAt
       ? new Date(this.createdAt).toLocaleDateString('en-US', {
         month: 'short',

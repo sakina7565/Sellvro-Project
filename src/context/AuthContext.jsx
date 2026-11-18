@@ -18,7 +18,7 @@ function readStoredUser() {
   } catch {
     try {
       if (typeof window !== 'undefined') localStorage.removeItem(USER_KEY)
-    } catch {}
+    } catch { }
     return null
   }
 }
@@ -31,12 +31,12 @@ export function AuthProvider({ children }) {
     if (nextUser && typeof nextUser === 'object' && Object.keys(nextUser).length > 0) {
       try {
         localStorage.setItem(USER_KEY, JSON.stringify(nextUser))
-      } catch {}
+      } catch { }
       setUser(nextUser)
     } else {
       try {
         localStorage.removeItem(USER_KEY)
-      } catch {}
+      } catch { }
       setUser(null)
     }
   }, [])
@@ -72,7 +72,6 @@ export function AuthProvider({ children }) {
   const login = useCallback(
     async (payload) => {
       const data = await authApi.login(payload)
-      if (data.token) localStorage.setItem(TOKEN_KEY, data.token)
       persistUser(data.user)
       return data
     },
@@ -82,7 +81,6 @@ export function AuthProvider({ children }) {
   const adminLogin = useCallback(
     async (payload) => {
       const data = await authApi.adminLogin(payload)
-      if (data.token) localStorage.setItem(TOKEN_KEY, data.token)
       persistUser(data.user)
       return data
     },
@@ -92,7 +90,6 @@ export function AuthProvider({ children }) {
   const register = useCallback(
     async (payload) => {
       const data = await authApi.register(payload)
-      if (data.token) localStorage.setItem(TOKEN_KEY, data.token)
       persistUser(data.user)
       return data
     },
@@ -102,7 +99,6 @@ export function AuthProvider({ children }) {
   const adminRegister = useCallback(
     async (payload) => {
       const data = await authApi.adminRegister(payload)
-      if (data.token) localStorage.setItem(TOKEN_KEY, data.token)
       persistUser(data.user)
       return data
     },
@@ -112,7 +108,6 @@ export function AuthProvider({ children }) {
   const googleLogin = useCallback(
     async (payload) => {
       const data = await authApi.googleAuth(payload)
-      if (data.token) localStorage.setItem(TOKEN_KEY, data.token)
       persistUser(data.user)
       return data
     },

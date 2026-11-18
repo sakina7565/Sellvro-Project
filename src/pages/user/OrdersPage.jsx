@@ -33,6 +33,7 @@ function getOrderCategorizedStatus(order) {
   const normStatus = (order.status || '').toLowerCase()
   const normTrack = (order.trackingStatus || '').toLowerCase()
   if (normStatus === 'cancelled' || normTrack === 'cancelled' || order.isRefunded) return 'cancelled'
+  if (normStatus === 'cancellation_pending' || order.cancellationRequest?.status === 'pending') return 'cancellation_pending'
   if (normStatus === 'returned' || normTrack === 'returned') return 'returned'
   if (normStatus === 'delivered' || normTrack === 'delivered' || order.warehouseLocation === 'delivered') return 'delivered'
   if (normStatus === 'order_due' || normTrack === 'order_due') return 'order_due'
@@ -56,6 +57,7 @@ function getOrderCategorizedStatus(order) {
 function TrackingStatusBadge({ status, trackingStatus }) {
   const normStatus = (status || '').toLowerCase()
   const normTrack = (trackingStatus || '').toLowerCase()
+  if (normStatus === 'cancellation_pending') return <Badge tone="warning" className="bg-amber-100 text-amber-900 border-amber-300">Cancel Pending</Badge>
   if (normStatus === 'cancelled' || normTrack === 'cancelled') return <Badge tone="danger">Cancelled</Badge>
   if (normStatus === 'returned' || normTrack === 'returned') return <Badge tone="danger" className="bg-rose-100 text-rose-800 border-rose-300">Returned</Badge>
   if (normStatus === 'delivered' || normTrack === 'delivered') return <Badge tone="success">Delivered</Badge>
@@ -368,6 +370,11 @@ function UserOrdersPage() {
                           SKU: {order.productSku}
                         </span>
                       ) : null}
+                      {order.customizationDetails && (
+                        <p className="mt-1 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-900 border border-indigo-200 truncate" title={order.customizationDetails}>
+                          ✨ Custom: {order.customizationDetails}
+                        </p>
+                      )}
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3.5">
@@ -499,6 +506,21 @@ function UserOrdersPage() {
                             )
                           }
 
+                          const isCancellationPending =
+                            order.cancellationRequest?.status === 'pending' || order.status === 'cancellation_pending'
+
+                          if (isCancellationPending) {
+                            return (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700 border border-amber-200">
+                                Cancellation Pending
+                              </span>
+                            )
+                          }
+
+                          // 12-Hour Cancellation Policy Guard
+                          const orderAgeMs = order.createdAt ? Date.now() - new Date(order.createdAt).getTime() : 0
+                          const isWithin12h = orderAgeMs <= 12 * 60 * 60 * 1000
+
                           // Check if order can still be cancelled before warehouse dispatch
                           const isCancellable =
                             order.status !== 'cancelled' &&
@@ -509,16 +531,27 @@ function UserOrdersPage() {
                             order.warehouseLocation !== 'delivered' &&
                             order.status !== 'delivered'
 
-                          if (isCancellable) {
+                          if (isCancellable && isWithin12h) {
                             return (
                               <button
                                 type="button"
                                 onClick={() => setCancelModalOrder(order)}
                                 className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-xs font-bold text-rose-700 border border-rose-200 hover:bg-rose-100 transition shadow-2xs cursor-pointer"
-                                title="Cancel order before warehouse dispatch and receive instant wallet refund"
+                                title="Request order cancellation within 12 hours of placement"
                               >
                                 <Ban className="h-3 w-3" /> Cancel
                               </button>
+                            )
+                          }
+
+                          if (isCancellable && !isWithin12h) {
+                            return (
+                              <span
+                                className="text-[10px] text-slate-400 font-medium italic"
+                                title="12-hour cancellation window has expired"
+                              >
+                                Cancel closed (&gt;12h)
+                              </span>
                             )
                           }
 

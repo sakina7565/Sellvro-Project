@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { ShoppingCart, Eye, Tag, CheckCircle2, Store } from 'lucide-react'
+import { ShoppingCart, Eye, Tag, CheckCircle2, Store, Sparkles } from 'lucide-react'
 import { mediaUrl } from '../../lib/api.js'
+import { useAuth } from '../../context/AuthContext.jsx'
 
 /**
  * Product card on User Panel "Buy Products" grid.
@@ -10,6 +11,7 @@ import { mediaUrl } from '../../lib/api.js'
  * - "Buy now" button directly opens checkout.
  */
 function BuyProductCard({ product }) {
+  const { isAuthenticated } = useAuth()
   const navigate = useNavigate()
   const productId = product.id || product._id
   const isActive = product.status === 'active' || !product.status
@@ -26,6 +28,15 @@ function BuyProductCard({ product }) {
   const handleBuy = (e) => {
     e.stopPropagation()
     e.preventDefault()
+    if (!isAuthenticated) {
+      navigate('/login', {
+        state: {
+          from: `/user/checkout/${productId}`,
+          message: 'Please sign in to your account before placing an order.',
+        },
+      })
+      return
+    }
     navigate(`/user/checkout/${productId}`, { state: { product } })
   }
 
@@ -60,6 +71,14 @@ function BuyProductCard({ product }) {
                 <Tag className="h-2.5 w-2.5 text-slate-400" />
                 {product.category}
               </span>
+            </div>
+          )}
+
+          {/* Customization Available Badge */}
+          {Boolean(product.customizationAvailable) && (
+            <div className="absolute left-3 bottom-3 z-10 flex items-center gap-1 rounded-md bg-indigo-600/95 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs backdrop-blur-xs">
+              <Sparkles className="h-3 w-3 text-amber-300" />
+              Customization Available
             </div>
           )}
 

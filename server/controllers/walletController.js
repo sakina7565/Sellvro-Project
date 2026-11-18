@@ -4,6 +4,7 @@ import User from '../models/User.js'
 import WalletSetting from '../models/WalletSetting.js'
 import { executeRealPaymentTransfer } from '../services/paymentTransferService.js'
 import { getNextWalletTxId } from '../services/sequenceService.js'
+import { logAdminAction } from '../utils/auditLogger.js'
 
 async function withBusinessName(requests) {
   const userIds = [
@@ -265,13 +266,37 @@ export const listMyWalletRequests = async (req, res) => {
   }
 }
 
-export const listAllWalletRequests = async (_req, res) => {
+export const listAllWalletRequests = async (req, res) => {
   try {
-    const requests = await WalletRequest.find()
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1)
+    const limit = req.query.limit ? Math.min(200, Math.max(1, parseInt(req.query.limit, 10))) : 0
+    const filter = {}
+    if (req.query.status && req.query.status !== 'all') {
+      filter.status = req.query.status
+    }
+
+    let query = WalletRequest.find(filter)
       .populate('user', 'fullName email role walletBalance status')
       .sort({ createdAt: -1 })
 
-    return res.json({ data: await withBusinessName(requests) })
+    if (limit > 0) {
+      query = query.skip((page - 1) * limit).limit(limit)
+    }
+
+    const [requests, total] = await Promise.all([
+      query,
+      WalletRequest.countDocuments(filter),
+    ])
+
+    return res.json({
+      data: await withBusinessName(requests),
+      pagination: {
+        total,
+        page,
+        limit: limit || total,
+        pages: limit > 0 ? Math.ceil(total / limit) || 1 : 1,
+      },
+    })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to load wallet requests.' })
   }
@@ -279,27 +304,49 @@ export const listAllWalletRequests = async (_req, res) => {
 
 export const approveWalletRequest = async (req, res) => {
   try {
-    const request = await WalletRequest.findById(req.params.id).populate('user', 'fullName email role')
+    const adminNote = req.body?.adminNote ? String(req.body.adminNote).trim() : ''
+    const updatePayload = { status: 'approved' }
+    if (adminNote) updatePayload.adminNote = adminNote
+
+    // Atomic guard: only transition from 'pending'
+    const request = await WalletRequest.findOneAndUpdate(
+      { _id: req.params.id, status: 'pending' },
+      { $set: updatePayload },
+      { new: true },
+    ).populate('user', 'fullName email role')
+
     if (!request) {
-      return res.status(404).json({ message: 'Wallet request not found.' })
-    }
-    if (request.status !== 'pending') {
-      return res.status(400).json({ message: `Request is already ${request.status}.` })
+      const existing = await WalletRequest.findById(req.params.id)
+      if (!existing) {
+        return res.status(404).json({ message: 'Wallet request not found.' })
+      }
+      return res.status(400).json({ message: `Request is already ${existing.status}.` })
     }
 
-    const user = await User.findById(request.user._id || request.user)
+    const userId = request.user?._id || request.user
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $inc: { walletBalance: Number(request.amount.toFixed(2)) } },
+      { new: true },
+    )
+
     if (!user) {
+      // Rollback request status if user not found
+      await WalletRequest.findByIdAndUpdate(request._id, { $set: { status: 'pending' } })
       return res.status(404).json({ message: 'User not found.' })
     }
 
-    user.walletBalance = Number(((user.walletBalance || 0) + request.amount).toFixed(2))
-    request.status = 'approved'
-    if (req.body?.adminNote) request.adminNote = String(req.body.adminNote).trim()
-
-    await user.save()
-    await request.save()
-
     const [safe] = await withBusinessName([request])
+
+    await logAdminAction({
+      adminId: req.user?._id,
+      action: 'approve_wallet_request',
+      targetType: 'wallet_request',
+      targetId: request._id,
+      details: { amount: request.amount, userId },
+      ip: req.ip,
+    })
+
     return res.json({
       message: 'Wallet request approved. Balance updated.',
       request: safe,
@@ -312,54 +359,41 @@ export const approveWalletRequest = async (req, res) => {
 
 export const rejectWalletRequest = async (req, res) => {
   try {
-    const request = await WalletRequest.findById(req.params.id).populate('user', 'fullName email role')
-    if (!request) {
-      return res.status(404).json({ message: 'Wallet request not found.' })
-    }
-    if (request.status !== 'pending') {
-      return res.status(400).json({ message: `Request is already ${request.status}.` })
-    }
+    const adminNote = req.body?.adminNote ? String(req.body.adminNote).trim() : ''
+    const updatePayload = { status: 'rejected' }
+    if (adminNote) updatePayload.adminNote = adminNote
 
-    request.status = 'rejected'
-    if (req.body?.adminNote) request.adminNote = String(req.body.adminNote).trim()
-    await request.save()
+    // Atomic guard: only transition from 'pending'
+    const request = await WalletRequest.findOneAndUpdate(
+      { _id: req.params.id, status: 'pending' },
+      { $set: updatePayload },
+      { new: true },
+    ).populate('user', 'fullName email role')
+
+    if (!request) {
+      const existing = await WalletRequest.findById(req.params.id)
+      if (!existing) {
+        return res.status(404).json({ message: 'Wallet request not found.' })
+      }
+      return res.status(400).json({ message: `Request is already ${existing.status}.` })
+    }
 
     const [safe] = await withBusinessName([request])
+
+    await logAdminAction({
+      adminId: req.user?._id,
+      action: 'reject_wallet_request',
+      targetType: 'wallet_request',
+      targetId: request._id,
+      details: { adminNote },
+      ip: req.ip,
+    })
+
     return res.json({
       message: 'Wallet request rejected.',
       request: safe,
     })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to reject wallet request.' })
-  }
-}
-
-/**
- * Execute real payment transfer to client account via Wise, Stripe, Payoneer, or Bank Wire
- */
-export const transferRealPayment = async (req, res) => {
-  try {
-    const { id } = req.params
-    const { provider = 'wise', accountNumber, iban, bankName, adminNote } = req.body
-
-    const result = await executeRealPaymentTransfer({
-      requestId: id,
-      provider,
-      accountNumber,
-      iban,
-      bankName,
-      adminNote,
-    })
-
-    const updated = await WalletRequest.findById(id).populate('user', 'fullName email role walletBalance status')
-    const [safe] = await withBusinessName([updated])
-
-    return res.json({
-      message: result.message,
-      transfer: result,
-      request: safe,
-    })
-  } catch (error) {
-    return res.status(500).json({ message: error.message || 'Payment transfer execution failed.' })
   }
 }

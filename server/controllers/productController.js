@@ -16,6 +16,8 @@ import BusinessProfile from '../models/BusinessProfile.js'
 import WalletSetting from '../models/WalletSetting.js'
 import { resolveCategoryName } from './categoryController.js'
 import { createNotification } from '../utils/notifications.js'
+import fs from 'fs'
+import { getImageDimensionsFromFile } from '../utils/imageDimensions.js'
 
 const PLACEHOLDER_IMAGE =
   'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80'
@@ -115,6 +117,43 @@ function readProductFields(body) {
     height: String(body.height || '').trim(),
     dimensionUnit: body.dimensionUnit || 'cm',
     image: String(body.image || '').trim(),
+    customizationAvailable:
+      body.customizationAvailable === true ||
+      body.customizationAvailable === 'true' ||
+      body.customizationAvailable === '1',
+    customizationInstructions: String(body.customizationInstructions || '').trim(),
+  }
+}
+
+function validateUploadedImageResolutions(files) {
+  if (!Array.isArray(files) || files.length === 0) return null
+  const isVideoFile = (f) =>
+    (f.mimetype && f.mimetype.startsWith('video/')) ||
+    /\.(mp4|webm|mov|ogg|mkv)$/i.test(f.originalname || f.filename || '')
+
+  for (const file of files) {
+    if (isVideoFile(file)) continue
+    const filePath = file.path
+    if (filePath && fs.existsSync(filePath)) {
+      const dim = getImageDimensionsFromFile(filePath)
+      if (dim && (dim.width < 1000 || dim.height < 1000)) {
+        return {
+          filename: file.originalname || file.filename,
+          width: dim.width,
+          height: dim.height,
+        }
+      }
+    }
+  }
+  return null
+}
+
+function cleanupUploadedFiles(files) {
+  if (!Array.isArray(files)) return
+  for (const file of files) {
+    try {
+      if (file.path && fs.existsSync(file.path)) fs.unlinkSync(file.path)
+    } catch (_) {}
   }
 }
 
@@ -122,6 +161,16 @@ export const createProduct = async (req, res) => {
   try {
     const fields = readProductFields(req.body)
     const asDraft = req.body.status === 'draft'
+
+    if (!asDraft) {
+      const lowResFile = validateUploadedImageResolutions(req.files)
+      if (lowResFile) {
+        cleanupUploadedFiles(req.files)
+        return res.status(400).json({
+          message: `Image rejected: "${lowResFile.filename}" is low-resolution (${lowResFile.width} × ${lowResFile.height} px). Minimum required resolution for product images is 1000 × 1000 pixels. Please upload images with 1000 × 1000 pixels or higher.`,
+        })
+      }
+    }
 
     if (!fields.name || !fields.category) {
       return res.status(400).json({ message: 'Product name and category are required.' })
@@ -270,6 +319,17 @@ export const createProduct = async (req, res) => {
 
 export const updateMyProduct = async (req, res) => {
   try {
+    const asDraft = req.body.status === 'draft'
+    if (!asDraft) {
+      const lowResFile = validateUploadedImageResolutions(req.files)
+      if (lowResFile) {
+        cleanupUploadedFiles(req.files)
+        return res.status(400).json({
+          message: `Image rejected: "${lowResFile.filename}" is low-resolution (${lowResFile.width} × ${lowResFile.height} px). Minimum required resolution for product images is 1000 × 1000 pixels. Please upload images with 1000 × 1000 pixels or higher.`,
+        })
+      }
+    }
+
     const product = await Product.findById(req.params.id)
     if (!product) {
       return res.status(404).json({ message: 'Product not found.' })
@@ -367,17 +427,39 @@ export const updateMyProduct = async (req, res) => {
       })
     }
 
+    const wasActive = product.status === 'active' || product.status === 'approved'
+    const isMaterialChange =
+      (fields.name && fields.name !== product.name) ||
+      (fields.price !== undefined && Number(fields.price) !== Number(product.price)) ||
+      (fields.category && fields.category !== product.category) ||
+      (fields.description && fields.description !== product.description) ||
+      uploaded.length > 0 ||
+      (req.body.existingImages !== undefined && JSON.stringify(fields.images) !== JSON.stringify(product.images))
+
     const resubmit = req.body.status === 'pending_approval' || req.body.resubmit === 'true'
     Object.assign(product, fields)
-    if (resubmit || product.status === 'rejected') {
+    if (resubmit || product.status === 'rejected' || (wasActive && isMaterialChange)) {
       product.status = 'pending_approval'
     }
 
     await product.save()
     await product.populate('supplier', 'fullName email')
 
+    if (wasActive && isMaterialChange) {
+      createNotification({
+        targetRole: 'admin',
+        type: 'product',
+        title: 'Product Edited — Re-approval Required',
+        message: `${req.user.fullName || 'A supplier'} edited active product "${product.name}". It has been submitted for re-moderation.`,
+        link: '/admin/products',
+      })
+    }
+
     return res.json({
-      message: 'Product updated.',
+      message:
+        wasActive && isMaterialChange
+          ? 'Product changes saved and submitted for admin re-approval.'
+          : 'Product updated.',
       product: product.toSafeObject(),
     })
   } catch (error) {
@@ -554,15 +636,38 @@ export const listApprovedProducts = async (_req, res) => {
   }
 }
 
-export const listAllProducts = async (_req, res) => {
+export const listAllProducts = async (req, res) => {
   try {
-    // Drafts are private to the supplier and never show in admin product list
-    const products = await Product.find({ status: { $ne: 'draft' } })
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1)
+    const limit = req.query.limit ? Math.min(200, Math.max(1, parseInt(req.query.limit, 10))) : 0
+    const filter = { status: { $ne: 'draft' } }
+    if (req.query.status && req.query.status !== 'all') {
+      filter.status = req.query.status
+    }
+
+    let query = Product.find(filter)
       .populate('supplier', 'fullName email phone clientId')
       .sort({ sku: 1, createdAt: -1 })
 
+    if (limit > 0) {
+      query = query.skip((page - 1) * limit).limit(limit)
+    }
+
+    const [products, total] = await Promise.all([
+      query,
+      Product.countDocuments(filter),
+    ])
+
     const enriched = await enrichProductsWithSupplier(products)
-    return res.json({ data: enriched })
+    return res.json({
+      data: enriched,
+      pagination: {
+        total,
+        page,
+        limit: limit || total,
+        pages: limit > 0 ? Math.ceil(total / limit) || 1 : 1,
+      },
+    })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to load products.' })
   }
@@ -921,6 +1026,18 @@ export const rejectProduct = async (req, res) => {
 export const createAdminProduct = async (req, res) => {
   try {
     const fields = readProductFields(req.body)
+    const asDraft = req.body.status === 'draft'
+
+    if (!asDraft) {
+      const lowResFile = validateUploadedImageResolutions(req.files)
+      if (lowResFile) {
+        cleanupUploadedFiles(req.files)
+        return res.status(400).json({
+          message: `Image rejected: "${lowResFile.filename}" is low-resolution (${lowResFile.width} × ${lowResFile.height} px). Minimum required resolution for product images is 1000 × 1000 pixels. Please upload images with 1000 × 1000 pixels or higher.`,
+        })
+      }
+    }
+
     const supplierId = req.body.supplier || req.body.supplierAssign
 
     if (!fields.name || !fields.category) {
@@ -1030,6 +1147,17 @@ export const createAdminProduct = async (req, res) => {
 
 export const updateAdminProduct = async (req, res) => {
   try {
+    const asDraft = req.body.status === 'draft'
+    if (!asDraft) {
+      const lowResFile = validateUploadedImageResolutions(req.files)
+      if (lowResFile) {
+        cleanupUploadedFiles(req.files)
+        return res.status(400).json({
+          message: `Image rejected: "${lowResFile.filename}" is low-resolution (${lowResFile.width} × ${lowResFile.height} px). Minimum required resolution for product images is 1000 × 1000 pixels. Please upload images with 1000 × 1000 pixels or higher.`,
+        })
+      }
+    }
+
     const product = await Product.findById(req.params.id)
     if (!product) {
       return res.status(404).json({ message: 'Product not found.' })
@@ -1117,6 +1245,15 @@ export const updateAdminProduct = async (req, res) => {
     if (width !== undefined) product.width = String(width).trim()
     if (height !== undefined) product.height = String(height).trim()
     if (dimensionUnit !== undefined) product.dimensionUnit = String(dimensionUnit).trim()
+    if (req.body.customizationAvailable !== undefined) {
+      product.customizationAvailable =
+        req.body.customizationAvailable === true ||
+        req.body.customizationAvailable === 'true' ||
+        req.body.customizationAvailable === '1'
+    }
+    if (req.body.customizationInstructions !== undefined) {
+      product.customizationInstructions = String(req.body.customizationInstructions || '').trim()
+    }
 
     // Handle photo updates
     const uploaded = Array.isArray(req.files)

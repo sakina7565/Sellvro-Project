@@ -31,6 +31,7 @@ function getOrderCategorizedStatus(order) {
   if (!order) return 'awaiting_dispatch'
   const st = (order.trackingStatus || order.status || '').toLowerCase()
   if (st === 'cancelled' || order.status === 'cancelled' || order.isRefunded) return 'cancelled'
+  if (st === 'cancellation_pending' || order.cancellationRequest?.status === 'pending') return 'cancellation_pending'
   if (st === 'returned' || order.status === 'returned') return 'returned'
   if (st === 'delivered' || order.warehouseLocation === 'delivered' || order.status === 'delivered') return 'delivered'
   if (st === 'order_due' || order.status === 'order_due') return 'order_due'
@@ -53,6 +54,7 @@ function getOrderCategorizedStatus(order) {
 
 function TrackingStatusBadge({ status, trackingStatus }) {
   const st = (trackingStatus || status || '').toLowerCase()
+  if (st === 'cancellation_pending') return <Badge tone="warning" className="bg-amber-100 text-amber-900 border-amber-300">Cancel Pending</Badge>
   if (st === 'cancelled') return <Badge tone="danger">Cancelled</Badge>
   if (st === 'returned') return <Badge tone="danger" className="bg-rose-100 text-rose-800 border-rose-300">Returned</Badge>
   if (st === 'delivered') return <Badge tone="success">Delivered</Badge>
@@ -305,6 +307,11 @@ function OrdersPage() {
                           SKU: {order.productSku}
                         </span>
                       ) : null}
+                      {order.customizationDetails && (
+                        <p className="mt-1 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-900 border border-indigo-200 truncate" title={order.customizationDetails}>
+                          ✨ Custom: {order.customizationDetails}
+                        </p>
+                      )}
                     </td>
 
                     {/* Carrier & Real Tracking */}

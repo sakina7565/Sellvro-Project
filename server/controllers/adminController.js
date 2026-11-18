@@ -8,11 +8,14 @@ import Review from '../models/Review.js'
 import Country from '../models/Country.js'
 import Location from '../models/Location.js'
 import Dispute from '../models/Dispute.js'
+import AdminAuditLog from '../models/AdminAuditLog.js'
 import { signToken } from '../middleware/auth.js'
 import { setAuthCookie, setImpersonatorCookie, readAuthToken } from '../utils/authCookie.js'
 import { createNotification } from '../utils/notifications.js'
 import { sendSupplierWarningEmail, sendSupplierSuspensionEmail } from '../utils/emailService.js'
 import { getNextDisputeNo } from '../services/sequenceService.js'
+import { escapeRegex } from '../utils/regex.js'
+import { logAdminAction } from '../utils/auditLogger.js'
 
 const formatJoined = (date) =>
   new Date(date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
@@ -241,6 +244,15 @@ export const approveAccount = async (req, res) => {
       { new: true },
     )
 
+    await logAdminAction({
+      adminId: req.user?._id,
+      action: 'approve_account',
+      targetType: 'user',
+      targetId: user._id,
+      details: { role: user.role, email: user.email },
+      ip: req.ip,
+    })
+
     return res.json({
       message: `${user.role === 'supplier' ? 'Supplier' : 'User'} approved successfully.`,
       user: user.toSafeObject(),
@@ -363,6 +375,15 @@ export const rejectAccount = async (req, res) => {
       { status: 'rejected' },
       { new: true },
     )
+
+    await logAdminAction({
+      adminId: req.user?._id,
+      action: 'reject_account',
+      targetType: 'user',
+      targetId: user._id,
+      details: { role: user.role, email: user.email },
+      ip: req.ip,
+    })
 
     return res.json({
       message: 'Account rejected.',
@@ -492,7 +513,7 @@ export const listAllAccounts = async (req, res) => {
       }
 
       if (search?.trim()) {
-        const regex = new RegExp(search.trim(), 'i')
+        const regex = new RegExp(escapeRegex(search.trim()), 'i')
         const matchingProfiles = await BusinessProfile.find({
           $or: [
             { businessName: regex },
@@ -731,7 +752,7 @@ export const listAllAccounts = async (req, res) => {
     }
 
     if (search?.trim()) {
-      const regex = new RegExp(search.trim(), 'i')
+      const regex = new RegExp(escapeRegex(search.trim()), 'i')
       const matchingRoles = await Role.find({ name: regex }).select('_id')
       const matchingRoleIds = matchingRoles.map((r) => r._id)
 
@@ -1061,6 +1082,15 @@ export const updateAccount = async (req, res) => {
       { new: true, upsert: true },
     )
 
+    await logAdminAction({
+      adminId: req.user?._id,
+      action: 'update_account',
+      targetType: 'user',
+      targetId: user._id,
+      details: { role: user.role, status: user.status, walletBalance: user.walletBalance },
+      ip: req.ip,
+    })
+
     return res.json({
       message: 'Account updated successfully.',
       user: {
@@ -1099,11 +1129,28 @@ export const deleteAccount = async (req, res) => {
       }
 
       await User.findByIdAndDelete(user._id)
+      await logAdminAction({
+        adminId: req.user?._id,
+        action: 'delete_account',
+        targetType: 'user',
+        targetId: user._id,
+        details: { role: user.role, email: user.email },
+        ip: req.ip,
+      })
       return res.json({ message: 'Staff account deleted successfully.' })
     }
 
     await BusinessProfile.deleteMany({ user: user._id })
     await User.findByIdAndDelete(user._id)
+
+    await logAdminAction({
+      adminId: req.user?._id,
+      action: 'delete_account',
+      targetType: 'user',
+      targetId: user._id,
+      details: { role: user.role, email: user.email },
+      ip: req.ip,
+    })
 
     return res.json({ message: `${user.role === 'supplier' ? 'Supplier' : 'User'} account deleted successfully.` })
   } catch (error) {
@@ -1130,6 +1177,15 @@ export const impersonateAccount = async (req, res) => {
 
     const targetToken = signToken(targetUser._id)
     setAuthCookie(res, targetToken)
+
+    await logAdminAction({
+      adminId: req.user?._id,
+      action: 'impersonate_account',
+      targetType: 'user',
+      targetId: targetUser._id,
+      details: { targetRole: targetUser.role, targetEmail: targetUser.email },
+      ip: req.ip,
+    })
 
     const redirectUrl =
       targetUser.role === 'supplier'
@@ -1167,7 +1223,7 @@ export const createCountry = async (req, res) => {
       return res.status(400).json({ message: 'Country name is required.' })
     }
 
-    const existing = await Country.findOne({ name: new RegExp(`^${name.trim()}$`, 'i') })
+    const existing = await Country.findOne({ name: new RegExp(`^${escapeRegex(name.trim())}$`, 'i') })
     if (existing) {
       return res.status(400).json({ message: 'Country already exists.' })
     }
@@ -1205,7 +1261,7 @@ export const createLocation = async (req, res) => {
       return res.status(400).json({ message: 'Location name is required.' })
     }
 
-    const existing = await Location.findOne({ name: new RegExp(`^${name.trim()}$`, 'i') })
+    const existing = await Location.findOne({ name: new RegExp(`^${escapeRegex(name.trim())}$`, 'i') })
     if (existing) {
       return res.status(400).json({ message: 'Location already exists.' })
     }
@@ -1864,6 +1920,37 @@ export const sendSupplierMessage = async (req, res) => {
     return res.status(500).json({ message: error.message || 'Failed to send message to supplier.' })
   }
 }
+
+export const listAuditLogs = async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1)
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50))
+    const skip = (page - 1) * limit
+
+    const [logs, total] = await Promise.all([
+      AdminAuditLog.find()
+        .populate('adminId', 'fullName email role')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      AdminAuditLog.countDocuments(),
+    ])
+
+    return res.json({
+      data: logs,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit) || 1,
+      },
+    })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to list audit logs.' })
+  }
+}
+
 
 
 

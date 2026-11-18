@@ -132,6 +132,14 @@ function UserOrderConfirmationPage() {
                 {hasShippingAddress(shipping) ? formatShippingAddress(shipping) : '—'}
               </p>
             </div>
+            {order.customizationDetails && (
+              <div className="border-t border-slate-100 pt-3 mt-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-indigo-700">Customization Details</p>
+                <p className="mt-1 text-sm text-slate-800 bg-indigo-50/80 p-2.5 rounded-lg border border-indigo-100 font-medium">
+                  {order.customizationDetails}
+                </p>
+              </div>
+            )}
           </Card>
 
           <div className="flex flex-wrap gap-3">

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Ban, Building2, Check, ExternalLink, Plus, Printer, RefreshCw, Star, Tag, Truck, Warehouse, X } from 'lucide-react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
+import { Ban, Building2, Check, Clock, ExternalLink, Plus, Printer, RefreshCw, ShieldAlert, Star, Tag, Truck, Warehouse, X } from 'lucide-react'
 import Badge from '../ui/Badge.jsx'
 import Button from '../ui/Button.jsx'
 import TrackingModal from './TrackingModal.jsx'
@@ -12,6 +12,7 @@ import { getErrorMessage, orderApi, mediaUrl } from '../../lib/api.js'
 import { formatSupplierId, formatUserId } from '../../lib/idFormatters.js'
 import { getCourierExternalTrackingUrl } from '../../lib/courierHelpers.js'
 import { formatShippingAddress, hasShippingAddress, ORDER_STATUS_OPTIONS } from '../../lib/orderHelpers.js'
+import { useAuth } from '../../context/AuthContext.jsx'
 
 function statusTone(status) {
   const value = String(status || '').toLowerCase()
@@ -57,6 +58,77 @@ function OrderDetailDrawer({
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [updateTrackingOpen, setUpdateTrackingOpen] = useState(false)
   const [showLabelModal, setShowLabelModal] = useState(false)
+  const [cancellingBusy, setCancellingBusy] = useState(false)
+  const [actionSuccess, setActionSuccess] = useState('')
+
+  const { user: authUser } = useAuth()
+  const isAdmin = authUser?.role === 'admin'
+
+  const { isExpired, hoursElapsed, hoursRemaining, minutesRemaining } = useMemo(() => {
+    if (!order?.createdAt) return { isExpired: false, hoursElapsed: 0, hoursRemaining: 12, minutesRemaining: 0 }
+    const orderTime = new Date(order.createdAt).getTime()
+    const diffMs = Date.now() - orderTime
+    const totalMinutesElapsed = Math.floor(diffMs / (1000 * 60))
+    const totalMinutesLimit = 12 * 60
+    const isPast12h = totalMinutesElapsed >= totalMinutesLimit
+    const remainingMins = Math.max(0, totalMinutesLimit - totalMinutesElapsed)
+    return {
+      isExpired: isPast12h,
+      hoursElapsed: (diffMs / (1000 * 60 * 60)).toFixed(1),
+      hoursRemaining: Math.floor(remainingMins / 60),
+      minutesRemaining: remainingMins % 60,
+    }
+  }, [order?.createdAt])
+
+  const handleAdminApproveCancel = async () => {
+    if (!order?.id) return
+    if (isExpired) {
+      alert('Action Blocked: More than 12 hours have passed since order placement. Under strict policy, orders cannot be cancelled after 12 hours.')
+      return
+    }
+    if (!window.confirm(`Are you sure you want to approve cancellation for Order #${order.orderNo}? Full $${Number(order.total || 0).toFixed(2)} will be refunded to customer wallet.`)) return
+    setCancellingBusy(true)
+    setError('')
+    try {
+      const res = await orderApi.approveCancel(order.id)
+      setActionSuccess('Cancellation approved successfully. Order is cancelled and refunded.')
+      if (res?.order) {
+        setOrder(res.order)
+        onUpdated?.(res.order)
+      } else {
+        loadOrder()
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to approve cancellation.'))
+    } finally {
+      setCancellingBusy(false)
+    }
+  }
+
+  const handleAdminRejectCancel = async () => {
+    if (!order?.id) return
+    const reason = window.prompt('Enter reason for rejecting cancellation (minimum 5 characters):')
+    if (!reason || reason.trim().length < 5) {
+      if (reason !== null) alert('Please enter a valid rejection reason with at least 5 characters.')
+      return
+    }
+    setCancellingBusy(true)
+    setError('')
+    try {
+      const res = await orderApi.rejectCancel(order.id, reason.trim())
+      setActionSuccess('Cancellation request rejected. Order restored to active status.')
+      if (res?.order) {
+        setOrder(res.order)
+        onUpdated?.(res.order)
+      } else {
+        loadOrder()
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to reject cancellation.'))
+    } finally {
+      setCancellingBusy(false)
+    }
+  }
 
   const loadOrder = useCallback(async () => {
     if (!orderId) return
@@ -218,6 +290,70 @@ function OrderDetailDrawer({
                   </span>
                 )}
               </div>
+
+              {actionSuccess && (
+                <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800">
+                  <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>{actionSuccess}</span>
+                </div>
+              )}
+
+              {/* Order Cancellation Request & 12-Hour Review Section */}
+              {(order.status === 'cancellation_pending' || order.cancellationRequest?.status === 'pending') && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-4 shadow-sm space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0" />
+                      <div>
+                        <h4 className="text-sm font-bold text-amber-950">Cancellation Request Pending Review</h4>
+                        <p className="text-xs text-amber-700">
+                          Requested by: <strong className="capitalize">{order.cancellationRequest?.requestedBy === 'supplier' ? 'Supplier' : 'Customer'}</strong>
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`inline-flex items-center gap-1 font-mono text-[11px] px-2 py-0.5 rounded font-bold ${isExpired ? 'bg-rose-200 text-rose-800' : 'bg-amber-200 text-amber-800'}`}>
+                      <Clock className="h-3 w-3" />
+                      {isExpired ? '12h Limit Expired' : `${hoursRemaining}h ${minutesRemaining}m left`}
+                    </span>
+                  </div>
+
+                  <div className="rounded-lg bg-white/80 border border-amber-200 p-3 text-xs text-slate-800">
+                    <span className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide">Cancellation Reason</span>
+                    <p className="mt-1 font-medium italic">"{order.cancellationRequest?.reason || 'No detailed reason provided'}"</p>
+                    <span className="mt-2 block text-[10px] text-slate-400">Order placed {hoursElapsed} hours ago. Strict policy allows cancellation only within 12 hours.</span>
+                  </div>
+
+                  {isAdmin && (
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleAdminApproveCancel}
+                        disabled={isExpired || cancellingBusy}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed shadow-2xs"
+                        title={isExpired ? 'Cannot approve: 12-hour limit has expired' : 'Approve cancellation and refund customer'}
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        {cancellingBusy ? 'Processing...' : 'Approve Cancellation (100% Refund)'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAdminRejectCancel}
+                        disabled={cancellingBusy}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50 cursor-pointer shadow-2xs"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        Reject Request
+                      </button>
+                    </div>
+                  )}
+
+                  {isExpired && (
+                    <p className="text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded px-2.5 py-1">
+                      Policy Warning: More than 12 hours have passed since order placement. Under strict platform policy, this order cannot be cancelled.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Delivery Rating & Feedback Prompt Banner (If Delivered) */}
               {(() => {
@@ -683,18 +819,29 @@ function OrderDetailDrawer({
                     )}
 
                     {order.status !== 'cancelled' &&
+                      order.status !== 'cancellation_pending' &&
+                      order.cancellationRequest?.status !== 'pending' &&
                       !['in_transit', 'out_for_delivery', 'delivered'].includes((order.trackingStatus || '').toLowerCase()) &&
                       !order.isDispatched &&
                       order.warehouseLocation !== 'in_transit' &&
                       order.warehouseLocation !== 'delivered' && (
-                        <button
-                          type="button"
-                          onClick={() => setCancelModalOpen(true)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition shadow-2xs"
-                        >
-                          <Ban className="h-3.5 w-3.5" />
-                          Cancel Order
-                        </button>
+                        isExpired ? (
+                          <span
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 border border-slate-200 bg-slate-50 px-2.5 py-1.5 rounded-lg"
+                            title="12-hour cancellation window has expired"
+                          >
+                            <Clock className="h-3 w-3" /> Cancellation closed (&gt;12h)
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setCancelModalOpen(true)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition shadow-2xs"
+                          >
+                            <Ban className="h-3.5 w-3.5" />
+                            Cancel Order
+                          </button>
+                        )
                       )}
 
                     {getCourierExternalTrackingUrl(order.carrier, order.trackingNumber) && (

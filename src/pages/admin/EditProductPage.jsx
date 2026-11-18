@@ -56,6 +56,8 @@ function EditProductPage() {
     width: '',
     height: '',
     dimensionUnit: 'cm',
+    customizationAvailable: false,
+    customizationInstructions: '',
   })
 
   // Photos: Array of 10 slots. Each item: { url?: string, file?: File, preview: string, isNew?: boolean }
@@ -131,6 +133,8 @@ function EditProductPage() {
           width: prod.width || '',
           height: prod.height || '',
           dimensionUnit: prod.dimensionUnit || 'cm',
+          customizationAvailable: Boolean(prod.customizationAvailable),
+          customizationInstructions: prod.customizationInstructions || '',
         })
 
         // Populate photo slots
@@ -189,14 +193,37 @@ function EditProductPage() {
   const handleFileSelected = (index, file) => {
     if (!file) return
     const preview = URL.createObjectURL(file)
-    setPhotoSlots((prev) => {
-      const next = [...prev]
-      if (next[index]?.preview?.startsWith('blob:')) {
-        URL.revokeObjectURL(next[index].preview)
+    const img = new window.Image()
+
+    img.onload = () => {
+      const width = img.naturalWidth || img.width
+      const height = img.naturalHeight || img.height
+
+      if (width < 1000 || height < 1000) {
+        URL.revokeObjectURL(preview)
+        setError(
+          `Image rejected: "${file.name}" is ${width} × ${height} px. Product images must be at least 1000 × 1000 pixels (high-resolution). Please upload an image with resolution of 1000 × 1000 pixels or higher.`,
+        )
+        return
       }
-      next[index] = { file, preview, isNew: true }
-      return next
-    })
+
+      setPhotoSlots((prev) => {
+        const next = [...prev]
+        if (next[index]?.preview?.startsWith('blob:')) {
+          URL.revokeObjectURL(next[index].preview)
+        }
+        next[index] = { file, preview, isNew: true, width, height, isHighRes: true }
+        return next
+      })
+      setError('')
+    }
+
+    img.onerror = () => {
+      URL.revokeObjectURL(preview)
+      setError(`Failed to read image "${file.name}". Please upload a valid image file.`)
+    }
+
+    img.src = preview
   }
 
   const handleRemovePhoto = (e, index) => {
@@ -222,6 +249,14 @@ function EditProductPage() {
     }
     if (!form.sku.trim()) {
       setError('SKU is required.')
+      return
+    }
+
+    const lowResSlot = photoSlots.find((s) => s && s.isNew && s.isLowRes)
+    if (lowResSlot) {
+      setError(
+        `Cannot update product: Photo "${lowResSlot.file?.name || 'Image'}" is low-resolution (${lowResSlot.width} × ${lowResSlot.height} px). Minimum required resolution is 1000 × 1000 pixels. Please replace it with a high-resolution photo.`,
+      )
       return
     }
 
@@ -262,6 +297,8 @@ function EditProductPage() {
         width: form.width,
         height: form.height,
         dimensionUnit: form.dimensionUnit,
+        customizationAvailable: form.customizationAvailable ? 'true' : 'false',
+        customizationInstructions: form.customizationInstructions || '',
         existingImages: JSON.stringify(existingImages),
       }
 
@@ -345,7 +382,7 @@ function EditProductPage() {
                       <input
                         ref={(el) => (fileInputRefs.current[index] = el)}
                         type="file"
-                        accept="image/jpeg,image/jpg,image/png,image/webp"
+                        accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/pjpeg,image/jfif,.jpg,.jpeg,.jfif,.pjpeg,.pjp,.png,.webp,.gif"
                         className="hidden"
                         onChange={(e) => {
                           const file = e.target.files?.[0]
@@ -810,6 +847,59 @@ function EditProductPage() {
                     />
                   </div>
                 </div>
+              </div>
+            </Card>
+
+            {/* 5. Product Customization Card */}
+            <Card className="p-6 sm:p-7 shadow-soft">
+              <h2 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[11px] text-white font-bold">
+                  5
+                </span>
+                Product Customization Option
+              </h2>
+
+              <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+                <label className="flex items-start gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.customizationAvailable)}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        customizationAvailable: e.target.checked,
+                      }))
+                    }
+                    className="mt-1 h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div>
+                    <span className="block font-bold text-sm text-indigo-950">
+                      Customization Available for this Product
+                    </span>
+                    <span className="block text-xs text-indigo-700 mt-0.5">
+                      Enable if this product offers custom engraving, personalized sizing, color choices, or custom manufacturing.
+                    </span>
+                  </div>
+                </label>
+
+                {form.customizationAvailable && (
+                  <div className="mt-4 pt-3 border-t border-indigo-100">
+                    <label
+                      htmlFor="customizationInstructions"
+                      className="mb-1 block text-xs font-semibold text-slate-700"
+                    >
+                      Customization Guidelines &amp; Instructions for Buyer (Optional)
+                    </label>
+                    <textarea
+                      id="customizationInstructions"
+                      rows={3}
+                      value={form.customizationInstructions || ''}
+                      onChange={updateField('customizationInstructions')}
+                      placeholder="e.g. Enter name up to 15 characters, specify preferred font style, choose custom color..."
+                      className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    />
+                  </div>
+                )}
               </div>
             </Card>
 

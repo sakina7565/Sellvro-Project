@@ -14,6 +14,9 @@ import {
   updateWmsOrderDispatch,
   getPublicOrderTracking,
   cancelOrder,
+  requestOrderCancellation,
+  approveOrderCancellation,
+  rejectOrderCancellation,
   updateUserOrderTracking,
   getOrderShippingLabel,
   parseOrderLabel,
@@ -47,7 +50,7 @@ function handleLabelParsingUpload(req, res, next) {
 router.get('/public-track/:ref', getPublicOrderTracking)
 router.get('/label/:ref', getOrderShippingLabel)
 router.get('/:id/shipping-label', getOrderShippingLabel)
-router.post('/parse-label', optionalProtect, handleLabelParsingUpload, parseOrderLabel)
+router.post('/parse-label', protect, handleLabelParsingUpload, parseOrderLabel)
 
 router.post('/', optionalProtect, handleShippingLabel, createOrder)
 router.get('/mine', protect, authorize('user', 'admin'), listMyOrders)
@@ -64,7 +67,10 @@ router.get('/wms/supplier/:clientId', getWmsSupplierOrders)
 router.post('/wms/update-dispatch', updateWmsOrderDispatch)
 
 router.get('/:id/track-wms', protect, authorize('user', 'supplier', 'admin'), trackWmsOrder)
-router.post('/:id/cancel', protect, authorize('user', 'admin'), cancelOrder)
+router.post('/:id/cancel', protect, authorize('user', 'supplier', 'admin'), cancelOrder)
+router.post('/:id/request-cancel', protect, authorize('user', 'supplier', 'admin'), requestOrderCancellation)
+router.post('/:id/approve-cancel', protect, authorize('admin'), approveOrderCancellation)
+router.post('/:id/reject-cancel', protect, authorize('admin'), rejectOrderCancellation)
 router.patch('/:id/user-tracking', protect, authorize('user', 'supplier', 'admin'), updateUserOrderTracking)
 router.patch('/:id/status', protect, authorize('admin', 'supplier'), updateOrderStatus)
 router.patch('/:id/tracking', protect, authorize('admin', 'supplier'), updateOrderTracking)

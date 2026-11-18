@@ -183,6 +183,8 @@ const EMPTY_FORM = {
   numItemsInSet: '1',
   itemSpecifics: {},
   variations: [],
+  customizationAvailable: false,
+  customizationInstructions: '',
 }
 
 function AddProductForm({
@@ -552,6 +554,8 @@ function AddProductForm({
     numItemsInSet: form.numItemsInSet,
     itemSpecifics: form.itemSpecifics,
     variations: form.variations,
+    customizationAvailable: form.customizationAvailable ? 'true' : 'false',
+    customizationInstructions: form.customizationInstructions || '',
     status,
     supplier: form.supplierAssign,
     publishActive: publishActive ? 'true' : 'false',
@@ -660,6 +664,17 @@ function AddProductForm({
       if (files.length < 6) {
         setError(
           `At least 6 product photos are mandatory (out of 10) to list this item. You have currently uploaded ${files.length} photo(s).`,
+        )
+        return
+      }
+
+      // Validate High-Resolution Images (minimum 1000 × 1000 px)
+      const lowRes = photos.find(
+        (p) => p && p.file && !p.isVideo && p.width && p.height && (p.width < 1000 || p.height < 1000),
+      )
+      if (lowRes) {
+        setError(
+          `Cannot publish listing: Photo "${lowRes.file.name}" is low-resolution (${lowRes.width} × ${lowRes.height} px). Minimum required resolution is 1000 × 1000 pixels. Please upload high-resolution images.`,
         )
         return
       }
@@ -1938,6 +1953,57 @@ function AddProductForm({
                 </Select>
               </div>
             )}
+          </div>
+        </AddProductSection>
+
+        {/* ── STEP 4: PRODUCT CUSTOMIZATION OPTION ──────────────────────────── */}
+        <AddProductSection
+          step="4"
+          title="Product Customization Option"
+        >
+          <div className="flex flex-col gap-4">
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+              <label className="flex items-start gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.customizationAvailable)}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      customizationAvailable: e.target.checked,
+                    }))
+                  }
+                  className="mt-1 h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div>
+                  <span className="block font-bold text-sm text-indigo-950">
+                    Customization Available for this Product
+                  </span>
+                  <span className="block text-xs text-indigo-700 mt-0.5">
+                    Enable this option if you provide personalized modifications (e.g. custom name engraving, custom sizing, custom colors, printed text/logos, etc.). Buyers will see a Customization badge and will enter their custom details at checkout.
+                  </span>
+                </div>
+              </label>
+
+              {form.customizationAvailable && (
+                <div className="mt-4 pt-3 border-t border-indigo-100">
+                  <FormLabel htmlFor="customizationInstructions">
+                    Customization Guidelines &amp; Instructions for Buyer (Optional)
+                  </FormLabel>
+                  <textarea
+                    id="customizationInstructions"
+                    rows={3}
+                    value={form.customizationInstructions || ''}
+                    onChange={updateField('customizationInstructions')}
+                    placeholder="e.g. Enter name up to 15 characters, specify preferred font style, choose between silver or gold plating..."
+                    className={TEXTAREA_CLASS}
+                  />
+                  <p className="mt-1.5 text-[11px] text-indigo-600">
+                    These instructions will be shown to customers on the product details page and checkout screen so they know what custom details to provide.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </AddProductSection>
 

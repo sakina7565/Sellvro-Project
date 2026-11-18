@@ -23,7 +23,9 @@ import Order from '../models/Order.js'
 import Product from '../models/Product.js'
 import User from '../models/User.js'
 import Category from '../models/Category.js'
+import { escapeRegex } from '../utils/regex.js'
 import WalletRequest from '../models/WalletRequest.js'
+import Dispute from '../models/Dispute.js'
 import { createNotification } from '../utils/notifications.js'
 import { getNextOrderNo, getNextWalletTxId } from '../services/sequenceService.js'
 
@@ -502,7 +504,7 @@ function validateShippingAddress(shipping) {
   return null
 }
 
-export const createOrder = async (req, res) => {
+export let createOrder = async (req, res) => {
   try {
     const productId = req.body.productId || req.body.product
     const quantity = Number(req.body.quantity || 1)
@@ -510,11 +512,11 @@ export const createOrder = async (req, res) => {
       req.body.shippingAddress || req.body.shipping || req.body,
     )
 
-    if (!productId) {
-      return res.status(400).json({ message: 'Product is required.' })
+    if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({ message: 'A valid product ID is required.' })
     }
-    if (!Number.isFinite(quantity) || quantity < 1) {
-      return res.status(400).json({ message: 'Quantity must be at least 1.' })
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      return res.status(400).json({ message: 'Quantity must be a positive integer.' })
     }
 
     const shippingError = validateShippingAddress(shippingAddress)
@@ -543,27 +545,12 @@ export const createOrder = async (req, res) => {
       shippingLabelUrl = `/api/orders/label/${orderLabelRef}`
     }
 
-    let product = null
-    if (mongoose.Types.ObjectId.isValid(productId)) {
-      product = await Product.findById(productId)
-    }
-    // Fallback: If not found by ObjectId (e.g. SKU, slug, or deal id passed), search by SKU or active catalog item
+    let product = await Product.findById(productId)
     if (!product || (product.status !== 'active' && product.status !== 'approved')) {
-      product = await Product.findOne({
-        $or: [{ sku: productId }, { name: new RegExp(productId, 'i') }],
-        status: { $in: ['active', 'approved'] },
-      })
-    }
-    if (!product || (product.status !== 'active' && product.status !== 'approved')) {
-      // Pick first available active marketplace product as fallback
-      product = await Product.findOne({ status: { $in: ['active', 'approved'] } })
-    }
-    if (!product) {
       return res.status(404).json({ message: 'Product is not available for purchase.' })
     }
     if (typeof product.quantity === 'number' && product.quantity < quantity) {
-      product.quantity = Math.max(quantity + 20, 50)
-      await product.save()
+      return res.status(409).json({ message: 'Insufficient stock for this product.' })
     }
 
     const unitPrice = Number(product.price)
@@ -611,27 +598,39 @@ export const createOrder = async (req, res) => {
         // Never attach an anonymous order to someone else's existing account.
         return res.status(409).json({ message: 'An account with this email already exists. Please sign in to place this order.' })
       }
-      buyer = await User.create({
-        fullName: shippingAddress.fullName || 'Client Customer',
-        email: guestEmail,
-        phone: guestPhone,
-        role: 'user',
-        status: 'approved',
-        walletBalance: 0,
-        password: Math.random().toString(36),
+
+      // Guest checkout is disabled: Customers must log in first before placing an order.
+      return res.status(401).json({
+        message: 'Guest checkout is disabled. Customers must log in to their account before placing an order.',
       })
     }
 
     if (paymentMethod === 'wallet') {
-      if ((buyer.walletBalance || 0) < total) {
+      const updatedBuyer = await User.findOneAndUpdate(
+        { _id: buyer._id, walletBalance: { $gte: total } },
+        { $inc: { walletBalance: -total } },
+        { new: true },
+      )
+      if (!updatedBuyer) {
         return res.status(400).json({
-          message: `Insufficient wallet balance. Total due is $${total.toFixed(2)}, but you currently have $${Number(buyer.walletBalance || 0).toFixed(2)}. Choose Cash on Delivery (COD) or deposit funds from your Wallet page.`,
+          message: `Insufficient account balance. Total due is $${total.toFixed(2)}, but your available balance is $${Number(buyer.walletBalance || 0).toFixed(2)} (Short by $${(total - Number(buyer.walletBalance || 0)).toFixed(2)}). Please deposit funds from your Wallet page before proceeding.`,
         })
       }
-      buyer.walletBalance = Number((buyer.walletBalance - total).toFixed(2))
+      buyer = updatedBuyer
     }
 
-    product.quantity -= quantity
+    const updatedProduct = await Product.findOneAndUpdate(
+      { _id: product._id, quantity: { $gte: quantity } },
+      { $inc: { quantity: -quantity } },
+      { new: true },
+    )
+    if (!updatedProduct) {
+      if (paymentMethod === 'wallet') {
+        await User.findByIdAndUpdate(buyer._id, { $inc: { walletBalance: total } })
+      }
+      return res.status(409).json({ message: 'Insufficient stock for this product.' })
+    }
+    product = updatedProduct
     const orderNo = await uniqueOrderNo()
 
     // Determine initial warehouse custody location (WMS Central Hub vs Supplier Warehouse)
@@ -674,6 +673,10 @@ export const createOrder = async (req, res) => {
 
     const assignedCarrier = requestedCarrier || wmsResult?.carrier || 'FedEx'
     const assignedTracking = userTrackingNumber || (wmsResult?.trackingNumber && !wmsResult.trackingNumber.startsWith('SLV-') ? wmsResult.trackingNumber : '')
+    const customizationDetails = req.body.customizationDetails
+      ? String(req.body.customizationDetails).trim()
+      : ''
+    const isCustomized = Boolean(customizationDetails)
 
     const order = await Order.create({
       orderNo,
@@ -733,6 +736,8 @@ export const createOrder = async (req, res) => {
       paymentMethod,
       payoutStatus: 'pending',
       shippingAddress,
+      customizationDetails,
+      isCustomized,
     })
 
     await buyer.save()
@@ -847,10 +852,34 @@ export const listSupplierOrders = async (req, res) => {
   }
 }
 
-export const listAllOrders = async (_req, res) => {
+export const listAllOrders = async (req, res) => {
   try {
-    const orders = await populateOrder(Order.find().sort({ createdAt: -1 }))
-    return res.json({ data: orders.map((item) => item.toSafeObject()) })
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1)
+    const limit = req.query.limit ? Math.min(200, Math.max(1, parseInt(req.query.limit, 10))) : 0
+    const filter = {}
+    if (req.query.status && req.query.status !== 'all') {
+      filter.status = req.query.status
+    }
+
+    let query = Order.find(filter).sort({ createdAt: -1 })
+    if (limit > 0) {
+      query = query.skip((page - 1) * limit).limit(limit)
+    }
+
+    const [orders, total] = await Promise.all([
+      populateOrder(query),
+      Order.countDocuments(filter),
+    ])
+
+    return res.json({
+      data: orders.map((item) => item.toSafeObject()),
+      pagination: {
+        total,
+        page,
+        limit: limit || total,
+        pages: limit > 0 ? Math.ceil(total / limit) || 1 : 1,
+      },
+    })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to load orders.' })
   }
@@ -873,7 +902,7 @@ export const lookupOrder = async (req, res) => {
           $or: [
             { orderNo: ref.toUpperCase() },
             { trackingNumber: ref },
-            { trackingNumber: new RegExp(`^${ref}$`, 'i') },
+            { trackingNumber: new RegExp(`^${escapeRegex(ref)}$`, 'i') },
             { orderLabelRef: ref },
           ],
         }),
@@ -934,6 +963,14 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(400).json({ message: 'Invalid order status.' })
     }
 
+    // Terminal states cannot transition to other statuses
+    if (order.status === 'cancelled') {
+      return res.status(400).json({ message: 'Cannot modify an order that has already been cancelled.' })
+    }
+    if (order.status === 'delivered' && next !== 'returned') {
+      return res.status(400).json({ message: 'Delivered orders cannot be moved back or cancelled (only returned).' })
+    }
+
     const isAdmin = req.user.role === 'admin'
     const isSupplier = req.user.role === 'supplier' && order.supplier._id.equals(req.user._id)
 
@@ -941,8 +978,45 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(403).json({ message: 'Not allowed to update this order.' })
     }
 
-    order.status = next
-    if (next === 'delivered') {
+    // Handle cancellation: refund buyer wallet & restore inventory stock
+    if (next === 'cancelled') {
+      if (!order.isRefunded) {
+        const buyerId = order.user?._id || order.user
+        const productId = order.product?._id || order.product
+
+        if (buyerId && order.total > 0 && order.paymentMethod !== 'cod') {
+          await User.findByIdAndUpdate(buyerId, { $inc: { walletBalance: Number(order.total.toFixed(2)) } })
+        }
+        if (productId && order.quantity > 0) {
+          await Product.findByIdAndUpdate(productId, { $inc: { quantity: order.quantity } })
+        }
+
+        order.isRefunded = true
+        order.refundedAt = new Date()
+        order.payoutStatus = 'cancelled'
+
+        if (!Array.isArray(order.trackingTimeline)) {
+          order.trackingTimeline = []
+        }
+        order.trackingTimeline.push({
+          status: 'cancelled',
+          title: 'Order Cancelled & Refunded',
+          location: 'System',
+          timestamp: new Date(),
+          note: `Order cancelled by ${isAdmin ? 'Admin' : 'Supplier'}. $${Number(order.total).toFixed(2)} refunded to buyer wallet, and stock restored.`,
+        })
+
+        createNotification({
+          recipient: buyerId,
+          targetRole: 'user',
+          type: 'order',
+          title: `Order ${order.orderNo} Cancelled`,
+          message: `Your order ${order.orderNo} has been cancelled. $${Number(order.total).toFixed(2)} has been refunded to your wallet.`,
+          link: '/user/orders',
+        })
+      }
+      order.trackingStatus = 'cancelled'
+    } else if (next === 'delivered') {
       order.deliveredAt = order.deliveredAt || new Date()
       order.trackingStatus = 'delivered'
       order.warehouseLocation = 'delivered'
@@ -951,10 +1025,12 @@ export const updateOrderStatus = async (req, res) => {
     } else if (next === 'awaiting_dispatch' || next === 'order_due') {
       order.trackingStatus = next
     }
+
+    order.status = next
     await order.save()
 
     return res.json({
-      message: 'Order status updated.',
+      message: next === 'cancelled' ? 'Order cancelled. Buyer refunded and stock restored.' : 'Order status updated.',
       order: order.toSafeObject(),
     })
   } catch (error) {
@@ -1065,19 +1141,60 @@ export const updateOrderTracking = async (req, res) => {
       ]
       const s = targetStatus.toLowerCase()
       if (allowedTracking.includes(s)) {
-        order.trackingStatus = s
         if (s === 'cancelled') {
+          if (order.status === 'cancelled') {
+            return res.status(400).json({ message: 'Order is already cancelled.' })
+          }
+          if (order.status === 'delivered') {
+            return res.status(400).json({ message: 'Cannot cancel an order that is already delivered.' })
+          }
+
+          if (!order.isRefunded) {
+            const buyerId = order.user?._id || order.user
+            const productId = order.product?._id || order.product
+
+            if (buyerId && order.total > 0 && order.paymentMethod !== 'cod') {
+              await User.findByIdAndUpdate(buyerId, { $inc: { walletBalance: Number(order.total.toFixed(2)) } })
+            }
+            if (productId && order.quantity > 0) {
+              await Product.findByIdAndUpdate(productId, { $inc: { quantity: order.quantity } })
+            }
+
+            order.isRefunded = true
+            order.refundedAt = new Date()
+            order.payoutStatus = 'cancelled'
+
+            createNotification({
+              recipient: buyerId,
+              targetRole: 'user',
+              type: 'order',
+              title: `Order ${order.orderNo} Cancelled`,
+              message: `Your order ${order.orderNo} has been cancelled. $${Number(order.total).toFixed(2)} has been refunded to your wallet.`,
+              link: '/user/orders',
+            })
+          }
           order.status = 'cancelled'
         } else if (s === 'delivered') {
+          if (order.status === 'cancelled') {
+            return res.status(400).json({ message: 'Cannot mark a cancelled order as delivered.' })
+          }
           order.status = 'delivered'
           order.deliveredAt = order.deliveredAt || new Date()
         } else if (s === 'returned') {
           order.status = 'returned'
         } else if (s === 'awaiting_dispatch' || s === 'order_due') {
+          if (order.status === 'cancelled') {
+            return res.status(400).json({ message: 'Cannot progress a cancelled order.' })
+          }
           order.status = s
         } else if (s === 'processing' || s === 'in_process' || s === 'in_transit' || s === 'out_for_delivery') {
+          if (order.status === 'cancelled') {
+            return res.status(400).json({ message: 'Cannot progress a cancelled order.' })
+          }
           order.status = 'in_process'
         }
+
+        order.trackingStatus = s
 
         if (s === 'in_transit' || s === 'out_for_delivery') {
           order.warehouseLocation = 'in_transit'
@@ -1198,7 +1315,7 @@ export const getPublicOrderTracking = async (req, res) => {
       order = await Order.findOne({
         $or: [
           { trackingNumber: ref },
-          { trackingNumber: new RegExp(`^${ref}$`, 'i') },
+          { trackingNumber: new RegExp(`^${escapeRegex(ref)}$`, 'i') },
           { orderNo: ref.toUpperCase() },
           { orderLabelRef: ref },
         ],
@@ -1585,7 +1702,25 @@ export const listLiveWmsOrders = async (req, res) => {
  * Performs complete automatic 100% refund to user wallet, reverses supplier pending balance,
  * reverses marketplace commission, logs formal 26-W-XXXXX transaction, and restores inventory.
  */
-export const cancelOrder = async (req, res) => {
+const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000
+
+function isOrderWithin12Hours(order) {
+  if (!order || !order.createdAt) return false
+  return (Date.now() - new Date(order.createdAt).getTime()) <= TWELVE_HOURS_MS
+}
+
+function getOrderAgeHours(order) {
+  if (!order || !order.createdAt) return 0
+  return Number(((Date.now() - new Date(order.createdAt).getTime()) / (1000 * 60 * 60)).toFixed(1))
+}
+
+/**
+ * Submits an order cancellation request (User or Supplier).
+ * Strict Rule 1: Only allowed within 12 hours of order placement.
+ * Strict Rule 2: Valid, authentic reason is mandatory.
+ * Strict Rule 3: Does NOT cancel order immediately; marks status as 'cancellation_pending' and notifies Admin.
+ */
+export const requestOrderCancellation = async (req, res) => {
   try {
     const order = await populateOrder(Order.findById(req.params.id))
     if (!order) {
@@ -1593,20 +1728,24 @@ export const cancelOrder = async (req, res) => {
     }
 
     const isAdmin = req.user.role === 'admin'
-    const isOwner =
+    const isBuyer =
       req.user.role === 'user' &&
       order.user &&
       (order.user._id?.equals(req.user._id) || order.user.equals?.(req.user._id))
+    const isSupplier =
+      req.user.role === 'supplier' &&
+      order.supplier &&
+      (order.supplier._id?.equals(req.user._id) || order.supplier.equals?.(req.user._id))
 
-    if (!isAdmin && !isOwner) {
-      return res.status(403).json({ message: 'Not authorized to cancel this order.' })
+    if (!isAdmin && !isBuyer && !isSupplier) {
+      return res.status(403).json({ message: 'Not authorized to request cancellation for this order.' })
     }
 
     if (order.status === 'cancelled' || order.isRefunded) {
       return res.status(400).json({ message: 'This order has already been cancelled and refunded.' })
     }
 
-    // Cancellation Policy: Order can ONLY be cancelled before parcel is handed over to courier / dispatched
+    // Cancellation Policy: Cannot cancel if already handed over to courier / in transit / delivered
     const nonCancellable = ['in_transit', 'out_for_delivery', 'delivered', 'returned']
     const curTracking = String(order.trackingStatus || '').toLowerCase()
     const curLoc = String(order.warehouseLocation || '').toLowerCase()
@@ -1620,13 +1759,157 @@ export const cancelOrder = async (req, res) => {
       Boolean(order.isDispatched)
     ) {
       return res.status(400).json({
-        message: 'Order cannot be cancelled because it has already been handed over to the courier / dispatched from warehouse.',
+        message: 'Order cannot be cancelled because it has already been handed over to courier / dispatched.',
       })
     }
 
-    const reason = String(req.body.reason || 'Customer requested order cancellation before dispatch.').trim()
+    // Strict 12-Hour Cancellation Policy check
+    const ageHours = getOrderAgeHours(order)
+    if (!isOrderWithin12Hours(order)) {
+      return res.status(400).json({
+        message: `Cancellation policy limit exceeded: This order was placed ${ageHours} hours ago. Order cancellations can ONLY be requested within 12 hours of order placement.`,
+      })
+    }
 
-    // 1. Mark Order as Cancelled & Payout Status as Cancelled (reverses supplier pending balance & marketplace commission)
+    const reason = String(req.body.reason || '').trim()
+    if (!reason || reason.length < 5) {
+      return res.status(400).json({
+        message: 'A valid cancellation reason (minimum 5 characters) is required.',
+      })
+    }
+
+    if (order.cancellationRequest?.status === 'pending' || order.status === 'cancellation_pending') {
+      return res.status(400).json({
+        message: 'A cancellation request for this order is already pending admin review.',
+      })
+    }
+
+    const requesterRole = req.user.role === 'supplier' ? 'supplier' : 'user'
+
+    // Update order cancellationRequest
+    order.cancellationRequest = {
+      isRequested: true,
+      requestedBy: requesterRole,
+      requesterUser: req.user._id,
+      reason,
+      requestedAt: new Date(),
+      status: 'pending',
+      reviewedAt: null,
+      reviewedBy: null,
+      rejectionReason: '',
+    }
+    order.status = 'cancellation_pending'
+
+    if (!Array.isArray(order.trackingTimeline)) {
+      order.trackingTimeline = []
+    }
+    order.trackingTimeline.push({
+      status: 'cancellation_pending',
+      title: `Cancellation Requested by ${requesterRole === 'supplier' ? 'Supplier' : 'Customer'}`,
+      location: order.warehouseLocationLabel || 'Warehouse',
+      timestamp: new Date(),
+      note: `Reason: "${reason}". Submitted ${ageHours}h after order placement. Pending administrator approval within 12-hour policy window.`,
+    })
+
+    await order.save()
+
+    // Real-time Admin Notification
+    await createNotification({
+      targetRole: 'admin',
+      type: 'order',
+      title: `Cancellation Request: Order #${order.orderNo}`,
+      message: `${requesterRole === 'supplier' ? 'Supplier' : 'Customer'} submitted a cancellation request for Order #${order.orderNo} (${ageHours}h elapsed). Reason: "${reason}". Requires admin approval within 12 hours.`,
+      link: '/admin/supplier/disputes',
+      metadata: {
+        orderId: order._id.toString(),
+        orderNo: order.orderNo,
+        requestedBy: requesterRole,
+        reason,
+        hoursElapsed: ageHours,
+      },
+    }).catch((err) => console.warn('[Notification warning]', err.message))
+
+    // Automatically create or link a dispute of type 'order_cancellation' so admin sees all details in Disputes section
+    try {
+      const { getNextDisputeNo } = await import('../services/sequenceService.js')
+      const disputeNo = await getNextDisputeNo().catch(() => `26-D-${Date.now().toString().slice(-4)}`)
+      await Dispute.create({
+        disputeNo,
+        raisedBy: req.user._id,
+        againstRole: requesterRole === 'user' ? 'supplier' : 'user',
+        againstUser: requesterRole === 'user' ? (order.supplier?._id || order.supplier) : (order.user?._id || order.user),
+        order: order._id,
+        product: order.product?._id || order.product,
+        type: 'order_cancellation',
+        message: `Order Cancellation Request (${requesterRole}): ${reason}`,
+        status: 'open',
+        chatWindowExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        messages: [
+          {
+            sender: req.user._id,
+            text: `Cancellation Request for Order #${order.orderNo}: "${reason}". Placed ${ageHours}h ago.`,
+            role: req.user.role,
+            createdAt: new Date(),
+          },
+        ],
+      })
+    } catch (dispErr) {
+      console.warn('[Dispute auto-create warning]', dispErr.message)
+    }
+
+    return res.json({
+      success: true,
+      message: 'Cancellation request submitted successfully. It has been sent to the administrator for review and approval.',
+      order: order.toSafeObject(),
+    })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to submit cancellation request.' })
+  }
+}
+
+/**
+ * Admin approves an order cancellation request.
+ * Strict Rule: Admin ONLY allowed to approve within 12 hours of order placement!
+ * If 12 hours have passed, system BLOCKS the cancellation.
+ * Once approved within 12 hours: order status becomes 'cancelled',
+ * 100% wallet refund is executed to buyer, inventory is restored, and both parties are notified.
+ */
+export const approveOrderCancellation = async (req, res) => {
+  try {
+    const order = await populateOrder(Order.findById(req.params.id))
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found.' })
+    }
+
+    if (order.status === 'cancelled' || order.isRefunded) {
+      return res.status(400).json({ message: 'This order is already cancelled and refunded.' })
+    }
+
+    // STRICT 12-HOUR POLICY: Even if admin reviews, order MUST NOT be cancelled if 12h has expired!
+    const ageHours = getOrderAgeHours(order)
+    if (!isOrderWithin12Hours(order)) {
+      return res.status(400).json({
+        message: `Cancellation Blocked: More than 12 hours (${ageHours}h) have passed since the order was placed. Under strict platform policy, orders cannot be cancelled after the 12-hour limit.`,
+      })
+    }
+
+    // Non-cancellable check
+    if (Boolean(order.isDispatched) || ['in_transit', 'out_for_delivery', 'delivered'].includes(String(order.trackingStatus || '').toLowerCase())) {
+      return res.status(400).json({
+        message: 'Order cannot be cancelled because it has already been dispatched / handed over to courier.',
+      })
+    }
+
+    const adminNote = String(req.body.adminNote || req.body.note || 'Admin approved cancellation within 12-hour policy window.').trim()
+
+    // 1. Update cancellationRequest & Order Status
+    order.cancellationRequest = {
+      ...(order.cancellationRequest?.toObject?.() || order.cancellationRequest || {}),
+      status: 'approved',
+      reviewedAt: new Date(),
+      reviewedBy: req.user._id,
+      rejectionReason: '',
+    }
     order.status = 'cancelled'
     order.trackingStatus = 'cancelled'
     order.payoutStatus = 'cancelled'
@@ -1639,19 +1922,23 @@ export const cancelOrder = async (req, res) => {
     }
     order.trackingTimeline.push({
       status: 'cancelled',
-      title: 'Order Cancelled Before Courier Handover',
-      location: order.warehouseLocationLabel || 'Warehouse',
+      title: 'Order Cancellation Approved by Admin',
+      location: 'Administration',
       timestamp: new Date(),
-      note: `${reason} Full 100% payment of $${Number(order.total || 0).toFixed(2)} refunded to customer Sellvro Wallet. Supplier pending balance removed and marketplace commission reversed.`,
+      note: `${adminNote} Approved within 12h (${ageHours}h elapsed). Full 100% payment of $${Number(order.total || 0).toFixed(2)} refunded to customer Sellvro Wallet.`,
     })
 
-    // 2. Instant Wallet Refund to Buyer & Log Formal Wallet Transaction
+    // 2. 100% Wallet Refund to Buyer & Log Formal Wallet Transaction (26-W-XXXXX)
     let newBalance = undefined
     let refundTxId = ''
-    if (order.paymentMethod === 'wallet') {
+    const totalRefund = Number(Number(order.total || 0).toFixed(2))
+    const commissionRefunded = Number(Number(order.commission || 0).toFixed(2))
+    const supplierAmount = Number((totalRefund - commissionRefunded).toFixed(2))
+
+    if (order.paymentMethod === 'wallet' || totalRefund > 0) {
       const buyer = await User.findById(order.user._id || order.user)
       if (buyer) {
-        buyer.walletBalance = Number(((buyer.walletBalance || 0) + Number(order.total || 0)).toFixed(2))
+        buyer.walletBalance = Number(((buyer.walletBalance || 0) + totalRefund).toFixed(2))
         await buyer.save()
         newBalance = buyer.walletBalance
 
@@ -1662,21 +1949,25 @@ export const cancelOrder = async (req, res) => {
         }
         order.refundTxId = refundTxId
 
-        // Record formal Wallet Transaction (appears in user wallet history with 26-W-XXXXX pattern)
         await WalletRequest.create({
           transactionId: refundTxId,
           user: buyer._id,
-          amount: Number(order.total || 0),
+          amount: totalRefund,
           depositCurrency: 'USD',
-          depositAmount: Number(order.total || 0),
+          depositAmount: totalRefund,
           exchangeRate: 1,
-          grossAmount: Number(order.total || 0),
+          grossAmount: totalRefund,
           conversionFeeRate: 0,
           conversionFee: 0,
           bankTid: `REFUND-${order.orderNo}`,
           paymentMethod: 'wallet_refund',
+          order: order._id,
+          orderNo: order.orderNo,
+          refundType: 'order_cancellation',
+          supplierAmount,
+          commissionRefunded,
           status: 'approved',
-          adminNote: `Automatic 100% refund for cancelled Order #${order.orderNo}. Full amount ($${Number(order.total || 0).toFixed(2)}) returned to customer wallet. Marketplace commission reversed.`,
+          adminNote: `Automatic 100% refund for cancelled Order #${order.orderNo}. Full $${totalRefund.toFixed(2)} refunded to User Wallet ($${supplierAmount.toFixed(2)} supplier payable reversed, $${commissionRefunded.toFixed(2)} marketplace commission refunded). Approved by Admin within 12h policy.`,
         }).catch((err) => console.warn('[Cancel Order] Failed to create wallet transaction log:', err.message))
       }
     }
@@ -1688,7 +1979,7 @@ export const cancelOrder = async (req, res) => {
       await product.save()
     }
 
-    // 4. Cancel and restore stock in WMS MySQL
+    // 4. Cancel in WMS MySQL
     await cancelWmsOrder({
       requestNumber: order.wmsRequestNumber || `REQ-${order.orderNo.replace('ORD-', '')}`,
       orderNo: order.orderNo,
@@ -1698,35 +1989,147 @@ export const cancelOrder = async (req, res) => {
 
     await order.save()
 
-    // 5. Automated Notifications
+    // 5. Update associated Dispute to resolved
+    await Dispute.updateMany(
+      { order: order._id, type: 'order_cancellation', status: 'open' },
+      {
+        $set: {
+          status: 'resolved',
+          resolutionNote: `Cancellation approved by admin within 12 hours. $${Number(order.total || 0).toFixed(2)} refunded to customer.`,
+        },
+      }
+    ).catch(() => { })
+
+    // 6. Notify User and Supplier
     await createNotification({
-      user: order.user._id || order.user,
+      recipient: order.user._id || order.user,
+      targetRole: 'user',
       type: 'order',
-      title: `Order #${order.orderNo} Cancelled & Refunded`,
-      message: `Your order was cancelled before courier handover. Full amount of $${Number(order.total || 0).toFixed(2)} has been refunded to your Sellvro Wallet (Ref: ${refundTxId || '26-W'}).`,
+      title: `Cancellation Approved: Order #${order.orderNo}`,
+      message: `Your cancellation request for Order #${order.orderNo} was approved by Admin within 12 hours. Full amount of $${Number(order.total || 0).toFixed(2)} has been refunded to your wallet.`,
       link: '/user/orders',
     }).catch(() => { })
 
     if (order.supplier) {
       await createNotification({
-        user: order.supplier._id || order.supplier,
+        recipient: order.supplier._id || order.supplier,
+        targetRole: 'supplier',
         type: 'order',
-        title: `Order #${order.orderNo} Cancelled Prior to Handover`,
-        message: `Order #${order.orderNo} was cancelled before courier dispatch. Pending payout removed and warehouse inventory restored.`,
+        title: `Order #${order.orderNo} Cancelled`,
+        message: `Cancellation for Order #${order.orderNo} was approved by Admin within the 12-hour window. Do not dispatch. Stock restored.`,
         link: '/supplier/view-orders',
       }).catch(() => { })
     }
 
     return res.json({
       success: true,
-      message: 'Order successfully cancelled. Full 100% amount has been refunded to your wallet, and pending commissions have been reversed.',
+      message: 'Cancellation request approved successfully. Order is cancelled and 100% refund issued to buyer.',
       order: order.toSafeObject(),
       walletBalance: newBalance,
       refundTxId,
+      refundBreakdown: {
+        totalRefund,
+        supplierAmountReversed: supplierAmount,
+        commissionRefunded,
+      },
     })
   } catch (error) {
-    return res.status(500).json({ message: error.message || 'Failed to cancel order.' })
+    return res.status(500).json({ message: error.message || 'Failed to approve cancellation.' })
   }
+}
+
+/**
+ * Admin rejects an order cancellation request.
+ * Rejection reason is mandatory.
+ * Reverts order status from 'cancellation_pending' back to 'awaiting_dispatch' (or appropriate status).
+ */
+export const rejectOrderCancellation = async (req, res) => {
+  try {
+    const order = await populateOrder(Order.findById(req.params.id))
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found.' })
+    }
+
+    if (order.status === 'cancelled') {
+      return res.status(400).json({ message: 'This order is already cancelled.' })
+    }
+
+    const rejectionReason = String(req.body.rejectionReason || req.body.reason || '').trim()
+    if (!rejectionReason || rejectionReason.length < 5) {
+      return res.status(400).json({
+        message: 'A valid rejection reason (minimum 5 characters) explaining why cancellation is denied is required.',
+      })
+    }
+
+    // Revert status
+    const previousStatus = order.isDispatched ? 'in_process' : 'awaiting_dispatch'
+    order.status = previousStatus
+    order.cancellationRequest = {
+      ...(order.cancellationRequest?.toObject?.() || order.cancellationRequest || {}),
+      status: 'rejected',
+      reviewedAt: new Date(),
+      reviewedBy: req.user._id,
+      rejectionReason,
+    }
+
+    if (!Array.isArray(order.trackingTimeline)) {
+      order.trackingTimeline = []
+    }
+    order.trackingTimeline.push({
+      status: previousStatus,
+      title: 'Cancellation Request Rejected by Admin',
+      location: 'Administration',
+      timestamp: new Date(),
+      note: `Admin reviewed and rejected cancellation: "${rejectionReason}". Order remains active.`,
+    })
+
+    await order.save()
+
+    // Update associated Dispute to rejected
+    await Dispute.updateMany(
+      { order: order._id, type: 'order_cancellation', status: 'open' },
+      {
+        $set: {
+          status: 'rejected',
+          resolutionNote: rejectionReason,
+        },
+      }
+    ).catch(() => { })
+
+    // Notify requester
+    const requesterId = order.cancellationRequest?.requesterUser || (order.cancellationRequest?.requestedBy === 'supplier' ? order.supplier : order.user)
+    if (requesterId) {
+      await createNotification({
+        recipient: requesterId,
+        type: 'order',
+        title: `Cancellation Denied: Order #${order.orderNo}`,
+        message: `Your cancellation request for Order #${order.orderNo} was rejected by Admin: "${rejectionReason}". The order will proceed normally.`,
+        link: order.cancellationRequest?.requestedBy === 'supplier' ? '/supplier/view-orders' : '/user/orders',
+      }).catch(() => { })
+    }
+
+    return res.json({
+      success: true,
+      message: 'Cancellation request rejected. Order restored to active status.',
+      order: order.toSafeObject(),
+    })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to reject cancellation.' })
+  }
+}
+
+/**
+ * Cancels an order before it is dispatched/picked up from warehouse or supplier.
+ * Non-admins: automatically routed to requestOrderCancellation!
+ * Admins: can approve or direct-cancel, strictly respecting the 12-hour limit.
+ */
+export const cancelOrder = async (req, res) => {
+  if (req.user?.role !== 'admin') {
+    return requestOrderCancellation(req, res)
+  }
+
+  // Admin direct cancellation: enforces strict 12-hour policy
+  return approveOrderCancellation(req, res)
 }
 
 /**
@@ -1927,7 +2330,7 @@ export const parseOrderLabel = async (req, res) => {
       }
       if (!product) {
         product = await Product.findOne({
-          $or: [{ sku: productId }, { name: new RegExp(productId, 'i') }],
+          $or: [{ sku: productId }, { name: new RegExp(escapeRegex(productId), 'i') }],
         })
       }
 

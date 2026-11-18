@@ -6,6 +6,7 @@ import Category from '../models/Category.js'
 import BusinessProfile from '../models/BusinessProfile.js'
 import { createNotification } from '../utils/notifications.js'
 import { getNextPayoutNo } from '../services/sequenceService.js'
+import { logAdminAction } from '../utils/auditLogger.js'
 
 async function getCategoryRatesMap() {
   try {
@@ -1121,6 +1122,15 @@ export const executeSupplierPayout = async (req, res) => {
       title: `Payout Released ($${payoutAmount.toFixed(2)})`,
       message: `Your weekly payout for ${weekKey || monthKey || 'mature orders'} of $${payoutAmount.toFixed(2)} has been released via ${paymentMethod || 'Bank Transfer'} with TID: ${tid}.`,
       link: '/supplier/finance/index',
+    })
+
+    await logAdminAction({
+      adminId: req.user?._id,
+      action: 'release_weekly_payout',
+      targetType: 'payout',
+      targetId: payout._id,
+      details: { supplierId, payoutAmount, tid, paymentMethod, orderCount: targetOrders.length },
+      ip: req.ip,
     })
 
     return res.status(201).json({

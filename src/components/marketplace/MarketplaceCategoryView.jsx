@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { mediaUrl } from '../../lib/api.js'
 import { FEATURED_DEALS, MARKETPLACE_CATEGORIES } from './marketplaceData.js'
+import { useAuth } from '../../context/AuthContext.jsx'
 
 // Subcategory mappings for major categories (matching eBay's taxonomy in the user screenshot)
 const CATEGORY_TAXONOMY = {
@@ -180,6 +181,7 @@ export default function MarketplaceCategoryView({
   onResetFilters,
 }) {
   const navigate = useNavigate()
+  const { isAuthenticated } = useAuth()
   const [viewMode, setViewMode] = useState('list') // 'list' or 'grid' (eBay default in screenshot is list)
   const [wishlist, setWishlist] = useState({})
   const [sortBy, setSortBy] = useState('newest') // 'newest' (default: latest added first), 'price_asc', 'price_desc', 'rating', 'best_match'
@@ -442,6 +444,15 @@ export default function MarketplaceCategoryView({
     e.preventDefault()
     e.stopPropagation()
     const itemId = item._id || item.id
+    if (!isAuthenticated) {
+      navigate('/login', {
+        state: {
+          from: `/checkout/${itemId}`,
+          message: 'Please sign in to your account before placing an order.',
+        },
+      })
+      return
+    }
     navigate(`/checkout/${itemId}`, { state: { product: { ...item, id: itemId } } })
   }
 

@@ -41,10 +41,10 @@ function LoginPage() {
         navigate('/admin/dashboard', { replace: true })
       } else {
         // Client / User role goes to landing page '/' unless completing an order checkout
-        const destination =
-          location.state?.from && location.state.from.startsWith('/user/checkout')
-            ? location.state.from
-            : '/'
+        const fromPath = location.state?.from || ''
+        const isCheckoutRedirect =
+          fromPath.startsWith('/checkout') || fromPath.startsWith('/user/checkout')
+        const destination = isCheckoutRedirect ? fromPath : '/'
         navigate(destination, { replace: true })
       }
     } catch (err) {

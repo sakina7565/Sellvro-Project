@@ -56,6 +56,8 @@ const productSchema = new mongoose.Schema(
     reviewsCount: { type: Number, default: 0, min: 0 },
     deliveryRatingAverage: { type: Number, default: 0, min: 0, max: 5 },
     onTimeDeliveryPercent: { type: Number, default: 100, min: 0, max: 100 },
+    customizationAvailable: { type: Boolean, default: false },
+    customizationInstructions: { type: String, trim: true, default: '' },
   },
   { timestamps: true },
 )
@@ -145,6 +147,8 @@ productSchema.methods.toSafeObject = function toSafeObject() {
     reviewsCount: Number(this.reviewsCount || 0),
     deliveryRatingAverage: Number(this.deliveryRatingAverage || 0),
     onTimeDeliveryPercent: Number(this.onTimeDeliveryPercent ?? 100),
+    customizationAvailable: Boolean(this.customizationAvailable),
+    customizationInstructions: this.customizationInstructions || '',
     createdAt: this.createdAt,
   }
 }

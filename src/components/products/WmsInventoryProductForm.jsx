@@ -221,6 +221,14 @@ function WmsInventoryProductForm({ onSwitchToSelf }) {
       return
     }
 
+    const lowResPhoto = photos.find((p) => p && p.file && p.isLowRes)
+    if (lowResPhoto) {
+      setError(
+        `Cannot list product: Photo "${lowResPhoto.file?.name || 'Image'}" is low-resolution (${lowResPhoto.width} × ${lowResPhoto.height} px). Minimum required resolution is 1000 × 1000 pixels. Please upload high-resolution images.`,
+      )
+      return
+    }
+
     setSubmitting(true)
     try {
       const payload = {

@@ -39,6 +39,7 @@ import {
   listLocations,
   createLocation,
   deleteLocation,
+  listAuditLogs,
 } from '../controllers/adminController.js'
 
 import {
@@ -71,7 +72,6 @@ import {
   listAllWalletRequests,
   approveWalletRequest,
   rejectWalletRequest,
-  transferRealPayment,
   getWalletSettings,
   updateWalletSettings,
 } from '../controllers/walletController.js'
@@ -259,13 +259,13 @@ router.post('/categories', requirePermission('admin.categories.manage'), createC
 router.patch('/categories/:id', requirePermission('admin.categories.manage'), updateCategory)
 router.delete('/categories/:id', requirePermission('admin.categories.manage'), deleteCategory)
 
-router.get('/countries', listCountries)
-router.post('/countries', createCountry)
-router.delete('/countries/:id', deleteCountry)
+router.get('/countries', requirePermission('admin.settings.country', 'admin.suppliers.view'), listCountries)
+router.post('/countries', requirePermission('admin.settings.country'), createCountry)
+router.delete('/countries/:id', requirePermission('admin.settings.country'), deleteCountry)
 
-router.get('/locations', listLocations)
-router.post('/locations', createLocation)
-router.delete('/locations/:id', deleteLocation)
+router.get('/locations', requirePermission('admin.settings.location', 'admin.suppliers.view'), listLocations)
+router.post('/locations', requirePermission('admin.settings.location'), createLocation)
+router.delete('/locations/:id', requirePermission('admin.settings.location'), deleteLocation)
 
 
 
@@ -293,12 +293,6 @@ router.patch(
   '/wallet-requests/:id/reject',
   requirePermission('admin.wallets.approve'),
   rejectWalletRequest,
-)
-
-router.post(
-  '/wallet-requests/:id/transfer-payment',
-  requirePermission('admin.wallets.approve'),
-  transferRealPayment,
 )
 
 router.get('/wallet-settings', requirePermission('admin.wallets.view'), getWalletSettings)
@@ -398,8 +392,14 @@ router.delete(
 )
 router.post(
   '/impersonate/:id',
-  requirePermission('admin.suppliers.view', 'admin.users.view'),
+  requireSuperAdmin,
   impersonateAccount,
+)
+
+router.get(
+  '/audit-logs',
+  requireSuperAdmin,
+  listAuditLogs,
 )
 
 // Supplier Performance Warning, Suspension, Penalty & SLA Routes

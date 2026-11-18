@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import {
   findWmsUserByEmail,
   registerWmsSupplier,
@@ -751,23 +752,31 @@ export const forgotPassword = async (req, res) => {
       return res.status(400).json({ message: 'Please enter your email address.' })
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+resetPasswordCode +resetPasswordExpires')
-    if (!user) {
-      return res.status(404).json({ message: 'No account found with this email address.' })
+    const cleanEmail = email.toLowerCase().trim()
+    const user = await User.findOne({ email: cleanEmail }).select('+resetPasswordCode +resetPasswordExpires +resetPasswordAttempts')
+
+    // Generic response message to prevent account enumeration
+    const genericSuccess = {
+      message: 'If an account exists with this email, a 6-digit verification code has been sent.',
+      email: cleanEmail,
     }
 
-    // Generate 6-digit verification code
-    const code = Math.floor(100000 + Math.random() * 900000).toString()
+    if (!user) {
+      return res.json(genericSuccess)
+    }
+
+    // Cryptographically secure 6-digit verification code
+    const code = crypto.randomInt(100000, 1000000).toString()
     user.resetPasswordCode = code
     user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000) // 15 mins
+    user.resetPasswordAttempts = 0
     await user.save()
 
-    await sendPasswordResetEmail(user.email, code, user.fullName)
-
-    return res.json({
-      message: 'A 6-digit verification code has been sent to your email.',
-      email: user.email,
+    await sendPasswordResetEmail(user.email, code, user.fullName).catch((err) => {
+      console.warn('Password reset email dispatch failed:', err.message)
     })
+
+    return res.json(genericSuccess)
   } catch (error) {
     console.error('Forgot password error:', error)
     return res.status(500).json({ message: error.message || 'Failed to send recovery code.' })
@@ -781,13 +790,30 @@ export const verifyResetCode = async (req, res) => {
       return res.status(400).json({ message: 'Email and verification code are required.' })
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+resetPasswordCode +resetPasswordExpires')
+    const cleanEmail = email.toLowerCase().trim()
+    const user = await User.findOne({ email: cleanEmail }).select('+resetPasswordCode +resetPasswordExpires +resetPasswordAttempts')
     if (!user || !user.resetPasswordCode) {
       return res.status(400).json({ message: 'No reset request found. Please request a new code.' })
     }
 
+    // Enforce max 5 failed attempts cap
+    if ((user.resetPasswordAttempts || 0) >= 5) {
+      user.resetPasswordCode = undefined
+      user.resetPasswordExpires = undefined
+      user.resetPasswordAttempts = 0
+      await user.save()
+      return res.status(429).json({ message: 'Too many incorrect attempts. For security, this code has been cancelled. Please request a new code.' })
+    }
+
     if (user.resetPasswordCode !== code.trim()) {
-      return res.status(400).json({ message: 'Invalid verification code. Please check and try again.' })
+      user.resetPasswordAttempts = (user.resetPasswordAttempts || 0) + 1
+      await user.save()
+      const remaining = 5 - user.resetPasswordAttempts
+      return res.status(400).json({
+        message: remaining > 0
+          ? `Invalid verification code. ${remaining} attempt(s) remaining.`
+          : 'Invalid verification code. Code cancelled due to too many attempts.',
+      })
     }
 
     if (new Date() > new Date(user.resetPasswordExpires)) {
@@ -817,12 +843,23 @@ export const resetPassword = async (req, res) => {
       return res.status(400).json({ message: 'Passwords do not match.' })
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password +resetPasswordCode +resetPasswordExpires')
+    const cleanEmail = email.toLowerCase().trim()
+    const user = await User.findOne({ email: cleanEmail }).select('+password +resetPasswordCode +resetPasswordExpires +resetPasswordAttempts')
     if (!user || !user.resetPasswordCode) {
       return res.status(400).json({ message: 'No reset request found. Please request a new code.' })
     }
 
+    if ((user.resetPasswordAttempts || 0) >= 5) {
+      user.resetPasswordCode = undefined
+      user.resetPasswordExpires = undefined
+      user.resetPasswordAttempts = 0
+      await user.save()
+      return res.status(429).json({ message: 'Too many incorrect attempts. Please request a new code.' })
+    }
+
     if (user.resetPasswordCode !== code.trim()) {
+      user.resetPasswordAttempts = (user.resetPasswordAttempts || 0) + 1
+      await user.save()
       return res.status(400).json({ message: 'Invalid verification code.' })
     }
 
@@ -833,6 +870,7 @@ export const resetPassword = async (req, res) => {
     user.password = newPassword
     user.resetPasswordCode = undefined
     user.resetPasswordExpires = undefined
+    user.resetPasswordAttempts = 0
     await user.save()
 
     const token = signToken(user._id)

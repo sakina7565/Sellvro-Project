@@ -1,10 +1,18 @@
-import { useEffect, useRef } from 'react'
-import { Image as ImageIcon, Video as VideoIcon, Plus, X, Film } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Image as ImageIcon, Video as VideoIcon, Plus, X, Film, AlertCircle } from 'lucide-react'
 import { mediaUrl } from '../../lib/api.js'
 
 const MAX_PHOTOS = 10
 const MAX_BYTES = 100 * 1024 * 1024 // 100MB
-const ACCEPTED_IMAGES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
+const ACCEPTED_IMAGES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/jfif',
+  'image/pjpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]
 const ACCEPTED_VIDEOS = ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg', 'video/x-matroska']
 const ACCEPTED = [...ACCEPTED_IMAGES, ...ACCEPTED_VIDEOS]
 
@@ -19,6 +27,12 @@ function isVideo(file) {
 
 function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 6, helperText, disabled = false }) {
   const inputRefs = useRef([])
+  const [localError, setLocalError] = useState('')
+
+  const notifyError = (msg) => {
+    setLocalError(msg || '')
+    onError?.(msg || '')
+  }
 
   useEffect(() => {
     return () => {
@@ -39,24 +53,68 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 6, hel
 
     const isValidType =
       ACCEPTED.includes(file.type) ||
-      /\.(jpe?g|png|webp|gif|mp4|webm|mov|ogg|mkv)$/i.test(file.name)
+      /\.(jpe?g|jfif|pjpeg|pjp|png|webp|gif|mp4|webm|mov|ogg|mkv)$/i.test(file.name)
 
     if (!isValidType) {
-      onError?.('Only JPG, PNG, WEBP, GIF images and MP4, WEBM, MOV videos are allowed.')
+      notifyError('Only JPG, JPEG, JFIF, PNG, WEBP, GIF images and MP4, WEBM, MOV videos are allowed.')
       return
     }
     if (file.size > MAX_BYTES) {
-      onError?.('Each image or video file must be 100MB or smaller.')
+      notifyError('Each image or video file must be 100MB or smaller.')
       return
     }
 
-    const next = Array.from({ length: MAX_PHOTOS }, (_, i) => photos[i] || null)
-    if (next[index]?.preview?.startsWith('blob:')) {
-      URL.revokeObjectURL(next[index].preview)
+    if (isVideo(file)) {
+      const next = Array.from({ length: MAX_PHOTOS }, (_, i) => photos[i] || null)
+      if (next[index]?.preview?.startsWith('blob:')) {
+        URL.revokeObjectURL(next[index].preview)
+      }
+      next[index] = { file, preview: URL.createObjectURL(file), isVideo: true }
+      onChange?.(next)
+      notifyError('')
+      return
     }
-    next[index] = { file, preview: URL.createObjectURL(file), isVideo: isVideo(file) }
-    onChange?.(next)
-    onError?.('')
+
+    // High-Resolution Image Validation (Minimum 1000 × 1000 pixels)
+    const imgUrl = URL.createObjectURL(file)
+    const img = new window.Image()
+
+    img.onload = () => {
+      const width = img.naturalWidth || img.width
+      const height = img.naturalHeight || img.height
+
+      // Reject images with resolution below 1000 × 1000 pixels
+      if (width < 1000 || height < 1000) {
+        URL.revokeObjectURL(imgUrl)
+        notifyError(
+          `Image rejected: "${file.name}" is ${width} × ${height} px. Product images must be at least 1000 × 1000 pixels (high-resolution). Please upload an image with resolution of 1000 × 1000 pixels or higher.`,
+        )
+        return
+      }
+
+      // Accept images with resolution of 1000 × 1000 pixels or higher
+      const next = Array.from({ length: MAX_PHOTOS }, (_, i) => photos[i] || null)
+      if (next[index]?.preview?.startsWith('blob:')) {
+        URL.revokeObjectURL(next[index].preview)
+      }
+      next[index] = {
+        file,
+        preview: imgUrl,
+        isVideo: false,
+        width,
+        height,
+        isHighRes: true,
+      }
+      onChange?.(next)
+      notifyError('')
+    }
+
+    img.onerror = () => {
+      URL.revokeObjectURL(imgUrl)
+      notifyError(`Failed to read image "${file.name}". Please ensure it is a valid, uncorrupted image file.`)
+    }
+
+    img.src = imgUrl
   }
 
   const handleRemove = (index) => {
@@ -79,19 +137,36 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 6, hel
         <div className="flex items-center gap-2">
           <Film className="h-4 w-4 text-teal-600 shrink-0" />
           <span className="font-semibold text-teal-950">
-            {helperText || `Upload up to 10 Product Images & Videos (6 images mandatory out of 10)`}
+            {helperText || `Upload up to 10 Product Images & Videos (Min. 1000 × 1000 px resolution required | 6 mandatory)`}
           </span>
         </div>
         <span
-          className={`inline-flex items-center rounded-full px-2.5 py-0.5 font-bold text-xs ${
-            isRequirementMet
+          className={`inline-flex items-center rounded-full px-2.5 py-0.5 font-bold text-xs ${isRequirementMet
               ? 'bg-emerald-100 text-emerald-800'
               : 'bg-amber-200 text-amber-900'
-          }`}
+            }`}
         >
           {uploadedCount} / {MAX_PHOTOS} uploaded {isRequirementMet ? '✓' : `(min ${minPhotos} mandatory)`}
         </span>
       </div>
+
+      {/* Prominent Local Error Notification (Directly visible at photo upload section) */}
+      {localError && (
+        <div className="mb-3 flex items-start justify-between gap-2.5 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-800 shadow-xs">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+            <span>{localError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setLocalError('')}
+            className="text-rose-500 hover:text-rose-700 shrink-0 ml-1 cursor-pointer"
+            aria-label="Dismiss error"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Grid of 10 Upload Slots */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 md:grid-cols-5">
@@ -111,7 +186,7 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 6, hel
                 }}
                 type="file"
                 disabled={disabled}
-                accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,video/ogg"
+                accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/pjpeg,image/jfif,.jpg,.jpeg,.jfif,.pjpeg,.pjp,.png,.webp,.gif,video/mp4,video/webm,video/quicktime,video/ogg"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0]
@@ -149,6 +224,16 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 6, hel
                     {photo.isExisting && (
                       <span className="rounded-md bg-slate-800/90 backdrop-blur-xs px-1.5 py-0.5 text-[9px] font-bold text-slate-200 shadow-xs">
                         Existing
+                      </span>
+                    )}
+                    {photo.width && photo.height && (
+                      <span
+                        className={`rounded-md backdrop-blur-xs px-1.5 py-0.5 text-[9px] font-bold text-white shadow-xs ${photo.isLowRes
+                            ? 'bg-amber-600/95 ring-1 ring-amber-300'
+                            : 'bg-emerald-700/90'
+                          }`}
+                      >
+                        {photo.isLowRes ? `⚠️ ${photo.width}×${photo.height} Low Res` : `${photo.width}×${photo.height} HD ✓`}
                       </span>
                     )}
                     {photo.file && (
@@ -189,13 +274,12 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 6, hel
                   type="button"
                   disabled={disabled}
                   onClick={() => openPicker(index)}
-                  className={`flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed transition-all ${
-                    disabled
+                  className={`flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed transition-all ${disabled
                       ? 'border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed'
                       : isRequired && !isRequirementMet
-                      ? 'border-amber-300 bg-amber-50/40 text-amber-700 hover:border-amber-400 hover:bg-amber-100/50 cursor-pointer'
-                      : 'border-slate-200 bg-white text-slate-400 hover:border-teal-300 hover:bg-teal-50/40 hover:text-teal-600 cursor-pointer'
-                  }`}
+                        ? 'border-amber-300 bg-amber-50/40 text-amber-700 hover:border-amber-400 hover:bg-amber-100/50 cursor-pointer'
+                        : 'border-slate-200 bg-white text-slate-400 hover:border-teal-300 hover:bg-teal-50/40 hover:text-teal-600 cursor-pointer'
+                    }`}
                 >
                   {isMain ? (
                     <>
@@ -223,6 +307,15 @@ function ProductPhotoUpload({ photos = [], onChange, onError, minPhotos = 6, hel
           )
         })}
       </div>
+
+      {photos.some((p) => p?.isLowRes) && (
+        <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50/90 px-3.5 py-2.5 text-xs text-amber-900 shadow-xs">
+          <span className="text-base leading-none">⚠️</span>
+          <div>
+            <strong className="font-bold">Low-Resolution Notice:</strong> One or more selected photos are below the required 1000 × 1000 px resolution. High-resolution images are mandatory to publish this product. Please replace low-res images before publishing.
+          </div>
+        </div>
+      )}
 
       <p className="mt-3 text-xs leading-relaxed text-slate-500">
         📌 Click any slot to upload images or product video demonstrations.{' '}

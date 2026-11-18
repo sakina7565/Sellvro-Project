@@ -245,6 +245,12 @@ export const orderApi = {
     apiRequest(`/orders/${id}/user-tracking`, { method: 'PATCH', body: payload }),
   cancel: (id, reason = '') =>
     apiRequest(`/orders/${id}/cancel`, { method: 'POST', body: { reason } }),
+  requestCancel: (id, reason = '') =>
+    apiRequest(`/orders/${id}/request-cancel`, { method: 'POST', body: { reason } }),
+  approveCancel: (id, adminNote = '') =>
+    apiRequest(`/orders/${id}/approve-cancel`, { method: 'POST', body: { adminNote } }),
+  rejectCancel: (id, rejectionReason = '') =>
+    apiRequest(`/orders/${id}/reject-cancel`, { method: 'POST', body: { rejectionReason } }),
   pushWms: (id) => apiRequest(`/orders/${id}/push-wms`, { method: 'POST' }),
   trackWms: (id) => apiRequest(`/orders/${id}/track-wms`),
   liveWmsOrders: (params = {}) => {
