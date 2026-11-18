@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Warehouse,
   Star,
+  Check,
   CheckCircle,
   SlidersHorizontal,
   LayoutGrid,

@@ -38,10 +38,15 @@ let dbMessage = 'Connecting to MongoDB Atlas...'
 app.disable('x-powered-by')
 
 // Security headers (M6)
-app.use((_req, res, next) => {
+app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('X-Frame-Options', 'SAMEORIGIN')
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  // Only directives that cannot block the app's scripts, styles, images or Google sign-in.
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'self'; base-uri 'self'; object-src 'none'")
+  if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains')
+  }
   next()
 })
 

@@ -598,16 +598,6 @@ async function enrichProductsWithSupplier(products) {
 
     return safeObj
   })
-
-  // Ensure products are in strictly serial SKU order
-  enriched.sort((a, b) => {
-    const numA = parseInt(String(a.sku).replace(/\D+/g, ''), 10) || 0
-    const numB = parseInt(String(b.sku).replace(/\D+/g, ''), 10) || 0
-    if (numA !== numB) return numA - numB
-    return String(a.sku).localeCompare(String(b.sku))
-  })
-
-  return enriched
 }
 
 export const listMyProducts = async (req, res) => {

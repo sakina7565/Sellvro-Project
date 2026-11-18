@@ -15,11 +15,9 @@ export default function UserCancelOrderModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  if (!open || !order) return null
-
-  // 12-Hour Cancellation Window calculation
+  // 12-Hour Cancellation Window calculation (runs before the early return so hook order never changes)
   const { isExpired, hoursElapsed, hoursRemaining, minutesRemaining } = useMemo(() => {
-    if (!order.createdAt) return { isExpired: false, hoursElapsed: 0, hoursRemaining: 12, minutesRemaining: 0 }
+    if (!order?.createdAt) return { isExpired: false, hoursElapsed: 0, hoursRemaining: 12, minutesRemaining: 0 }
     const orderTime = new Date(order.createdAt).getTime()
     const diffMs = Date.now() - orderTime
     const totalMinutesElapsed = Math.floor(diffMs / (1000 * 60))
@@ -34,7 +32,9 @@ export default function UserCancelOrderModal({
       hoursRemaining: remHours,
       minutesRemaining: remMins,
     }
-  }, [order.createdAt])
+  }, [order?.createdAt])
+
+  if (!open || !order) return null
 
   const handleCancel = async () => {
     setError('')

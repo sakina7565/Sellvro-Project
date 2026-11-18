@@ -20,3 +20,6 @@ build/
 
 # Archives can contain .env files and customer uploads
 *.zip
+
+# Runtime logs (written by app.cjs on the server)
+*.log

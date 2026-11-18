@@ -145,16 +145,6 @@ export default function WalletsRequestsPage() {
     setTimeout(() => setCopyFeedback(''), 2500)
   }
 
-  // Real Transfer Execution States (within inspect modal)
-  const [transferProvider, setTransferProvider] = useState('wise')
-  const [transferAccountNum, setTransferAccountNum] = useState('')
-  const [transferIban, setTransferIban] = useState('')
-  const [transferBankName, setTransferBankName] = useState('')
-  const [transferAdminNote, setTransferAdminNote] = useState('')
-  const [executingTransfer, setExecutingTransfer] = useState(false)
-  const [transferError, setTransferError] = useState('')
-  const [transferSuccess, setTransferSuccess] = useState('')
-
   // Settings Modal State
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState('general') // 'general' | 'pkr_usd' | 'international' | 'couriers'
@@ -289,13 +279,6 @@ export default function WalletsRequestsPage() {
 
   const handleOpenInspect = (request) => {
     setInspectRequest(request)
-    setTransferProvider(request.paymentMethod || 'wise')
-    setTransferAccountNum(request.clientAccountNumber || '')
-    setTransferIban(request.clientIban || '')
-    setTransferBankName(request.clientBankName || '')
-    setTransferAdminNote('')
-    setTransferError('')
-    setTransferSuccess('')
   }
 
   const handleApprove = async (id, netAmount) => {
@@ -338,46 +321,6 @@ export default function WalletsRequestsPage() {
       setError(getErrorMessage(err, 'Failed to reject request.'))
     } finally {
       setBusyId('')
-    }
-  }
-
-  const handleExecuteTransfer = async (id) => {
-    if (!transferAccountNum.trim() && !transferIban.trim()) {
-      setTransferError('Please enter client account number, email or IBAN to execute real transfer.')
-      return
-    }
-
-    if (
-      !window.confirm(
-        `Execute REAL payment transfer of $${Number(inspectRequest.amount).toFixed(2)} USD to client account (${transferAccountNum || transferIban}) via ${transferProvider.toUpperCase()}? This will transfer funds directly to client and credit their wallet balance.`,
-      )
-    ) {
-      return
-    }
-
-    setExecutingTransfer(true)
-    setTransferError('')
-    setTransferSuccess('')
-    try {
-      const res = await adminApi.transferRealPayment(id, {
-        provider: transferProvider,
-        accountNumber: transferAccountNum.trim(),
-        iban: transferIban.trim(),
-        bankName: transferBankName.trim(),
-        adminNote: transferAdminNote.trim(),
-      })
-      setTransferSuccess(
-        `✓ Real payment transfer executed! Transaction Ref: ${res.transfer?.transferRef || 'CONFIRMED'}. Client wallet credited +$${Number(inspectRequest.amount).toFixed(2)} USD.`,
-      )
-      setSuccess(`Real payment transferred to ${inspectRequest.user} via ${transferProvider.toUpperCase()}!`)
-      if (res.request) {
-        setInspectRequest(res.request)
-      }
-      await loadRequests()
-    } catch (err) {
-      setTransferError(getErrorMessage(err, 'Payment transfer execution failed.'))
-    } finally {
-      setExecutingTransfer(false)
     }
   }
 

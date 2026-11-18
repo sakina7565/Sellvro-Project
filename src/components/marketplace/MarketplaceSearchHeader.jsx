@@ -76,7 +76,7 @@ function MarketplaceSearchHeader({
 
   return (
     <div className="border-b border-slate-200 bg-white py-3 sm:py-3.5">
-      <div className="mx-auto flex max-w-7xl items-center gap-2.5 px-4 sm:px-6 md:gap-4">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-2.5 px-4 sm:px-6 md:flex-nowrap md:gap-4">
         {/* Brand Logo */}
         <Link to="/" className="shrink-0 flex items-center">
           <Logo size="lg" className="h-7 sm:h-9 w-auto" />
@@ -137,7 +137,8 @@ function MarketplaceSearchHeader({
         </div>
 
         {/* Main eBay-Style Unified Search Bar */}
-        <form onSubmit={handleSubmit} className="flex flex-1 items-center min-w-0">
+        {/* Below md the search bar takes its own row so its button never overlaps Sign In / Register */}
+        <form onSubmit={handleSubmit} className="order-last flex basis-full items-center min-w-0 md:order-none md:flex-1">
           <div className="flex w-full items-center rounded-full border-2 border-slate-900 focus-within:border-blue-600 bg-white transition-all shadow-xs">
             {/* Search Input */}
             <div className="relative flex flex-1 items-center pl-3.5 sm:pl-4 min-w-0">
@@ -198,7 +199,7 @@ function MarketplaceSearchHeader({
         </form>
 
         {/* Client Login & Register Quick Actions right in the Search Header */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2 shrink-0 md:ml-0">
           {isAuthenticated ? (
             <Link
               to={dashboardPath}

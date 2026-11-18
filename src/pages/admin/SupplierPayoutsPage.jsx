@@ -450,7 +450,7 @@ Status: VERIFIED & COMPLETED
                 if (viewMode === 'orders') {
                   if (ordersPreviousView === 'pending-weeks') {
                     setViewMode('directory')
-                    setActiveTab('pending-weeks')
+                    setDirectoryFilter('mature') // the "pending weeks" tab (same mapping as ?tab=pending-weeks)
                   } else if (ordersPreviousView === 'weeks' && selectedMonthObj) {
                     setViewMode('weeks')
                   } else {

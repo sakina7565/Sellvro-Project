@@ -3,7 +3,8 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const apiPort = env.PORT || process.env.PORT || 5001
+  // Same default as server/server.js so `npm run dev:all` works without a PORT in .env
+  const apiPort = env.PORT || process.env.PORT || 5000
 
   return {
     plugins: [react()],

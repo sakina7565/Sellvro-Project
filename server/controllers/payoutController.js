@@ -1041,11 +1041,13 @@ export const executeSupplierPayout = async (req, res) => {
     }
 
     if (Array.isArray(parsedOrderIds) && parsedOrderIds.length > 0) {
-      targetOrders = await Order.find({
+      const requestedOrders = await Order.find({
         _id: { $in: parsedOrderIds },
         supplier: supplierId,
         payoutStatus: { $ne: 'processed' },
       })
+      // Same rule as the month/all branches: only delivered, matured, non-cancelled orders are payable.
+      targetOrders = requestedOrders.filter((o) => isOrderMature(o))
     } else if (monthKey) {
       const allSupOrders = await Order.find({
         supplier: supplierId,

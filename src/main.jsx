@@ -1,18 +1,22 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter, useLocation } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { DisputeNotificationProvider } from './context/DisputeNotificationContext.jsx'
 import ToastStack from './components/ui/ToastStack.jsx'
+import ErrorBoundary from './components/ui/ErrorBoundary.jsx'
 import { useDisputeNotifications } from './context/DisputeNotificationContext.jsx'
 import './index.css'
 import App from './App.jsx'
 
 function AppShell() {
   const { toasts, dismissToast } = useDisputeNotifications()
+  const { pathname } = useLocation()
   return (
     <>
-      <App />
+      <ErrorBoundary resetKey={pathname}>
+        <App />
+      </ErrorBoundary>
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </>
   )

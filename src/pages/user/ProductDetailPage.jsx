@@ -72,10 +72,8 @@ function PaymentBadges() {
 }
 
 function ProductDetailPage() {
-  const { id } = useParams()
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { user, isAuthenticated } = useAuth()
+  const { user } = useAuth()
 
   const isAdminPreview =
     searchParams.get('preview') === 'admin' ||
@@ -97,6 +95,20 @@ function ProductDetailPage() {
   if (user?.role === 'admin' && !isAdminPreview) {
     return <Navigate to="/admin/dashboard" replace />
   }
+
+  return <ProductDetailContent />
+}
+
+// Separate component so the role redirects above never change the hook order of the page.
+function ProductDetailContent() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const { user, isAuthenticated } = useAuth()
+
+  const isAdminPreview =
+    searchParams.get('preview') === 'admin' ||
+    sessionStorage.getItem('sellvro_admin_preview') === '1'
 
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)

@@ -2,7 +2,6 @@ import WalletRequest from '../models/WalletRequest.js'
 import BusinessProfile from '../models/BusinessProfile.js'
 import User from '../models/User.js'
 import WalletSetting from '../models/WalletSetting.js'
-import { executeRealPaymentTransfer } from '../services/paymentTransferService.js'
 import { getNextWalletTxId } from '../services/sequenceService.js'
 import { logAdminAction } from '../utils/auditLogger.js'
 

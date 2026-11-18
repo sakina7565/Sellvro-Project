@@ -27,7 +27,7 @@ function MarketplaceHeroCarousel() {
 
   return (
     <section className="relative z-0 mx-auto mt-4 max-w-7xl px-4 sm:px-6">
-      <div className="relative h-[340px] sm:h-[400px] md:h-[440px] w-full overflow-hidden rounded-2xl bg-slate-900 shadow-md">
+      <div className="relative h-[380px] sm:h-[400px] md:h-[440px] w-full overflow-hidden rounded-2xl bg-slate-900 shadow-md">
         {/* Background Image with Overlay */}
         <div className="absolute inset-0">
           <img
@@ -39,7 +39,8 @@ function MarketplaceHeroCarousel() {
         </div>
 
         {/* Content Box */}
-        <div className="relative z-10 flex h-full max-w-2xl flex-col justify-center px-6 sm:px-12 text-white">
+        {/* pb-12 on phones keeps the wrapped buttons clear of the slide controls at the bottom */}
+        <div className="relative z-10 flex h-full max-w-2xl flex-col justify-center px-6 pb-12 sm:px-12 sm:pb-0 text-white">
           <div className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold tracking-wider uppercase text-blue-200 backdrop-blur-md">
             <ShieldCheck className="h-3.5 w-3.5 text-blue-400" />
             <span>{slide.tag}</span>

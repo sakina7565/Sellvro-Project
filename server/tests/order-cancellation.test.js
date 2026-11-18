@@ -241,6 +241,8 @@ test('Order Cancellation: Admin approval within 12h cancels order and executes r
     }),
   }))
   stub(User, 'findById', async () => dummyBuyer)
+  // Atomic claim on the order before refunding (prevents double approval)
+  stub(Order, 'updateOne', async () => ({ modifiedCount: 1 }))
   stub(Product, 'findById', async () => ({ quantity: 5, save: async () => {} }))
   stub(Dispute, 'updateMany', async () => ({}))
 
@@ -345,6 +347,8 @@ test('Order Cancellation Refund: Full breakdown created with supplier reversed a
     }),
   }))
   stub(User, 'findById', async () => dummyBuyer)
+  // Atomic claim on the order before refunding (prevents double approval)
+  stub(Order, 'updateOne', async () => ({ modifiedCount: 1 }))
   stub(Product, 'findById', async () => ({ quantity: 10, save: async () => {} }))
   stub(Dispute, 'updateMany', async () => ({}))
   stub(WalletRequest, 'create', async (doc) => {

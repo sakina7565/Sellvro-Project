@@ -691,7 +691,7 @@ function UserOrdersPage() {
       {/* Enter Real Courier Tracking Modal */}
       {updateTrackingModalOrder && (
         <UserUpdateTrackingModal
-          order={updateTrackingOrder || updateTrackingModalOrder}
+          order={updateTrackingModalOrder}
           open={Boolean(updateTrackingModalOrder)}
           onClose={() => setUpdateTrackingModalOrder(null)}
           onSuccess={(msg) => {
