@@ -22,14 +22,6 @@ function statusTone(status) {
   return 'neutral'
 }
 
-function Field({ label, children }) {
-  return (
-    <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</dt>
-      <dd className="mt-1 whitespace-pre-line text-sm font-medium text-slate-700">{children}</dd>
-    </div>
-  )
-}
 
 /**
  * Side drawer showing full order details for admin / user / supplier.
@@ -319,7 +311,7 @@ function OrderDetailDrawer({
 
                   <div className="rounded-lg bg-white/80 border border-amber-200 p-3 text-xs text-slate-800">
                     <span className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide">Cancellation Reason</span>
-                    <p className="mt-1 font-medium italic">"{order.cancellationRequest?.reason || 'No detailed reason provided'}"</p>
+                    <p className="mt-1 font-medium italic">&quot;{order.cancellationRequest?.reason || 'No detailed reason provided'}&quot;</p>
                     <span className="mt-2 block text-[10px] text-slate-400">Order placed {hoursElapsed} hours ago. Strict policy allows cancellation only within 12 hours.</span>
                   </div>
 

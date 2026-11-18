@@ -6,8 +6,8 @@ import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import mongoose from 'mongoose'
-import connectDB, { isDbConnected } from './config/db.js'
-import { checkMySQLConnection, getMySQLStatus } from './config/mysql.js'
+import connectDB from './config/db.js'
+import { checkMySQLConnection } from './config/mysql.js'
 import authRoutes from './routes/authRoutes.js'
 import businessRoutes from './routes/businessRoutes.js'
 import adminRoutes from './routes/adminRoutes.js'
@@ -33,7 +33,6 @@ const PORT = process.env.PORT || 5000
 app.set('trust proxy', 1)
 
 let dbStatus = 'connecting'
-let dbMessage = 'Connecting to MongoDB Atlas...'
 
 app.disable('x-powered-by')
 
@@ -177,13 +176,11 @@ checkMySQLConnection().catch(() => { })
 connectDB()
   .then((conn) => {
     dbStatus = 'connected'
-    dbMessage = `Connected to ${conn.connection.host}`
     console.log(`MongoDB connected successfully: ${conn.connection.host}`)
   })
   .catch((error) => {
     dbStatus = 'error'
     const msg = error.message || String(error)
-    dbMessage = msg
     console.error('MongoDB connection error:', msg)
 
     if (msg.toLowerCase().includes('bad auth') || msg.toLowerCase().includes('authentication failed')) {

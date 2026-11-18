@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { AlertCircle, Ban, Clock, ShieldAlert, Wallet, X } from 'lucide-react'
+import { AlertCircle, Ban, Clock, ShieldAlert, X } from 'lucide-react'
 import Button from '../ui/Button.jsx'
 import { getErrorMessage, orderApi } from '../../lib/api.js'
 import { useAuth } from '../../context/AuthContext.jsx'

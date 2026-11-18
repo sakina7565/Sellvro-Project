@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Search, ChevronDown, SlidersHorizontal, Check, User, LayoutDashboard, LogIn, UserPlus } from 'lucide-react'
+import { Search, ChevronDown, SlidersHorizontal, Check, LogIn, UserPlus } from 'lucide-react'
 import Logo from '../ui/Logo.jsx'
 import { MARKETPLACE_CATEGORIES } from './marketplaceData.js'
 import { useAuth } from '../../context/AuthContext.jsx'

@@ -207,7 +207,7 @@ export const createDispute = async (req, res) => {
     let disputeNo = ''
     try {
       disputeNo = await getNextDisputeNo()
-    } catch (err) {
+    } catch {
       const yy = now.getFullYear().toString().slice(-2)
       disputeNo = `${yy}-D-${String(Date.now()).slice(-4)}`
     }
@@ -447,7 +447,7 @@ export const resolveDispute = async (req, res) => {
           let refundTxId = ''
           try {
             refundTxId = await getNextWalletTxId()
-          } catch (_txErr) {
+          } catch {
             refundTxId = `26-W-${Date.now().toString().slice(-5)}`
           }
           order.refundTxId = refundTxId

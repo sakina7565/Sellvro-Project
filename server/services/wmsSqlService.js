@@ -104,7 +104,7 @@ export async function ensureSupplierColumns() {
       if (!colNames.includes(col.name)) {
         try {
           await queryWms(`ALTER TABLE supplier_business_details ADD COLUMN \`${col.name}\` ${col.type}`)
-        } catch (addErr) {
+        } catch {
           // Ignore if already added concurrently
         }
       }
@@ -678,7 +678,7 @@ export async function createWmsFulfillmentRequest({
       if (invRows && invRows.length > 0 && invRows[0].location_id) {
         targetLocationId = invRows[0].location_id
       }
-    } catch (_) { }
+    } catch { /* ignore */ }
   }
   if (!targetLocationId) targetLocationId = 2 // default to Section B
 

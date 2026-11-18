@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { LogOut, User, LayoutDashboard } from 'lucide-react'
+import { LogOut, LayoutDashboard } from 'lucide-react'
 import Logo from '../ui/Logo.jsx'
 import Button from '../ui/Button.jsx'
 import UserAvatar from '../ui/UserAvatar.jsx'

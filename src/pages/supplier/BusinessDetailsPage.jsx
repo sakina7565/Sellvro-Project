@@ -17,7 +17,6 @@ import {
   CreditCard,
   FileBadge,
   Check,
-  ExternalLink,
   X,
   FileText,
   Clock,
@@ -25,7 +24,6 @@ import {
   XCircle,
   Briefcase,
   Globe,
-  Zap,
 } from 'lucide-react'
 import OnboardingLayout from '../../components/layout/OnboardingLayout.jsx'
 import Card from '../../components/ui/Card.jsx'
@@ -557,7 +555,7 @@ function SupplierBusinessDetailsPage() {
                   Admin Verification Controls
                 </span>
                 <p className="text-xs text-teal-900">
-                  Review the 4 verification sections below. You can approve or reject this supplier's marketplace access directly.
+                  Review the 4 verification sections below. You can approve or reject this supplier&apos;s marketplace access directly.
                 </p>
               </div>
 

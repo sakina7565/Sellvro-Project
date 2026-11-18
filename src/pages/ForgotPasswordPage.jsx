@@ -221,7 +221,7 @@ function ForgotPasswordPage() {
             </div>
             <h1 className="text-xl font-bold text-slate-900">Check Your Email</h1>
             <p className="mt-1 text-xs text-slate-500">
-              We've sent a 6-digit verification code to <strong className="text-slate-800">{email}</strong>.
+              We&apos;ve sent a 6-digit verification code to <strong className="text-slate-800">{email}</strong>.
             </p>
           </div>
 
@@ -255,7 +255,7 @@ function ForgotPasswordPage() {
             </Button>
 
             <div className="flex items-center justify-between pt-2 text-xs text-slate-500">
-              <span>Didn't receive code?</span>
+              <span>Didn&apos;t receive code?</span>
               <button
                 type="button"
                 onClick={handleResendCode}

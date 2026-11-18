@@ -1,6 +1,5 @@
 import {
   createWmsFulfillmentRequest,
-  deductWmsInventoryStock,
   updateWmsOrderTracking,
   cancelWmsOrder,
   findWmsUserByEmail,
@@ -10,10 +9,7 @@ import {
   pushOrderToLiveWmsApi,
   fetchLiveWmsOrderTracking,
 } from '../services/wmsApiService.js'
-import {
-  getOfficialCourierTrackingUrl,
-  queryLiveCarrierTracking,
-} from '../services/trackingApiService.js'
+import { queryLiveCarrierTracking } from '../services/trackingApiService.js'
 import {
   parseUploadedLabelFile,
   parseLabelDetails,
@@ -33,7 +29,7 @@ import { getNextOrderNo, getNextWalletTxId } from '../services/sequenceService.j
 async function generateOrderNo() {
   try {
     return await getNextOrderNo()
-  } catch (err) {
+  } catch {
     const yy = new Date().getFullYear().toString().slice(-2)
     return `${yy}-SV-${String(Date.now()).slice(-5)}`
   }
@@ -122,8 +118,6 @@ async function pushOrderToWmsApi({
   orderNo,
   product,
   quantity,
-  unitPrice,
-  total,
   shippingAddress,
   shippingLabelUrl,
   brandLabel,
@@ -132,9 +126,6 @@ async function pushOrderToWmsApi({
   carrier,
   trackingNumber,
 }) {
-  const wmsToken = supplier?.wmsToken || process.env.WMS_API_TOKEN || process.env.WMS_SUPPLIER_TOKEN || ''
-  const baseUrl = process.env.WMS_BASE_URL || 'https://wmsbysellvro.com'
-  const endpoint = `${baseUrl}/api/supplier/orders`
 
   const customerName = String(shippingAddress?.fullName || 'Customer').trim()
   const customerPhone = String(shippingAddress?.phone || '').trim()
@@ -212,13 +203,13 @@ async function pushOrderToWmsApi({
       try {
         const wmsByEmail = await findWmsUserByEmail(supplier.email)
         if (wmsByEmail?.id) clientId = wmsByEmail.id
-      } catch (_) { }
+      } catch { /* ignore */ }
     }
     if (!clientId && supplierCode) {
       try {
         const wmsByCode = await findWmsUserByUniqueName(supplierCode)
         if (wmsByCode?.id) clientId = wmsByCode.id
-      } catch (_) { }
+      } catch { /* ignore */ }
     }
     if (!clientId) {
       clientId = 36
@@ -1994,7 +1985,7 @@ export const approveOrderCancellation = async (req, res) => {
 
         try {
           refundTxId = await getNextWalletTxId()
-        } catch (_txErr) {
+        } catch {
           refundTxId = `26-W-${Date.now().toString().slice(-5)}`
         }
         order.refundTxId = refundTxId

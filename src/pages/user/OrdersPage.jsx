@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertCircle, Ban, Building2, Check, CheckCircle2, Copy, Eye, FileText, Plus, Printer, Search, Star, Truck, Warehouse } from 'lucide-react'
+import { Ban, Building2, Check, CheckCircle2, Copy, Eye, Plus, Printer, Search, Star, Truck, Warehouse } from 'lucide-react'
 import UserLayout from '../../components/layout/UserLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import OrderDetailDrawer from '../../components/orders/OrderDetailDrawer.jsx'

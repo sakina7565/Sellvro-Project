@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertCircle, CheckCircle2, ChevronDown, PackageCheck, Sparkles, Truck, X } from 'lucide-react'
+import { AlertCircle, CheckCircle2, PackageCheck, Sparkles, Truck, X } from 'lucide-react'
 import Button from '../ui/Button.jsx'
 import { POPULAR_COURIERS, generateAutomatedTrackingId, validateCarrierTracking } from '../../lib/courierHelpers.js'
 import { getErrorMessage, orderApi } from '../../lib/api.js'

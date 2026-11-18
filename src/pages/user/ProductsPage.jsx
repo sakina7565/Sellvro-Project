@@ -139,7 +139,7 @@ function UserProductsPage() {
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 text-primary shrink-0" />
             <span>
-              Searching for <strong className="font-semibold text-primary-950">"{appliedQuery}"</strong> ({products.length} results found)
+              Searching for <strong className="font-semibold text-primary-950">&quot;{appliedQuery}&quot;</strong> ({products.length} results found)
             </span>
           </div>
           <button

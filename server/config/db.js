@@ -5,7 +5,7 @@ import mongoose from 'mongoose'
 if (typeof dns.setDefaultResultOrder === 'function') {
   try {
     dns.setDefaultResultOrder('ipv4first')
-  } catch (e) {
+  } catch {
     // Ignore if not supported in current environment
   }
 }

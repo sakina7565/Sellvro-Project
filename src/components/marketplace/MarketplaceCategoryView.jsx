@@ -6,21 +6,16 @@ import {
   Warehouse,
   Star,
   Check,
-  CheckCircle,
-  SlidersHorizontal,
   LayoutGrid,
   List,
   ArrowRight,
-  ShieldCheck,
   Truck,
   RotateCcw,
   Sparkles,
   Search,
-  ExternalLink,
-  ChevronDown,
 } from 'lucide-react'
 import { mediaUrl } from '../../lib/api.js'
-import { FEATURED_DEALS, MARKETPLACE_CATEGORIES } from './marketplaceData.js'
+import { FEATURED_DEALS } from './marketplaceData.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 
 // Subcategory mappings for major categories (matching eBay's taxonomy in the user screenshot)
@@ -518,7 +513,7 @@ export default function MarketplaceCategoryView({
         {searchQuery && (
           <>
             <ChevronRight className="h-3 w-3 text-slate-400" />
-            <span className="font-bold text-slate-900">Search: "{searchQuery}"</span>
+            <span className="font-bold text-slate-900">Search: &quot;{searchQuery}&quot;</span>
           </>
         )}
       </nav>

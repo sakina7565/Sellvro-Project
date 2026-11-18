@@ -7,33 +7,17 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronRight as ChevronNext,
-  Copy,
   Check,
-  CheckCircle2,
-  ExternalLink,
-  Eye,
   Heart,
-  HelpCircle,
   Info,
   LayoutDashboard,
   Maximize2,
-  MessageSquare,
   Lock,
-  Minus,
-  Package,
-  Plus,
-  RotateCcw,
-  Scale,
   Share2,
   ShieldCheck,
-  ShoppingCart,
   Sparkles,
   Star,
-  Store,
-  Tag,
-  ThumbsUp,
   Truck,
-  Warehouse,
   TrendingUp,
   X,
   Zap,
@@ -41,7 +25,6 @@ import {
 import MarketplaceTopBar from '../../components/marketplace/MarketplaceTopBar.jsx'
 import MarketplaceSearchHeader from '../../components/marketplace/MarketplaceSearchHeader.jsx'
 import MarketplaceFooter from '../../components/marketplace/MarketplaceFooter.jsx'
-import Card from '../../components/ui/Card.jsx'
 import Button from '../../components/ui/Button.jsx'
 import { productApi, mediaUrl, getErrorMessage } from '../../lib/api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -287,13 +270,7 @@ function ProductDetailContent() {
     product?.storageLocation === 'warehouse',
   )
 
-  const handleDecrease = () => {
-    setQuantity((prev) => Math.max(1, prev - 1))
-  }
 
-  const handleIncrease = () => {
-    setQuantity((prev) => Math.min(maxStock, prev + 1))
-  }
 
   const handleQuantityChange = (e) => {
     const val = parseInt(e.target.value, 10)

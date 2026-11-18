@@ -1,8 +1,6 @@
 import {
-  generateNextWmsSku,
   checkWmsSkuExists,
   createWmsProduct,
-  getWmsApprovedProducts,
   getWmsLiveStockBySku,
   findWmsUserByEmail,
 } from '../services/wmsSqlService.js'
@@ -22,14 +20,6 @@ import { getImageDimensionsFromFile } from '../utils/imageDimensions.js'
 const PLACEHOLDER_IMAGE =
   'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80'
 
-function generateSku() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let suffix = ''
-  for (let i = 0; i < 6; i += 1) {
-    suffix += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return `SVRO-${suffix}`
-}
 
 async function uniqueSku(preferred, excludeId = null) {
   const candidate = preferred?.trim().toUpperCase()
@@ -153,7 +143,7 @@ function cleanupUploadedFiles(files) {
   for (const file of files) {
     try {
       if (file.path && fs.existsSync(file.path)) fs.unlinkSync(file.path)
-    } catch (_) {}
+    } catch { /* ignore */ }
   }
 }
 

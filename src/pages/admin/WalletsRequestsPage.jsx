@@ -11,16 +11,11 @@ import {
   Eye,
   User,
   Truck,
-  Send,
   Zap,
   Globe,
   Building,
-  Smartphone,
   CreditCard,
   Copy,
-  AlertCircle,
-  HelpCircle,
-  Package,
   RotateCcw,
 } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'

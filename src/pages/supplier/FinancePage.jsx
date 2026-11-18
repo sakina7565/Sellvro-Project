@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { User, Briefcase, HandCoins, DollarSign, Percent, TrendingDown, ArrowDownRight } from 'lucide-react'
+import { Briefcase, HandCoins, DollarSign, TrendingDown } from 'lucide-react'
 import SupplierLayout from '../../components/layout/SupplierLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import StatCard from '../../components/dashboard/StatCard.jsx'

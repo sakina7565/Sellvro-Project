@@ -12,7 +12,6 @@ function parseMaxAgeMs() {
 }
 
 export function getAuthCookieOptions(req) {
-  const isProd = process.env.NODE_ENV === 'production'
   const isHttps = req ? (req.secure || req.headers?.['x-forwarded-proto'] === 'https') : false
 
   return {

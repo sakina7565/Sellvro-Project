@@ -1,21 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import {
   AlertCircle,
   ArrowLeft,
-  Award,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
-  Filter,
   Heart,
-  Info,
   Mail,
-  MapPin,
   Menu,
-  MessageSquare,
   MoreVertical,
   Package,
   Pause,
@@ -24,13 +18,7 @@ import {
   Share2,
   ShieldCheck,
   ShoppingBag,
-  Sparkles,
-  Store,
-  Tag,
-  Truck,
-  Warehouse,
   X,
-  Zap,
 } from 'lucide-react'
 import UserLayout from '../../components/layout/UserLayout.jsx'
 import Button from '../../components/ui/Button.jsx'
@@ -43,8 +31,6 @@ const ITEMS_PER_PAGE = 12
 
 function UserStorePage() {
   const { supplierId } = useParams()
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
 
   const [store, setStore] = useState(null)
   const [products, setProducts] = useState([])
@@ -60,7 +46,7 @@ function UserStorePage() {
   const [sortOption, setSortOption] = useState('best-match')
   const [filterFormat, setFilterFormat] = useState('all') // 'all', 'wms', 'direct'
   const [filterCondition, setFilterCondition] = useState('all') // 'all', 'new', 'wms-inspected'
-  const [filterShipping, setFilterShipping] = useState('all') // 'all', 'free'
+   // 'all', 'free'
 
   // Categories Dropdown State
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false)
@@ -78,7 +64,6 @@ function UserStorePage() {
   const [currentPage, setCurrentPage] = useState(1)
 
   // Quick View / Action Modal State
-  const [quickViewProduct, setQuickViewProduct] = useState(null)
 
   // Watchlisted product IDs
   const [watchedProductIds, setWatchedProductIds] = useState(new Set())

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Heart, ChevronRight, Warehouse, Star, CheckCircle, Lock } from 'lucide-react'
+import { Heart, ChevronRight, Warehouse, CheckCircle } from 'lucide-react'
 import { FEATURED_DEALS } from './marketplaceData.js'
 import { mediaUrl } from '../../lib/api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -72,7 +72,7 @@ function MarketplaceDeals({ products = [], activeCategory = 'All Categories', ac
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-              Today's Deals
+              Today&apos;s Deals
             </h2>
             <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-[11px] font-bold text-red-700">
               Hot B2B Offers

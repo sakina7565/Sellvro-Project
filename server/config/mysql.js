@@ -6,7 +6,7 @@ let mysql = null
 try {
   const mod = await import('mysql2/promise')
   mysql = mod.default || mod
-} catch (err) {
+} catch {
   // Graceful fallback if mysql2 is not installed in production node_modules
   mysql = null
 }

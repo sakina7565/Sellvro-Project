@@ -18,7 +18,7 @@ function readStoredUser() {
   } catch {
     try {
       if (typeof window !== 'undefined') localStorage.removeItem(USER_KEY)
-    } catch { }
+    } catch { /* ignore */ }
     return null
   }
 }
@@ -31,12 +31,12 @@ export function AuthProvider({ children }) {
     if (nextUser && typeof nextUser === 'object' && Object.keys(nextUser).length > 0) {
       try {
         localStorage.setItem(USER_KEY, JSON.stringify(nextUser))
-      } catch { }
+      } catch { /* ignore */ }
       setUser(nextUser)
     } else {
       try {
         localStorage.removeItem(USER_KEY)
-      } catch { }
+      } catch { /* ignore */ }
       setUser(null)
     }
   }, [])

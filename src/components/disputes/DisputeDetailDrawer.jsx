@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertCircle, AlertTriangle, ArrowRight, Ban, Check, Clock, DollarSign, MapPin, Package, ShieldAlert, Store, Truck, User as UserIcon, X, XCircle } from 'lucide-react'
+import { ArrowRight, Check, Clock, DollarSign, MapPin, Package, Store, User as UserIcon, X, XCircle } from 'lucide-react'
 import Badge from '../ui/Badge.jsx'
 import DisputeChatPanel from './DisputeChatPanel.jsx'
 import { getErrorMessage, orderApi } from '../../lib/api.js'
@@ -7,7 +7,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { useDisputeNotifications } from '../../context/DisputeNotificationContext.jsx'
 import { usePolling } from '../../hooks/usePolling.js'
 import { formatAgainstLabel, formatRaisedByLabel, formatPartySummary } from '../../lib/disputeHelpers.js'
-import { formatDisputeId, formatUserId, formatSupplierId } from '../../lib/idFormatters.js'
+import { formatDisputeId } from '../../lib/idFormatters.js'
 
 
 
@@ -119,7 +119,7 @@ export default function DisputeDetailDrawer({
                 },
               }
             }
-          } catch (_) {
+          } catch {
             // silent fallback
           }
         }
@@ -563,7 +563,7 @@ export default function DisputeDetailDrawer({
                             Cancellation Reason Provided by {dispute.fromLabel || 'Requester'}
                           </span>
                           <p className="mt-1 font-semibold text-slate-900 italic">
-                            "{dispute.message || dispute.requests || o.cancellationRequest?.reason}"
+                            &quot;{dispute.message || dispute.requests || o.cancellationRequest?.reason}&quot;
                           </p>
                         </div>
                       )}

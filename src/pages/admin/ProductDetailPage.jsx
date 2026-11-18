@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Check, SquarePen, ArrowLeft, Percent, DollarSign, Sparkles } from 'lucide-react'
+import { Check, SquarePen, ArrowLeft, Percent } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import Card from '../../components/ui/Card.jsx'
 import { adminApi, mediaUrl, getErrorMessage } from '../../lib/api.js'
@@ -14,9 +14,8 @@ function ProductDetailPage() {
   const [activeImageIndex, setActiveImageIndex] = useState(0)
 
   // Commission state and revenue split
-  const [commission, setCommission] = useState('10')
+  const [, setCommission] = useState('10')
   const [commissionSuccess, setCommissionSuccess] = useState('')
-  const [isSavingCommission, setIsSavingCommission] = useState(false)
 
   const loadProduct = async () => {
     setLoading(true)
@@ -279,7 +278,7 @@ function ProductDetailPage() {
                 </div>
 
                 <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">
-                  Commission is automatically assigned from the <strong>"{product.category || 'General'}"</strong> category. When an order is placed, this rate ({product.commission || 8}%) is deducted and retained by Sellvro, and the remainder is credited to the supplier.
+                  Commission is automatically assigned from the <strong>&quot;{product.category || 'General'}&quot;</strong> category. When an order is placed, this rate ({product.commission || 8}%) is deducted and retained by Sellvro, and the remainder is credited to the supplier.
                 </p>
 
                 <p className="mt-1 text-[11px] text-slate-400">

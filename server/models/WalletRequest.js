@@ -156,7 +156,7 @@ walletRequestSchema.pre('save', async function setTransactionId(next) {
     try {
       const { getNextWalletTxId } = await import('../services/sequenceService.js')
       this.transactionId = await getNextWalletTxId()
-    } catch (err) {
+    } catch {
       const yy = new Date().getFullYear().toString().slice(-2)
       const num = 10001 + (parseInt(this._id ? this._id.toString().slice(-4) : '10001', 16) % 89999)
       this.transactionId = `${yy}-W-${String(num).slice(-5)}`

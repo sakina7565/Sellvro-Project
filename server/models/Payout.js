@@ -99,7 +99,7 @@ payoutSchema.pre('save', async function setPayoutNo(next) {
     try {
       const { getNextPayoutNo } = await import('../services/sequenceService.js')
       this.payoutNo = await getNextPayoutNo()
-    } catch (err) {
+    } catch {
       const yy = new Date().getFullYear().toString().slice(-2)
       const num = 10001 + (parseInt(this._id ? this._id.toString().slice(-4) : '10001', 16) % 89999)
       this.payoutNo = `${yy}-P-${String(num).slice(-5)}`

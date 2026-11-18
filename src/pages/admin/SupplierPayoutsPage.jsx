@@ -10,20 +10,10 @@ import {
   Clock,
   Copy,
   DollarSign,
-  ExternalLink,
   Eye,
-  FileText,
-  Filter,
-  Image,
-  Layers,
-  Receipt,
   RefreshCw,
   Search,
   Share2,
-  ShieldCheck,
-  Tag,
-  Upload,
-  User,
   Wallet,
   X,
   Pencil,
@@ -62,7 +52,7 @@ function SupplierPayoutsPage() {
   // WEEKLY PAYOUTS STREAM & QUEUE
   // -------------------------------------------------------------
   const [pendingWeeks, setPendingWeeks] = useState([])
-  const [pendingWeeksSummary, setPendingWeeksSummary] = useState({
+  const [, setPendingWeeksSummary] = useState({
     totalActionableAmount: 0,
     actionableWeeksCount: 0,
     distinctSuppliersCount: 0,
@@ -1135,7 +1125,7 @@ Status: VERIFIED & COMPLETED
             <div className="border-b border-slate-100 p-4 bg-slate-50/50">
               <h3 className="text-sm font-bold text-slate-900">Weekly Payout Schedule & Delivery Maturity</h3>
               <p className="text-xs text-slate-500">
-                Each weekly cycle resolves to its Saturday release date. Click "Release Weekly Payout" to disburse and upload transaction screenshot.
+                Each weekly cycle resolves to its Saturday release date. Click &quot;Release Weekly Payout&quot; to disburse and upload transaction screenshot.
               </p>
             </div>
 
@@ -1862,7 +1852,7 @@ Status: VERIFIED & COMPLETED
             <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/50 p-2.5 text-xs text-amber-900">
               <p className="font-semibold">Step 1: Direct Bank-to-Bank Transfer</p>
               <p className="mt-0.5 text-[11px] text-amber-800">
-                Transfer the payout amount to the supplier's bank account outside Sellvro. Once completed, enter the bank TID and attach the transfer receipt screenshot below.
+                Transfer the payout amount to the supplier&apos;s bank account outside Sellvro. Once completed, enter the bank TID and attach the transfer receipt screenshot below.
               </p>
             </div>
 

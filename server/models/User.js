@@ -165,7 +165,7 @@ userSchema.pre('save', async function setDisplayIdAndHash(next) {
       } else if (this.role === 'user' || this.role === 'buyer') {
         this.displayId = await getNextUserId()
       }
-    } catch (err) {
+    } catch {
       const num = 1001 + (parseInt(this._id ? this._id.toString().slice(-4) : '1001', 16) % 8999)
       this.displayId = this.role === 'supplier' ? `SPAK-${num}` : `US-${num}`
     }

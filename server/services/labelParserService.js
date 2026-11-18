@@ -1,5 +1,4 @@
 import fs from 'fs'
-import path from 'path'
 
 /**
  * Intelligent Courier Shipping Label Parser
@@ -22,8 +21,9 @@ export function extractLabelTextFromBuffer(buffer, filename = '') {
     // If text file or uncompressed PDF stream
     text = buffer.toString('utf8')
     // Remove binary noise characters
+    // eslint-disable-next-line no-control-regex -- matching control characters is the point: they are PDF binary noise
     text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, ' ')
-  } catch (_) {
+  } catch {
     text = ''
   }
   return `${filename} \n ${text}`

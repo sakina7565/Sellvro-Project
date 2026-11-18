@@ -199,7 +199,7 @@ export function getTrackingProgressPercent(status = '') {
 /**
  * Generates an automated tracking ID for testing/demo environments
  */
-export function generateAutomatedTrackingId(carrierName = 'FedEx', orderNo = '') {
+export function generateAutomatedTrackingId(carrierName = 'FedEx') {
   const c = String(carrierName || '').toLowerCase()
   if (c.includes('ups')) {
     const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'

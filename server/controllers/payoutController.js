@@ -668,7 +668,6 @@ export const getSupplierMonthlyHistory = async (req, res) => {
     const orders = await Order.find({ supplier: supplierId }).populate('product', 'category commission').sort({ createdAt: -1 })
     const payouts = await Payout.find({ supplier: supplierId }).sort({ processedAt: -1, createdAt: -1 })
 
-    const now = Date.now()
 
     // Group orders by month key (YYYY-MM)
     const monthGroups = {}

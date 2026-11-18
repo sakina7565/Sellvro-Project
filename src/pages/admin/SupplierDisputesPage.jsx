@@ -153,7 +153,7 @@ function SupplierDisputesPage() {
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 text-primary shrink-0" />
             <span>
-              Showing disputes for <strong className="font-semibold text-primary-950">"{searchQuery}"</strong> ({filteredDisputes.length} found)
+              Showing disputes for <strong className="font-semibold text-primary-950">&quot;{searchQuery}&quot;</strong> ({filteredDisputes.length} found)
             </span>
           </div>
           <button

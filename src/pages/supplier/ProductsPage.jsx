@@ -26,7 +26,6 @@ import { productApi, getErrorMessage } from '../../lib/api.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import {
   SUPPLIER_PRODUCT_STATUS_FILTER_OPTIONS,
-  PRODUCT_STATUS_HINT,
   PRODUCT_STATUS_LABEL,
   PRODUCT_STATUS_TONE,
   statusFilterToValue,
@@ -286,7 +285,7 @@ function SupplierProductsPage() {
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 text-primary shrink-0" />
             <span>
-              Searching for <strong className="font-semibold text-primary-950">"{searchQuery}"</strong> ({filteredProducts.length} results found)
+              Searching for <strong className="font-semibold text-primary-950">&quot;{searchQuery}&quot;</strong> ({filteredProducts.length} results found)
             </span>
           </div>
           <button

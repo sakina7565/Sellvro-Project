@@ -46,7 +46,7 @@ function LandingPage() {
   const [activeSubcategory, setActiveSubcategory] = useState(subcategoryFromUrl)
   const [categories, setCategories] = useState(MARKETPLACE_CATEGORIES)
   const [liveProducts, setLiveProducts] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [, setLoading] = useState(true)
 
   const dashboardPath = getDashboardPathForUser(user) || '/user/dashboard'
 

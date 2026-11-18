@@ -4,7 +4,6 @@ import {
   Bell,
   ShoppingCart,
   ChevronDown,
-  User,
   LogOut,
   LayoutDashboard,
   Package,

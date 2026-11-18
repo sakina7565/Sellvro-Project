@@ -2,17 +2,14 @@ import { useState } from 'react'
 import {
   Building2,
   Check,
-  CheckCircle2,
   Clock,
   Copy,
   ExternalLink,
   MapPin,
-  Package,
   Truck,
   Warehouse,
   X,
 } from 'lucide-react'
-import Badge from '../ui/Badge.jsx'
 import {
   getCourierExternalTrackingUrl,
   getTrackingProgressPercent,

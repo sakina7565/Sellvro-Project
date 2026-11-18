@@ -13,7 +13,7 @@ function UserOrderConfirmationPage() {
   const { orderId } = useParams()
   const location = useLocation()
   const [order, setOrder] = useState(location.state?.order || null)
-  const [message, setMessage] = useState(location.state?.message || 'Order placed successfully.')
+  const [message] = useState(location.state?.message || 'Order placed successfully.')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(!location.state?.order)
 
