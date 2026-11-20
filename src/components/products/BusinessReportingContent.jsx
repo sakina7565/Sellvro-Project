@@ -1,43 +1,15 @@
 import {
-  Activity,
-  AlertTriangle,
-  ArrowDownRight,
-  ArrowUpRight,
-  BarChart3,
-  Calendar,
-  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  Clock,
-  Coins,
-  CreditCard,
-  DollarSign,
   Download,
-  Eye,
-  EyeOff,
-  FileCheck,
-  FileSpreadsheet,
-  FileText,
-  Filter,
   Grid,
-  HeartPulse,
   HelpCircle,
   Lightbulb,
   Package,
-  RotateCcw,
   Search,
-  Settings,
-  ShieldAlert,
-  ShieldCheck,
-  ShoppingCart,
   SlidersHorizontal,
-  TrendingDown,
-  TrendingUp,
-  Truck,
-  Undo2,
-  Wallet,
   Zap,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -238,7 +210,7 @@ export default function BusinessReportingContent({ panel = 'admin' }) {
   })
 
   // Data Loading
-  const [loading, setLoading] = useState(true)
+  const [, setLoading] = useState(true)
   const [products, setProducts] = useState([])
   const [orders, setOrders] = useState([])
   const [suppliers, setSuppliers] = useState([])

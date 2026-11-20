@@ -1,11 +1,9 @@
 import { useState } from 'react'
 import {
   AlertTriangle,
-  CheckCircle2,
   HelpCircle,
   MessageSquare,
   Send,
-  ShieldAlert,
   Store,
   X,
 } from 'lucide-react'

@@ -1,38 +1,21 @@
 import {
   AlertCircle,
-  ArrowDownRight,
   ArrowRight,
-  ArrowUpRight,
   BarChart3,
-  Box,
-  Calendar,
   CheckCircle2,
   ChevronRight,
-  Clock,
   Copy,
-  DollarSign,
-  Download,
-  ExternalLink,
-  Eye,
-  Filter,
-  Layers,
   MapPin,
   Package,
   PackageCheck,
   PackageSearch,
-  Phone,
   RefreshCw,
   Search,
-  Send,
-  ShieldCheck,
-  ShoppingBag,
   ShoppingCart,
-  TrendingDown,
   TrendingUp,
   Truck,
   User,
   Users,
-  Wallet,
   X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -40,7 +23,7 @@ import { useSearchParams } from 'react-router-dom'
 import Card from '../ui/Card.jsx'
 import Badge from '../ui/Badge.jsx'
 import Button from '../ui/Button.jsx'
-import { adminApi, getErrorMessage, mediaUrl } from '../../lib/api.js'
+import { adminApi, getErrorMessage } from '../../lib/api.js'
 import { formatUserId } from '../../lib/idFormatters.js'
 
 function getUserDisplayId(user) {

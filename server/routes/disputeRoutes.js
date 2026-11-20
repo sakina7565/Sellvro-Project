@@ -7,7 +7,7 @@ import {
   markDisputeRead,
   getUnreadDisputeCount,
 } from '../controllers/disputeController.js'
-import { protect, authorize, requireApproved } from '../middleware/auth.js'
+import { protect, authorize } from '../middleware/auth.js'
 
 const router = Router()
 

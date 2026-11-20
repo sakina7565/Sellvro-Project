@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ShieldCheck, Truck, RefreshCw, ArrowRight } from 'lucide-react'
+import { ShieldCheck, Truck, RefreshCw } from 'lucide-react'
 
 function MarketplacePromoBanner() {
   return (
@@ -42,10 +42,10 @@ function MarketplacePromoBanner() {
               Special B2B Opportunity
             </span>
             <h3 className="mt-3 text-2xl sm:text-3xl font-extrabold tracking-tight">
-              There's a deal for your business, too
+              There&apos;s a deal for your business, too
             </h3>
             <p className="mt-2 text-xs sm:text-sm text-orange-100 max-w-lg">
-              Don't miss a chance to stock high-demand inventory at direct wholesale rates.
+              Don&apos;t miss a chance to stock high-demand inventory at direct wholesale rates.
               Verified suppliers, barcode scanning, and multi-country logistics ready for your store.
             </p>
           </div>

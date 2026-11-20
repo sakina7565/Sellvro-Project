@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import {
   Building2,
   User,
@@ -23,7 +23,6 @@ import {
   XCircle,
   Briefcase,
   Globe,
-  Zap,
 } from 'lucide-react'
 import OnboardingLayout from '../../components/layout/OnboardingLayout.jsx'
 import Card from '../../components/ui/Card.jsx'
@@ -38,7 +37,6 @@ import { validateIban, formatIbanSpaces, POPULAR_BANKS } from '../../utils/ibanV
 
 function UserBusinessDetailsPage() {
   const { user: authUser, updateUser } = useAuth()
-  const navigate = useNavigate()
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)

@@ -202,7 +202,7 @@ disputeSchema.pre('save', async function setDisputeNo(next) {
     try {
       const { getNextDisputeNo } = await import('../services/sequenceService.js')
       this.disputeNo = await getNextDisputeNo()
-    } catch (err) {
+    } catch {
       const yy = new Date().getFullYear().toString().slice(-2)
       const num = 1001 + (parseInt(this._id ? this._id.toString().slice(-4) : '1001', 16) % 8999)
       this.disputeNo = `${yy}-D-${String(num).slice(-4)}`

@@ -1,7 +1,7 @@
 import dotenv from 'dotenv'
 import { trackFedexShipment } from './fedexApiService.js'
-import { trackUpsShipment, getUpsTrackingUrl } from './upsApiService.js'
-import { trackUspsShipment, getUspsTrackingUrl } from './uspsApiService.js'
+import { trackUpsShipment } from './upsApiService.js'
+import { trackUspsShipment } from './uspsApiService.js'
 
 dotenv.config()
 

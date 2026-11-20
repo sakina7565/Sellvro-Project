@@ -13,7 +13,7 @@ import Card from '../../components/ui/Card.jsx'
 import Badge from '../../components/ui/Badge.jsx'
 import IconAction from '../../components/ui/IconAction.jsx'
 import { orderApi, getErrorMessage, mediaUrl } from '../../lib/api.js'
-import { formatSupplierId, formatUserId } from '../../lib/idFormatters.js'
+import { formatUserId } from '../../lib/idFormatters.js'
 
 const TABLE_HEAD = [
   'FR / DISPATCH ID',
@@ -316,9 +316,6 @@ function SupplierViewOrdersPage() {
                 </tr>
               )}
               {filteredOrders.map((order) => {
-                const userDisplay = formatUserId(order.userDisplayId || order.userId)
-                const supplierDisplay = formatSupplierId(order.supplierDisplayId || order.supplierId)
-
                 return (
                   <tr key={order.id} className="border-b border-slate-50 hover:bg-slate-50/50 last:border-0">
                     {/* 1. FR ID / Request Number */}

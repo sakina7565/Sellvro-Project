@@ -1,31 +1,19 @@
 import { useEffect, useState } from 'react'
 import {
   AlertTriangle,
-  ArrowRight,
   Award,
   CheckCircle2,
   Clock,
-  Eye,
   FileText,
-  Filter,
-  Flame,
-  HelpCircle,
   Package,
   RefreshCw,
   Search,
   ShieldAlert,
-  ShieldCheck,
   Star,
-  Store,
-  ThumbsDown,
-  ThumbsUp,
   Truck,
-  Warehouse,
   X,
   XCircle,
-  Zap,
 } from 'lucide-react'
-import Card from '../ui/Card.jsx'
 import Badge from '../ui/Badge.jsx'
 import Button from '../ui/Button.jsx'
 import { adminApi, getErrorMessage, mediaUrl } from '../../lib/api.js'
@@ -807,7 +795,7 @@ export default function SupplierPerformanceModal({
 
                           {rev.comment ? (
                             <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-700 italic border border-slate-100">
-                              "{rev.comment}"
+                              &quot;{rev.comment}&quot;
                             </p>
                           ) : (
                             <p className="text-[11px] text-slate-400 italic">No written comment provided.</p>
@@ -830,7 +818,7 @@ export default function SupplierPerformanceModal({
                   <div className="flex items-center justify-between border-b border-slate-200 pb-2">
                     <div>
                       <h3 className="text-sm font-bold text-slate-900">
-                        Product Reviews for Supplier's Catalog
+                        Product Reviews for Supplier&apos;s Catalog
                       </h3>
                       <p className="text-xs text-slate-500">
                         Supplier ke products par customers ke diye hue reviews, ratings aur feedback.
@@ -843,7 +831,7 @@ export default function SupplierPerformanceModal({
 
                   {productReviews.length === 0 ? (
                     <div className="py-12 text-center text-slate-400 italic rounded-xl border border-dashed border-slate-200">
-                      No product reviews recorded for this supplier's listings yet.
+                      No product reviews recorded for this supplier&apos;s listings yet.
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -896,7 +884,7 @@ export default function SupplierPerformanceModal({
                                   </div>
                                 </div>
                                 {r.comment && (
-                                  <p className="text-[11px] text-slate-600 italic">"{r.comment}"</p>
+                                  <p className="text-[11px] text-slate-600 italic">&quot;{r.comment}&quot;</p>
                                 )}
                                 <div className="text-[10px] text-slate-400 flex justify-between pt-1">
                                   <span>Order #{r.orderNo}</span>

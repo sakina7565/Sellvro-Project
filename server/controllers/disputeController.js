@@ -6,6 +6,7 @@ import User from '../models/User.js'
 import WalletRequest from '../models/WalletRequest.js'
 import { getNextDisputeNo, getNextWalletTxId } from '../services/sequenceService.js'
 import { createNotification } from '../utils/notifications.js'
+import { logAdminAction } from '../utils/auditLogger.js'
 import { cancelWmsOrder } from '../services/wmsSqlService.js'
 
 async function populateDispute(query) {
@@ -206,7 +207,7 @@ export const createDispute = async (req, res) => {
     let disputeNo = ''
     try {
       disputeNo = await getNextDisputeNo()
-    } catch (err) {
+    } catch {
       const yy = now.getFullYear().toString().slice(-2)
       disputeNo = `${yy}-D-${String(Date.now()).slice(-4)}`
     }
@@ -413,10 +414,27 @@ export const resolveDispute = async (req, res) => {
     if (dispute.order && (dispute.type === 'order_cancellation' || req.body.refundBuyer || req.body.outcome === 'refund' || req.body.outcome === 'cancel_order')) {
       const order = await Order.findById(dispute.order._id || dispute.order)
       if (order && !order.isRefunded && order.status !== 'cancelled') {
-        refundAmount = Number(req.body.refundAmount || order.total)
-        if (refundAmount > 0) {
+        // Cash-on-delivery orders were never paid: cancel them, but credit nothing (same rule as updateOrderStatus).
+        const paidUpfront = order.paymentMethod !== 'cod'
+        const orderTotal = Number(order.total || 0)
+        const requestedRefund = Number(req.body.refundAmount || orderTotal)
+        if (paidUpfront && (!Number.isFinite(requestedRefund) || requestedRefund < 0 || requestedRefund > orderTotal + 0.005)) {
+          return res.status(400).json({
+            message: `Refund amount must be between $0 and the order total ($${orderTotal.toFixed(2)}).`,
+          })
+        }
+        refundAmount = paidUpfront ? requestedRefund : 0
+        if (refundAmount > 0 || !paidUpfront) {
+          // Claim the order atomically so a parallel approval/resolution cannot refund it twice.
+          const claim = await Order.updateOne(
+            { _id: order._id, isRefunded: { $ne: true }, status: { $ne: 'cancelled' } },
+            { $set: { isRefunded: true } },
+          )
+          if (!claim.modifiedCount) {
+            return res.status(409).json({ message: 'This order is already being cancelled or refunded.' })
+          }
           const buyerId = order.user?._id || order.user
-          if (buyerId) {
+          if (buyerId && refundAmount > 0) {
             await User.findByIdAndUpdate(buyerId, { $inc: { walletBalance: Number(refundAmount.toFixed(2)) } })
           }
           order.isRefunded = true
@@ -429,7 +447,7 @@ export const resolveDispute = async (req, res) => {
           let refundTxId = ''
           try {
             refundTxId = await getNextWalletTxId()
-          } catch (_txErr) {
+          } catch {
             refundTxId = `26-W-${Date.now().toString().slice(-5)}`
           }
           order.refundTxId = refundTxId
@@ -449,7 +467,9 @@ export const resolveDispute = async (req, res) => {
             title: 'Cancellation Approved via Dispute Resolution',
             location: 'Administration',
             timestamp: new Date(),
-            note: `Dispute ${dispute.disputeNo} resolved by Admin within 12 hours. 100% refund of $${refundAmount.toFixed(2)} credited to customer wallet.`,
+            note: refundAmount > 0
+              ? `Dispute ${dispute.disputeNo} resolved by Admin within 12 hours. Refund of $${refundAmount.toFixed(2)} credited to customer wallet.`
+              : `Dispute ${dispute.disputeNo} resolved by Admin within 12 hours. Cash on Delivery order: no payment was collected, so no refund is due.`,
           })
 
           // Restore product stock
@@ -469,7 +489,7 @@ export const resolveDispute = async (req, res) => {
           const commissionRefunded = Number(Number(order.commission || 0).toFixed(2))
           const supplierAmount = Number((totalRefund - commissionRefunded).toFixed(2))
 
-          await WalletRequest.create({
+          if (refundAmount > 0) await WalletRequest.create({
             transactionId: refundTxId,
             user: buyerId,
             amount: totalRefund,
@@ -494,8 +514,10 @@ export const resolveDispute = async (req, res) => {
             recipient: buyerId,
             targetRole: 'user',
             type: 'order',
-            title: `Order #${order.orderNo} Cancelled & Refunded`,
-            message: `Dispute for Order #${order.orderNo} was resolved. $${refundAmount.toFixed(2)} refunded to your wallet.`,
+            title: refundAmount > 0 ? `Order #${order.orderNo} Cancelled & Refunded` : `Order #${order.orderNo} Cancelled`,
+            message: refundAmount > 0
+              ? `Dispute for Order #${order.orderNo} was resolved. $${refundAmount.toFixed(2)} refunded to your wallet.`
+              : `Dispute for Order #${order.orderNo} was resolved and the order cancelled. As a Cash on Delivery order, no payment was taken, so no refund is due.`,
             link: '/user/orders',
           }).catch(() => { })
 
@@ -515,9 +537,20 @@ export const resolveDispute = async (req, res) => {
 
     await dispute.save()
 
+    await logAdminAction({
+      adminId: req.user?._id,
+      action: 'resolve_dispute',
+      targetType: 'dispute',
+      targetId: dispute._id,
+      details: { disputeNo: dispute.disputeNo, orderCancelled: refundProcessed, refundAmount },
+      ip: req.ip,
+    })
+
     return res.json({
       message: refundProcessed
-        ? `Dispute marked as resolved. $${refundAmount.toFixed(2)} refunded to buyer.`
+        ? refundAmount > 0
+          ? `Dispute marked as resolved. $${refundAmount.toFixed(2)} refunded to buyer.`
+          : 'Dispute marked as resolved. Order cancelled (Cash on Delivery: no refund due).'
         : 'Dispute marked as resolved.',
       dispute: dispute.toSafeObject({ includeMessages: true, viewerId: req.user._id }),
     })

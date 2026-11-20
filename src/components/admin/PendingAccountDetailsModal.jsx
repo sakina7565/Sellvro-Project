@@ -6,16 +6,9 @@ import {
   Mail,
   Phone,
   MapPin,
-  Globe,
   CreditCard,
-  Calendar,
-  DollarSign,
-  Tag,
   CheckCircle2,
   XCircle,
-  FileText,
-  Briefcase,
-  Layers,
   FileBadge,
   ShieldCheck,
   ExternalLink,
@@ -45,17 +38,12 @@ function PendingAccountDetailsModal({
   const name = account.fullName || account.supplier || 'Unnamed User'
   const email = account.email || account.businessEmail || '—'
   const businessName = account.companyName || account.businessName || '—'
-  const businessCategory = account.businessCategory || account.category || '—'
-  const businessDescription = account.businessDescription || 'No description provided by applicant.'
   const phone = account.companyPhone || account.businessPhone || account.phone || 'Not provided'
   const address = account.companyAddress || account.businessAddress || 'Not provided'
   const city = account.city || ''
   const country = account.country || ''
   const location = account.location || [city, country].filter(Boolean).join(', ') || 'Not specified'
-  const orderType = account.orderType || 'Standard'
   const paymentProvider = account.paymentProvider || 'Not configured'
-  const accNumber = account.accNumber || '—'
-  const cardDate = account.cardDate || '—'
   const joined = account.joined || '—'
   const wallet = account.wallet || (account.walletBalance !== undefined ? `$${account.walletBalance}` : '$0')
   const registrationEntity = account.registrationEntity || '—'

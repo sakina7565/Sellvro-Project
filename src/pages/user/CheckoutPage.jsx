@@ -4,14 +4,11 @@ import {
   ArrowLeft,
   Building2,
   CheckCircle2,
-  CreditCard,
   FileText,
   MapPin,
   Minus,
   Plus,
-  Printer,
   Sparkles,
-  Truck,
   Upload,
   Warehouse,
   Wallet,
@@ -620,7 +617,7 @@ export default function UserCheckoutPage() {
                     }`}
                 >
                   <Upload className="h-3.5 w-3.5 text-blue-600" />
-                  Upload Customer's Label (PDF / Image)
+                  Upload Customer&apos;s Label (PDF / Image)
                 </button>
               </div>
 

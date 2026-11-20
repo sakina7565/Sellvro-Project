@@ -9,10 +9,6 @@ import {
   XCircle,
   Check,
   ShieldCheck,
-  TrendingUp,
-  DollarSign,
-  Package,
-  Layers,
   Sparkles,
   BarChart3,
 } from 'lucide-react'
@@ -24,7 +20,6 @@ import MobileCard from '../../components/admin/MobileCard.jsx'
 import DetailRow from '../../components/admin/DetailRow.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Badge from '../../components/ui/Badge.jsx'
-import Button from '../../components/ui/Button.jsx'
 import ProductImage from '../../components/ui/ProductImage.jsx'
 import BarcodeModal from '../../components/admin/BarcodeModal.jsx'
 import CreateDisputeModal from '../../components/admin/CreateDisputeModal.jsx'

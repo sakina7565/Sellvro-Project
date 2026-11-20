@@ -6,8 +6,8 @@ import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import mongoose from 'mongoose'
-import connectDB, { isDbConnected } from './config/db.js'
-import { checkMySQLConnection, getMySQLStatus } from './config/mysql.js'
+import connectDB from './config/db.js'
+import { checkMySQLConnection } from './config/mysql.js'
 import authRoutes from './routes/authRoutes.js'
 import businessRoutes from './routes/businessRoutes.js'
 import adminRoutes from './routes/adminRoutes.js'
@@ -33,15 +33,19 @@ const PORT = process.env.PORT || 5000
 app.set('trust proxy', 1)
 
 let dbStatus = 'connecting'
-let dbMessage = 'Connecting to MongoDB Atlas...'
 
 app.disable('x-powered-by')
 
 // Security headers (M6)
-app.use((_req, res, next) => {
+app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('X-Frame-Options', 'SAMEORIGIN')
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  // Only directives that cannot block the app's scripts, styles, images or Google sign-in.
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'self'; base-uri 'self'; object-src 'none'")
+  if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains')
+  }
   next()
 })
 
@@ -172,13 +176,11 @@ checkMySQLConnection().catch(() => { })
 connectDB()
   .then((conn) => {
     dbStatus = 'connected'
-    dbMessage = `Connected to ${conn.connection.host}`
     console.log(`MongoDB connected successfully: ${conn.connection.host}`)
   })
   .catch((error) => {
     dbStatus = 'error'
     const msg = error.message || String(error)
-    dbMessage = msg
     console.error('MongoDB connection error:', msg)
 
     if (msg.toLowerCase().includes('bad auth') || msg.toLowerCase().includes('authentication failed')) {

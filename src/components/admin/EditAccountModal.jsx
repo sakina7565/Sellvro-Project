@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, Edit3, Building2, User, Lock, Mail, Phone, MapPin, DollarSign, Warehouse } from 'lucide-react'
+import { X, Edit3, Lock, Mail, Phone, MapPin, DollarSign, Warehouse } from 'lucide-react'
 import Button from '../ui/Button.jsx'
 import Input from '../ui/Input.jsx'
 import Select from '../ui/Select.jsx'

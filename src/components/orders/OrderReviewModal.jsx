@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCircle2, ShieldCheck, Sparkles, Star, ThumbsDown, ThumbsUp, Truck, UserCheck, X } from 'lucide-react'
+import { ShieldCheck, Sparkles, Star, ThumbsDown, ThumbsUp, Truck, UserCheck, X } from 'lucide-react'
 import Button from '../ui/Button.jsx'
 import { getErrorMessage, mediaUrl, orderApi } from '../../lib/api.js'
 

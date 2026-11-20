@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import {
   Building2,
   Check,
-  CheckCircle2,
   Clock,
   Copy,
   ExternalLink,
   MapPin,
-  Package,
   Search,
   Truck,
   Warehouse,

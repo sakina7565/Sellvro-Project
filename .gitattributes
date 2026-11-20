@@ -1,0 +1,12 @@
+# Never convert line endings inside binary files (autocrlf would corrupt PDFs)
+*.pdf  binary
+*.docx binary
+*.xlsx binary
+*.zip  binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.mp4  binary

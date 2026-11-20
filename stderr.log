@@ -9302,3 +9302,23 @@ SyntaxError: The requested module '../controllers/walletController.js' does not 
 [2026-11-20T10:26:35.568Z] PORT env: 5001
 [2026-11-20T10:26:35.585Z] HTTP server listening on port/socket: 5001
 [2026-11-20T10:26:40.059Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-20T11:11:53.298Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-20T11:11:53.308Z] === Starting Sellvro on Node.js v22.14.0 (PID: 19164) ===
+[2026-11-20T11:11:53.309Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-20T11:11:53.310Z] NODE_ENV: development
+[2026-11-20T11:11:53.311Z] PASSENGER_APP_ROOT: not set
+[2026-11-20T11:11:53.311Z] PORT env: 5001
+[2026-11-20T11:11:53.327Z] HTTP server listening on port/socket: 5001
+[2026-11-20T11:11:57.258Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-20T11:18:59.115Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-20T11:18:59.124Z] === Starting Sellvro on Node.js v22.14.0 (PID: 18700) ===
+[2026-11-20T11:18:59.125Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-20T11:18:59.126Z] NODE_ENV: development
+[2026-11-20T11:18:59.126Z] PASSENGER_APP_ROOT: not set
+[2026-11-20T11:18:59.127Z] PORT env: 5001
+[2026-11-20T11:18:59.139Z] HTTP server listening on port/socket: 5001
+[2026-11-20T11:18:59.296Z] FATAL: Failed to load server/server.js: SyntaxError: Unexpected token '<<'
+    at compileSourceTextModule (node:internal/modules/esm/utils:338:16)
+    at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:102:18)
+    at #translate (node:internal/modules/esm/loader:468:12)
+    at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:515:27)

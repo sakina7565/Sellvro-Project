@@ -1508,7 +1508,7 @@ export const reinstateSupplierAccount = async (req, res) => {
         message: 'Your supplier account has been reinstated. You may now reactivate your product listings in the portal.',
         type: 'account',
       })
-    } catch {}
+    } catch { /* ignore */ }
 
     return res.json({
       success: true,
@@ -1823,7 +1823,7 @@ export const penalizeSupplierAccount = async (req, res) => {
         message: `Admin has recorded a performance penalty${amount > 0 ? ` ($${amount})` : ''}: ${penaltyRecord.reason}`,
         type: 'account',
       })
-    } catch {}
+    } catch { /* ignore */ }
 
     return res.json({
       success: true,
@@ -1890,7 +1890,6 @@ export const sendSupplierMessage = async (req, res) => {
     })
 
     // If marked as warning, also increment warnings and record in supplier warnings log
-    let autoSuspended = false
     if (isWarning) {
       if (!supplier.warnings) supplier.warnings = []
       const nextWarnNum = (supplier.warningsCount || supplier.warnings.length || 0) + 1
@@ -1908,7 +1907,6 @@ export const sendSupplierMessage = async (req, res) => {
         supplier.suspensionReason =
           subject || 'Account automatically suspended: Reached maximum limit of 3 performance warnings.'
         supplier.suspendedAt = now
-        autoSuspended = true
 
         await Product.updateMany(
           { supplier: supplier._id, status: 'active' },
@@ -1927,7 +1925,7 @@ export const sendSupplierMessage = async (req, res) => {
         message: `Admin has sent you a message: "${subject || 'Notice'}". Check your Disputes section to view and reply.`,
         type: 'dispute',
       })
-    } catch {}
+    } catch { /* ignore */ }
 
     return res.status(201).json({
       success: true,

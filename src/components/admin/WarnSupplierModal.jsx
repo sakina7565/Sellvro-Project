@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle, CheckCircle2, Star, Truck, X, Mail } from 'lucide-react'
+import { AlertTriangle, Star, Truck, X, Mail } from 'lucide-react'
 import Button from '../ui/Button.jsx'
 import { adminApi, getErrorMessage } from '../../lib/api.js'
 

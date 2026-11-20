@@ -10,7 +10,6 @@ import {
   Building2,
   Phone,
   MapPin,
-  FileBadge,
   Upload,
   CheckCircle2,
   X,
@@ -27,7 +26,6 @@ import AuthLayout from '../components/layout/AuthLayout.jsx'
 import Input from '../components/ui/Input.jsx'
 import Select from '../components/ui/Select.jsx'
 import Button from '../components/ui/Button.jsx'
-import Badge from '../components/ui/Badge.jsx'
 import GoogleSignInButton from '../components/auth/GoogleSignInButton.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { getErrorMessage, categoryApi, businessApi } from '../lib/api.js'

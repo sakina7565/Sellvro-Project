@@ -2,7 +2,6 @@ import WalletRequest from '../models/WalletRequest.js'
 import BusinessProfile from '../models/BusinessProfile.js'
 import User from '../models/User.js'
 import WalletSetting from '../models/WalletSetting.js'
-import { executeRealPaymentTransfer } from '../services/paymentTransferService.js'
 import { getNextWalletTxId } from '../services/sequenceService.js'
 import { logAdminAction } from '../utils/auditLogger.js'
 
@@ -38,7 +37,7 @@ export const getCurrencies = async (_req, res) => {
       { code: 'PKR', name: 'Pakistani Rupee', symbol: '₨', ratePerUsd: rate, feePercent: 0 },
     ]
     return res.json({ currencies, settings: setting })
-  } catch (_err) {
+  } catch {
     return res.json({ currencies: SUPPORTED_CURRENCIES })
   }
 }
@@ -141,7 +140,7 @@ export const getMarketplaceFee = async (_req, res) => {
       marketplaceFeePercent: Number(setting.marketplaceFeePercent ?? 8),
       wmsFeePercent: Number(setting.wmsFeePercent ?? 0),
     })
-  } catch (error) {
+  } catch {
     return res.json({ success: true, marketplaceFeePercent: 8, wmsFeePercent: 0 })
   }
 }

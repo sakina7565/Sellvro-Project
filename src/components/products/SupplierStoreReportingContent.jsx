@@ -1,20 +1,13 @@
 import {
   AlertTriangle,
-  ArrowDownRight,
-  ArrowUpRight,
   BarChart3,
   Box,
   Building2,
   Calendar,
-  CheckCircle2,
-  ChevronDown,
   Clock,
   DollarSign,
   Download,
-  ExternalLink,
   Eye,
-  Filter,
-  HelpCircle,
   Layers,
   MapPin,
   Package,
@@ -22,28 +15,15 @@ import {
   PackageOpen,
   RefreshCw,
   Search,
-  ShieldAlert,
   ShieldCheck,
   ShoppingBag,
-  ShoppingCart,
   Store,
-  Tag,
   TrendingUp,
   Truck,
-  User,
   Users,
   X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import { Link } from 'react-router-dom'
 import {
   businessApi,
@@ -53,7 +33,6 @@ import {
   orderApi,
   productApi,
 } from '../../lib/api.js'
-import Badge from '../ui/Badge.jsx'
 import Button from '../ui/Button.jsx'
 
 const CURRENCY_SYMBOLS = {
@@ -136,7 +115,7 @@ export default function SupplierStoreReportingContent() {
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [fulfillmentFilter, setFulfillmentFilter] = useState('all') // 'all', 'warehouse', 'self'
   const [stockFilter, setStockFilter] = useState('all') // 'all', 'low', 'out'
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [statusFilter] = useState('all')
   const [sortBy, setSortBy] = useState('sales_desc') // 'sales_desc', 'units_desc', 'stock_asc', 'name_asc'
 
   // Selected Product Drill-down Modal State
@@ -463,39 +442,6 @@ export default function SupplierStoreReportingContent() {
   }, [productPerformanceRows])
 
   // Monthly Sales Chart Data (Last 6 Months)
-  const salesChartData = useMemo(() => {
-    const months = []
-    const now = new Date()
-
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const label = d.toLocaleString('en-US', { month: 'short' })
-      months.push({
-        name: label,
-        month: d.getMonth(),
-        year: d.getFullYear(),
-        sales: 0,
-        orders: 0,
-        units: 0,
-      })
-    }
-
-    orders.forEach((o) => {
-      if (o.status === 'cancelled') return
-      const oDate = new Date(o.createdAt || o.date)
-      if (Number.isNaN(oDate.getTime())) return
-
-      const bucket = months.find((m) => m.month === oDate.getMonth() && m.year === oDate.getFullYear())
-      if (bucket) {
-        const val = Number(o.total) || (Number(o.quantity) || 1) * Number(o.unitPrice || 0)
-        bucket.sales += val * (CURRENCY_RATES[currency] || 1)
-        bucket.orders += 1
-        bucket.units += Number(o.quantity) || 1
-      }
-    })
-
-    return months
-  }, [orders, currency])
 
   // Handle open drill-down modal for a product
   const handleInspectProduct = (prodRow) => {

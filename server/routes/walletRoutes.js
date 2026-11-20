@@ -14,7 +14,6 @@ import {
 import {
   protect,
   authorize,
-  requireApproved,
   attachAdminPermissions,
   requirePermission,
 } from '../middleware/auth.js'

@@ -3,22 +3,14 @@ import {
   User,
   Briefcase,
   HandCoins,
-  ArrowRightLeft,
-  DollarSign,
   ShieldCheck,
   Building,
   Smartphone,
-  CreditCard,
   Copy,
   Check,
   AlertCircle,
-  HelpCircle,
   QrCode,
   FileText,
-  Upload,
-  Send,
-  Globe,
-  Zap,
   RotateCcw,
 } from 'lucide-react'
 import UserLayout from '../../components/layout/UserLayout.jsx'
@@ -113,7 +105,7 @@ const DEFAULT_USD_ACCOUNTS = [
 export default function UserWalletPage() {
   const [balance, setBalance] = useState(0)
   const [requests, setRequests] = useState([])
-  const [currencies, setCurrencies] = useState(DEFAULT_CURRENCIES)
+  const [, setCurrencies] = useState(DEFAULT_CURRENCIES)
   const [pkrAccounts, setPkrAccounts] = useState(DEFAULT_PKR_ACCOUNTS)
   const [usdAccounts, setUsdAccounts] = useState(DEFAULT_USD_ACCOUNTS)
   const [usdRatePerPkr, setUsdRatePerPkr] = useState(280)
@@ -600,7 +592,7 @@ export default function UserWalletPage() {
               {isEmpty && (
                 <tr>
                   <td colSpan={TABLE_HEAD.length} className="px-5 py-16 text-center text-sm text-slate-500">
-                    No transaction history found. Click "+ Deposit / Add Funds" to submit your first deposit.
+                    No transaction history found. Click &quot;+ Deposit / Add Funds&quot; to submit your first deposit.
                   </td>
                 </tr>
               )}

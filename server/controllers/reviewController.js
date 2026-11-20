@@ -118,7 +118,7 @@ export const submitOrderReview = async (req, res) => {
           type: 'order',
         })
       }
-    } catch {}
+    } catch { /* ignore */ }
 
     return res.status(201).json({
       success: true,

@@ -1,6 +1,5 @@
 import {
   createWmsFulfillmentRequest,
-  deductWmsInventoryStock,
   updateWmsOrderTracking,
   cancelWmsOrder,
   findWmsUserByEmail,
@@ -10,10 +9,7 @@ import {
   pushOrderToLiveWmsApi,
   fetchLiveWmsOrderTracking,
 } from '../services/wmsApiService.js'
-import {
-  getOfficialCourierTrackingUrl,
-  queryLiveCarrierTracking,
-} from '../services/trackingApiService.js'
+import { queryLiveCarrierTracking } from '../services/trackingApiService.js'
 import {
   parseUploadedLabelFile,
   parseLabelDetails,
@@ -27,12 +23,13 @@ import { escapeRegex } from '../utils/regex.js'
 import WalletRequest from '../models/WalletRequest.js'
 import Dispute from '../models/Dispute.js'
 import { createNotification } from '../utils/notifications.js'
+import { logAdminAction } from '../utils/auditLogger.js'
 import { getNextOrderNo, getNextWalletTxId } from '../services/sequenceService.js'
 
 async function generateOrderNo() {
   try {
     return await getNextOrderNo()
-  } catch (err) {
+  } catch {
     const yy = new Date().getFullYear().toString().slice(-2)
     return `${yy}-SV-${String(Date.now()).slice(-5)}`
   }
@@ -121,8 +118,6 @@ async function pushOrderToWmsApi({
   orderNo,
   product,
   quantity,
-  unitPrice,
-  total,
   shippingAddress,
   shippingLabelUrl,
   brandLabel,
@@ -131,9 +126,6 @@ async function pushOrderToWmsApi({
   carrier,
   trackingNumber,
 }) {
-  const wmsToken = supplier?.wmsToken || process.env.WMS_API_TOKEN || process.env.WMS_SUPPLIER_TOKEN || ''
-  const baseUrl = process.env.WMS_BASE_URL || 'https://wmsbysellvro.com'
-  const endpoint = `${baseUrl}/api/supplier/orders`
 
   const customerName = String(shippingAddress?.fullName || 'Customer').trim()
   const customerPhone = String(shippingAddress?.phone || '').trim()
@@ -211,13 +203,13 @@ async function pushOrderToWmsApi({
       try {
         const wmsByEmail = await findWmsUserByEmail(supplier.email)
         if (wmsByEmail?.id) clientId = wmsByEmail.id
-      } catch (_) { }
+      } catch { /* ignore */ }
     }
     if (!clientId && supplierCode) {
       try {
         const wmsByCode = await findWmsUserByUniqueName(supplierCode)
         if (wmsByCode?.id) clientId = wmsByCode.id
-      } catch (_) { }
+      } catch { /* ignore */ }
     }
     if (!clientId) {
       clientId = 36
@@ -919,6 +911,13 @@ export const lookupOrder = async (req, res) => {
       return res.status(400).json({ message: 'Order ID, order number, or tracking ID is required.' })
     }
 
+    // Full orders contain the buyer's address and phone; anonymous visitors use the public tracker instead.
+    if (!req.user) {
+      return res.status(401).json({
+        message: 'Please sign in to view this order. For shipment status, use the Track Order page.',
+      })
+    }
+
     let order = null
     if (mongoose.Types.ObjectId.isValid(ref)) {
       order = await populateOrder(Order.findById(ref))
@@ -1005,13 +1004,32 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(403).json({ message: 'Not allowed to update this order.' })
     }
 
+    // Suppliers follow the same 12-hour request + admin approval policy as buyers (no instant refund).
+    if (isSupplier && next === 'cancelled') {
+      req.body.reason = String(req.body.reason || '').trim() || 'Cancellation requested by the supplier from the order panel.'
+      return requestOrderCancellation(req, res)
+    }
+
     // Handle cancellation: refund buyer wallet & restore inventory stock
     if (next === 'cancelled') {
       if (!order.isRefunded) {
+        // Claim the order atomically so a parallel approval/dispute cannot refund it twice.
+        const claim = await Order.updateOne(
+          { _id: order._id, isRefunded: { $ne: true }, status: { $ne: 'cancelled' } },
+          { $set: { isRefunded: true } },
+        )
+        if (!claim.modifiedCount) {
+          return res.status(409).json({ message: 'This order is already being cancelled or refunded.' })
+        }
+
         const buyerId = order.user?._id || order.user
         const productId = order.product?._id || order.product
+        const paidUpfront = order.paymentMethod !== 'cod'
+        const refundLine = paidUpfront
+          ? `$${Number(order.total).toFixed(2)} refunded to buyer wallet`
+          : 'Cash on Delivery order, so no refund was due'
 
-        if (buyerId && order.total > 0 && order.paymentMethod !== 'cod') {
+        if (buyerId && order.total > 0 && paidUpfront) {
           await User.findByIdAndUpdate(buyerId, { $inc: { walletBalance: Number(order.total.toFixed(2)) } })
         }
         if (productId && order.quantity > 0) {
@@ -1030,7 +1048,7 @@ export const updateOrderStatus = async (req, res) => {
           title: 'Order Cancelled & Refunded',
           location: 'System',
           timestamp: new Date(),
-          note: `Order cancelled by ${isAdmin ? 'Admin' : 'Supplier'}. $${Number(order.total).toFixed(2)} refunded to buyer wallet, and stock restored.`,
+          note: `Order cancelled by ${isAdmin ? 'Admin' : 'Supplier'}. ${refundLine}, and stock restored.`,
         })
 
         createNotification({
@@ -1038,7 +1056,9 @@ export const updateOrderStatus = async (req, res) => {
           targetRole: 'user',
           type: 'order',
           title: `Order ${order.orderNo} Cancelled`,
-          message: `Your order ${order.orderNo} has been cancelled. $${Number(order.total).toFixed(2)} has been refunded to your wallet.`,
+          message: paidUpfront
+            ? `Your order ${order.orderNo} has been cancelled. $${Number(order.total).toFixed(2)} has been refunded to your wallet.`
+            : `Your order ${order.orderNo} has been cancelled. As a Cash on Delivery order, no payment was taken.`,
           link: '/user/orders',
         })
       }
@@ -1929,6 +1949,21 @@ export const approveOrderCancellation = async (req, res) => {
 
     const adminNote = String(req.body.adminNote || req.body.note || 'Admin approved cancellation within 12-hour policy window.').trim()
 
+    // Claim the order atomically so two simultaneous approvals cannot both refund it.
+    const claim = await Order.updateOne(
+      { _id: order._id, isRefunded: { $ne: true }, status: { $ne: 'cancelled' } },
+      { $set: { isRefunded: true } },
+    )
+    if (!claim.modifiedCount) {
+      return res.status(409).json({ message: 'This cancellation is already being processed or was already approved.' })
+    }
+
+    // Cash-on-delivery orders were never paid, so there is nothing to refund (same rule as updateOrderStatus).
+    const paidUpfront = order.paymentMethod !== 'cod'
+    const refundText = paidUpfront
+      ? `Full 100% payment of $${Number(order.total || 0).toFixed(2)} refunded to customer Sellvro Wallet.`
+      : 'Cash on Delivery order: no payment was collected, so no wallet refund is due.'
+
     // 1. Update cancellationRequest & Order Status
     order.cancellationRequest = {
       ...(order.cancellationRequest?.toObject?.() || order.cancellationRequest || {}),
@@ -1942,7 +1977,7 @@ export const approveOrderCancellation = async (req, res) => {
     order.payoutStatus = 'cancelled'
     order.isRefunded = true
     order.refundedAt = new Date()
-    order.refundAmount = Number(order.total || 0)
+    order.refundAmount = paidUpfront ? Number(order.total || 0) : 0
 
     if (!Array.isArray(order.trackingTimeline)) {
       order.trackingTimeline = []
@@ -1952,26 +1987,32 @@ export const approveOrderCancellation = async (req, res) => {
       title: 'Order Cancellation Approved by Admin',
       location: 'Administration',
       timestamp: new Date(),
-      note: `${adminNote} Approved within 12h (${ageHours}h elapsed). Full 100% payment of $${Number(order.total || 0).toFixed(2)} refunded to customer Sellvro Wallet.`,
+      note: `${adminNote} Approved within 12h (${ageHours}h elapsed). ${refundText}`,
     })
 
     // 2. 100% Wallet Refund to Buyer & Log Formal Wallet Transaction (26-W-XXXXX)
     let newBalance = undefined
     let refundTxId = ''
-    const totalRefund = Number(Number(order.total || 0).toFixed(2))
-    const commissionRefunded = Number(Number(order.commission || 0).toFixed(2))
+    const totalRefund = paidUpfront ? Number(Number(order.total || 0).toFixed(2)) : 0
+    const commissionRefunded = paidUpfront ? Number(Number(order.commission || 0).toFixed(2)) : 0
     const supplierAmount = Number((totalRefund - commissionRefunded).toFixed(2))
 
-    if (order.paymentMethod === 'wallet' || totalRefund > 0) {
+    if (paidUpfront && totalRefund > 0) {
       const buyer = await User.findById(order.user._id || order.user)
       if (buyer) {
         buyer.walletBalance = Number(((buyer.walletBalance || 0) + totalRefund).toFixed(2))
-        await buyer.save()
+        try {
+          await buyer.save()
+        } catch (saveErr) {
+          // Nothing was paid out: release the claim so the admin can retry.
+          await Order.updateOne({ _id: order._id }, { $set: { isRefunded: false } }).catch(() => {})
+          throw saveErr
+        }
         newBalance = buyer.walletBalance
 
         try {
           refundTxId = await getNextWalletTxId()
-        } catch (_txErr) {
+        } catch {
           refundTxId = `26-W-${Date.now().toString().slice(-5)}`
         }
         order.refundTxId = refundTxId
@@ -2016,13 +2057,22 @@ export const approveOrderCancellation = async (req, res) => {
 
     await order.save()
 
+    await logAdminAction({
+      adminId: req.user?._id,
+      action: 'approve_order_cancellation',
+      targetType: 'order',
+      targetId: order._id,
+      details: { orderNo: order.orderNo, refundAmount: totalRefund, paymentMethod: order.paymentMethod || 'wallet' },
+      ip: req.ip,
+    })
+
     // 5. Update associated Dispute to resolved
     await Dispute.updateMany(
       { order: order._id, type: 'order_cancellation', status: 'open' },
       {
         $set: {
           status: 'resolved',
-          resolutionNote: `Cancellation approved by admin within 12 hours. $${Number(order.total || 0).toFixed(2)} refunded to customer.`,
+          resolutionNote: `Cancellation approved by admin within 12 hours. ${paidUpfront ? `$${totalRefund.toFixed(2)} refunded to customer.` : 'Cash on Delivery order: no refund due.'}`,
         },
       }
     ).catch(() => { })
@@ -2033,7 +2083,7 @@ export const approveOrderCancellation = async (req, res) => {
       targetRole: 'user',
       type: 'order',
       title: `Cancellation Approved: Order #${order.orderNo}`,
-      message: `Your cancellation request for Order #${order.orderNo} was approved by Admin within 12 hours. Full amount of $${Number(order.total || 0).toFixed(2)} has been refunded to your wallet.`,
+      message: `Your cancellation request for Order #${order.orderNo} was approved by Admin within 12 hours. ${paidUpfront ? `Full amount of $${totalRefund.toFixed(2)} has been refunded to your wallet.` : 'As a Cash on Delivery order, no payment was taken, so no refund is due.'}`,
       link: '/user/orders',
     }).catch(() => { })
 
@@ -2050,7 +2100,9 @@ export const approveOrderCancellation = async (req, res) => {
 
     return res.json({
       success: true,
-      message: 'Cancellation request approved successfully. Order is cancelled and 100% refund issued to buyer.',
+      message: paidUpfront
+        ? 'Cancellation request approved successfully. Order is cancelled and 100% refund issued to buyer.'
+        : 'Cancellation request approved successfully. Order is cancelled (Cash on Delivery: no refund due).',
       order: order.toSafeObject(),
       walletBalance: newBalance,
       refundTxId,
@@ -2079,6 +2131,11 @@ export const rejectOrderCancellation = async (req, res) => {
 
     if (order.status === 'cancelled') {
       return res.status(400).json({ message: 'This order is already cancelled.' })
+    }
+
+    // Only a pending request can be rejected; otherwise this would rewind e.g. a delivered order's status.
+    if (order.status !== 'cancellation_pending' && order.cancellationRequest?.status !== 'pending') {
+      return res.status(400).json({ message: 'There is no pending cancellation request for this order.' })
     }
 
     const rejectionReason = String(req.body.rejectionReason || req.body.reason || '').trim()
@@ -2111,6 +2168,15 @@ export const rejectOrderCancellation = async (req, res) => {
     })
 
     await order.save()
+
+    await logAdminAction({
+      adminId: req.user?._id,
+      action: 'reject_order_cancellation',
+      targetType: 'order',
+      targetId: order._id,
+      details: { orderNo: order.orderNo, rejectionReason },
+      ip: req.ip,
+    })
 
     // Update associated Dispute to rejected
     await Dispute.updateMany(

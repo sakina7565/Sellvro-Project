@@ -27,7 +27,6 @@ const DEFAULT_HERO_IMAGE =
  */
 function PanelDashboard({
   panelLabel,
-  displayName,
   welcomeTitle,
   welcomeSubtitle,
   featuredModule,

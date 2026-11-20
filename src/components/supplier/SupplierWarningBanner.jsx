@@ -6,10 +6,8 @@ import {
   Clock,
   Star,
   Truck,
-  CheckCircle2,
   XCircle,
   X,
-  ChevronRight,
   Info,
   HelpCircle,
 } from 'lucide-react'
