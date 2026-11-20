@@ -14,8 +14,6 @@ import {
   CheckCircle2,
   X,
   AlertTriangle,
-  Loader2,
-  Sparkles,
   CreditCard,
   Landmark,
   BadgeCheck,
@@ -28,8 +26,19 @@ import Select from '../components/ui/Select.jsx'
 import Button from '../components/ui/Button.jsx'
 import GoogleSignInButton from '../components/auth/GoogleSignInButton.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
-import { getErrorMessage, categoryApi, businessApi } from '../lib/api.js'
-import { validateImageQuality, extractIdCardNumber } from '../utils/idCardScanner.js'
+import { getErrorMessage, categoryApi } from '../lib/api.js'
+
+// ID card upload: same types the server's upload filter allows. No image-content checks.
+const ID_CARD_MIME_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/jfif',
+  'image/pjpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'application/pdf',
+]
 
 function RegisterPage() {
   const navigate = useNavigate()
@@ -65,13 +74,10 @@ function RegisterPage() {
   const [accountHolderName, setAccountHolderName] = useState(googleUser?.name || '')
   const [accountNumberOrIban, setAccountNumberOrIban] = useState('')
 
-  // Verification Upload & OCR State
+  // Verification Upload State
   const [idCardFile, setIdCardFile] = useState(null)
   const [idCardNumber, setIdCardNumber] = useState('')
   const [idCardError, setIdCardError] = useState('')
-  const [scanningId, setScanningId] = useState(false)
-  const [scanSuccess, setScanSuccess] = useState('')
-  const [scanProgress, setScanProgress] = useState(0)
 
   // Passwords
   const [password, setPassword] = useState('')
@@ -144,10 +150,8 @@ function RegisterPage() {
     if (!file) return
 
     setIdCardError('')
-    setScanSuccess('')
     setError('')
     clearFieldError('idCardFile')
-    clearFieldError('idCardNumber')
 
     // 10MB file limit
     if (file.size > 10 * 1024 * 1024) {
@@ -156,113 +160,22 @@ function RegisterPage() {
       return
     }
 
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
-    if (!validTypes.includes(file.type)) {
-      setIdCardError('Invalid file format. Please upload JPG, PNG, or WEBP image of your National ID Card.')
+    // Same file types the server's upload filter accepts (server/middleware/upload.js); no content checks.
+    const okType =
+      ID_CARD_MIME_TYPES.includes(file.type) || /\.(jpe?g|jfif|pjpeg|pjp|png|webp|gif|pdf)$/i.test(file.name)
+    if (!okType) {
+      setIdCardError('Invalid file format. Please upload a JPG, PNG, WEBP, GIF image or a PDF.')
       if (fileInputRef.current) fileInputRef.current.value = ''
       return
     }
 
-    // Step 1: Image Quality Inspection (Blur, Overexposure, Glare)
-    setScanningId(true)
-    setScanProgress(15)
-
-    try {
-      const quality = await validateImageQuality(file)
-      if (!quality.isValid) {
-        setIdCardFile(null)
-        setIdCardNumber('')
-        if (fileInputRef.current) fileInputRef.current.value = ''
-        setIdCardError(quality.error)
-        setFieldErrors((prev) => ({ ...prev, idCardFile: quality.error }))
-        setError(quality.error)
-        setScanningId(false)
-        return
-      }
-
-      setScanProgress(35)
-
-      // Step 2: OCR ID Card Number Extraction
-      const ocrResult = await extractIdCardNumber(file, (p) => {
-        setScanProgress(35 + Math.round(p * 0.45))
-      })
-
-      // Strict validation: Must detect a genuine Pakistani CNIC
-      if (!ocrResult.found || !ocrResult.isValidCnic || !ocrResult.idNumber) {
-        setIdCardFile(null)
-        setIdCardNumber('')
-        if (fileInputRef.current) fileInputRef.current.value = ''
-        const rejectMsg =
-          ocrResult.error ||
-          'Ghalat tasveer! Ye valid Pakistani CNIC / National ID card ki image nahi hai ya details parhi nahi ja saktin. Baraye meherbani sirf apna asal aur saaf CNIC upload karein.'
-        setIdCardError(rejectMsg)
-        setFieldErrors((prev) => ({ ...prev, idCardFile: rejectMsg }))
-        setError(rejectMsg)
-        setScanningId(false)
-        return
-      }
-
-      setScanProgress(80)
-
-      // Step 3: Check Duplicate CNIC across system
-      try {
-        const verifyRes = await businessApi.verifyCnic(ocrResult.idNumber)
-        if (verifyRes && verifyRes.available === false) {
-          setIdCardFile(null)
-          setIdCardNumber('')
-          if (fileInputRef.current) fileInputRef.current.value = ''
-          const dupMsg =
-            verifyRes.message ||
-            `Ye ID Card / CNIC number (${ocrResult.idNumber}) pehle se kisi doosre account k sath registered hai. Ek CNIC se sirf ek hi account register ho sakta hai.`
-          setIdCardError(dupMsg)
-          setFieldErrors((prev) => ({ ...prev, idCardFile: dupMsg }))
-          setError(dupMsg)
-          setScanningId(false)
-          return
-        }
-      } catch (dupErr) {
-        const dupMsg = dupErr?.data?.message || dupErr?.message
-        if (dupErr?.status === 400 || dupErr?.status === 409 || (dupMsg && dupMsg.includes('registered'))) {
-          setIdCardFile(null)
-          setIdCardNumber('')
-          if (fileInputRef.current) fileInputRef.current.value = ''
-          const conflictMsg =
-            dupMsg ||
-            `Ye ID Card / CNIC number (${ocrResult.idNumber}) pehle se kisi doosre account k sath registered hai. Ek CNIC se sirf ek hi account register ho sakta hai.`
-          setIdCardError(conflictMsg)
-          setFieldErrors((prev) => ({ ...prev, idCardFile: conflictMsg }))
-          setError(conflictMsg)
-          setScanningId(false)
-          return
-        }
-      }
-
-      // Step 4: Quality & Uniqueness Passed -> Auto-fill extracted CNIC
-      setIdCardFile(file)
-      setIdCardNumber(ocrResult.idNumber)
-      clearFieldError('idCardNumber')
-      clearFieldError('idCardFile')
-      setScanSuccess(`Asal Pakistani CNIC tasdeeq shuda: ${ocrResult.idNumber}`)
-      setScanProgress(100)
-    } catch (err) {
-      console.warn('ID Card scan notice:', err)
-      setIdCardFile(null)
-      setIdCardNumber('')
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      const failMsg =
-        'CNIC tasveer verify karne mein masla aaya. Baraye meherbani saaf aur clear CNIC tasveer upload karein.'
-      setIdCardError(failMsg)
-      setError(failMsg)
-    } finally {
-      setScanningId(false)
-    }
+    setIdCardFile(file)
+    clearFieldError('idCardFile')
   }
 
   const removeFile = () => {
     setIdCardFile(null)
-    setIdCardNumber('')
     setIdCardError('')
-    setScanSuccess('')
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -829,7 +742,7 @@ function RegisterPage() {
               </div>
             </div>
 
-            {/* ── Section 4: Verification Upload & ID Extraction ── */}
+            {/* ── Section 4: Verification Upload & ID ── */}
             <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3.5">
               <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2">
                 <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-100 text-emerald-700">
@@ -842,7 +755,7 @@ function RegisterPage() {
 
               <div className="space-y-3">
                 <p className="text-[11px] text-slate-500">
-                  Please upload a clear front photo of your CNIC / National ID Card or Passport (Max 10 MB). System automatically inspects image quality (blur & glare) and extracts your ID number.
+                  Please upload a photo of your CNIC / National ID Card or Passport (Max 10 MB), then enter your ID card number below.
                 </p>
 
                 <input
@@ -850,59 +763,25 @@ function RegisterPage() {
                   type="file"
                   id="idCardFile"
                   name="idCardFile"
-                  accept=".jpg,.jpeg,.png,.webp,.pdf"
+                  accept=".jpg,.jpeg,.jfif,.png,.webp,.gif,.pdf"
                   onChange={handleFileChange}
                   className="hidden"
                 />
 
-                {/* Quality / Glare / Blur Error Message */}
+                {/* File type / size error */}
                 {idCardError && (
                   <div className="rounded-xl border border-rose-200 bg-rose-50/95 p-3.5 text-xs text-rose-700 flex items-start gap-2.5 animate-fadeIn">
                     <AlertTriangle className="h-5 w-5 shrink-0 text-rose-600 mt-0.5" />
                     <div>
-                      <span className="font-bold block text-rose-900 text-[13px]">Image Quality Error:</span>
+                      <span className="font-bold block text-rose-900 text-[13px]">Upload Error:</span>
                       <p className="mt-0.5 text-rose-800 leading-relaxed">{idCardError}</p>
                     </div>
-                  </div>
-                )}
-
-                {/* Scanning & Progress Indicator */}
-                {scanningId && (
-                  <div className="rounded-xl border border-primary-200 bg-primary-50/70 p-3.5 space-y-2 animate-fadeIn">
-                    <div className="flex items-center justify-between text-xs text-primary-900 font-semibold">
-                      <span className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin text-primary-600" />
-                        Scanning ID card quality & extracting ID number…
-                      </span>
-                      <span>{scanProgress}%</span>
-                    </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-primary-100">
-                      <div
-                        className="h-full bg-primary-600 transition-all duration-300 rounded-full"
-                        style={{ width: `${scanProgress}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Extracted CNIC Success Banner */}
-                {scanSuccess && !scanningId && (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-3 text-xs text-emerald-800 flex items-center justify-between gap-2 animate-fadeIn">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-emerald-600 shrink-0" />
-                      <div>
-                        <span className="font-bold text-emerald-950">ID Number Extracted:</span>{' '}
-                        <span className="font-mono font-bold text-emerald-900">{idCardNumber}</span>
-                      </div>
-                    </div>
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                   </div>
                 )}
 
                 {!idCardFile ? (
                   <button
                     type="button"
-                    disabled={scanningId}
                     onClick={() => fileInputRef.current?.click()}
                     className={`flex w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-5 text-center transition-colors ${fieldErrors.idCardFile
                       ? 'border-rose-400 bg-rose-50/50 hover:bg-rose-50'
@@ -914,7 +793,7 @@ function RegisterPage() {
                       Click to choose ID Card photo *
                     </span>
                     <span className="mt-0.5 text-[10px] text-slate-400">
-                      JPG, PNG, WEBP, or PDF up to 10 MB (Clear & sharp photo required)
+                      JPG, PNG, WEBP, GIF or PDF up to 10 MB
                     </span>
                   </button>
                 ) : (
@@ -926,7 +805,7 @@ function RegisterPage() {
                           {idCardFile.name}
                         </p>
                         <p className="text-[10px] text-emerald-700">
-                          {(idCardFile.size / 1024).toFixed(1)} KB · Quality verified & attached
+                          {(idCardFile.size / 1024).toFixed(1)} KB · Attached
                         </p>
                       </div>
                     </div>
@@ -948,33 +827,26 @@ function RegisterPage() {
                   </p>
                 )}
 
-                {/* ID Card / CNIC Number Field (Strict Auto-Extracted & Locked) */}
+                {/* ID Card / CNIC Number Field (entered by the applicant) */}
                 <div className="pt-1">
                   <Input
                     id="idCardNumber"
                     name="idCardNumber"
-                    label="Auto-Extracted ID Card / CNIC Number *"
+                    label="ID Card / CNIC Number *"
                     icon={CreditCard}
-                    placeholder="Auto-extracted from your ID Card photo above"
+                    placeholder="e.g. 42101-1234567-1"
                     value={idCardNumber}
-                    readOnly={true}
-                    className={
-                      scanSuccess && idCardNumber
-                        ? 'bg-emerald-50/70 border-emerald-300 font-mono font-bold text-emerald-950 cursor-not-allowed'
-                        : 'bg-slate-100 font-mono text-slate-500 cursor-not-allowed select-none'
-                    }
+                    onChange={(e) => {
+                      setIdCardNumber(e.target.value)
+                      clearFieldError('idCardNumber')
+                    }}
+                    className="font-mono"
                     error={fieldErrors.idCardNumber}
                     required
                     helperText={
-                      scanSuccess && idCardNumber ? (
-                        <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-semibold">
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Automatically extracted and verified from your National ID Card!
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-slate-500">
-                          Upload your National ID Card photo above to automatically scan, extract and verify your ID card number.
-                        </span>
-                      )
+                      <span className="text-[11px] text-slate-500">
+                        Enter the 13-digit CNIC number printed on your ID card.
+                      </span>
                     }
                   />
                 </div>
