@@ -1,9 +1,5 @@
 import { useEffect, useState } from 'react'
-<<<<<<< HEAD
 import { X, SquarePen, Tag, DollarSign, Layers, Package, Barcode, Percent, MapPin, FileText, Link2, Plus } from 'lucide-react'
-=======
-import { X, SquarePen, Tag, DollarSign, Package, Barcode, Percent, MapPin } from 'lucide-react'
->>>>>>> origin/main
 import Button from '../ui/Button.jsx'
 import Input from '../ui/Input.jsx'
 import Select from '../ui/Select.jsx'

@@ -362,7 +362,7 @@ export default function SupplierOrderReviewModal({ order, open, onClose, onSucce
                 <textarea
                   rows={2}
                   value={rejectCustomReason}
-                  onChange={(e) => setCustomCustomReason ? setRejectCustomReason(e.target.value) : setRejectCustomReason(e.target.value)}
+                  onChange={(e) => setRejectCustomReason(e.target.value)}
                   placeholder="Explain why you cannot fulfill this order..."
                   className="w-full rounded-lg border border-slate-300 bg-white p-2.5 text-xs text-slate-800 focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
                 />

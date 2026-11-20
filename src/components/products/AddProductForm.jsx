@@ -10,15 +10,12 @@ import {
   ChevronUp,
   Clock,
   FileText,
-<<<<<<< HEAD
   Globe,
   Hash,
   Info,
   Layers,
   LayoutGrid,
   Link2,
-=======
->>>>>>> origin/main
   Lock,
   PackagePlus,
   Pencil,

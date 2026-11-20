@@ -16,6 +16,7 @@ import {
   authorize,
   attachAdminPermissions,
   requirePermission,
+  requireApproved,
 } from '../middleware/auth.js'
 import { productUpload } from '../middleware/upload.js'
 

@@ -13,7 +13,6 @@ import {
   LayoutDashboard,
   Maximize2,
   Lock,
-<<<<<<< HEAD
   Minus,
   Package,
   Palette,
@@ -21,8 +20,6 @@ import {
   Plus,
   RotateCcw,
   Scale,
-=======
->>>>>>> origin/main
   Share2,
   ShieldCheck,
   Sparkles,
@@ -35,6 +32,7 @@ import {
   BarChart3,
   Search,
   Flame,
+  Tag,
 } from 'lucide-react'
 import MarketplaceTopBar from '../../components/marketplace/MarketplaceTopBar.jsx'
 import MarketplaceSearchHeader from '../../components/marketplace/MarketplaceSearchHeader.jsx'

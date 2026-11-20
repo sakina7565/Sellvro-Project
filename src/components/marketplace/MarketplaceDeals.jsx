@@ -1,10 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-<<<<<<< HEAD
 import { Heart, ChevronRight, Warehouse, Star, CheckCircle, Lock, Flame } from 'lucide-react'
-=======
-import { Heart, ChevronRight, Warehouse, CheckCircle } from 'lucide-react'
->>>>>>> origin/main
 import { FEATURED_DEALS } from './marketplaceData.js'
 import { mediaUrl } from '../../lib/api.js'
 import { useAuth } from '../../context/AuthContext.jsx'

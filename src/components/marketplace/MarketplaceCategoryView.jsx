@@ -14,12 +14,9 @@ import {
   Sparkles,
   Palette,
   Search,
-<<<<<<< HEAD
   ExternalLink,
   ChevronDown,
   Flame,
-=======
->>>>>>> origin/main
 } from 'lucide-react'
 import { mediaUrl } from '../../lib/api.js'
 import { FEATURED_DEALS } from './marketplaceData.js'
@@ -184,7 +181,7 @@ export default function MarketplaceCategoryView({
   onResetFilters,
 }) {
   const navigate = useNavigate()
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
   const [viewMode, setViewMode] = useState('list') // 'list' or 'grid' (eBay default in screenshot is list)
   const [wishlist, setWishlist] = useState({})
   const [sortBy, setSortBy] = useState('best_match') // 'best_match' (default: product ranking by research priority), 'newest', 'price_asc', 'price_desc', 'rating'
@@ -460,7 +457,6 @@ export default function MarketplaceCategoryView({
     activeSubcategory,
     appliedMin,
     appliedMax,
-    inWarehouseOnly,
     freeShippingOnly,
     minRating,
     sortBy,

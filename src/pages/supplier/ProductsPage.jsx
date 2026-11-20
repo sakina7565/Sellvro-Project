@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
+  AlertCircle,
   SquarePen,
   Barcode,
   Info,
@@ -452,43 +453,10 @@ function SupplierProductsPage() {
               )}
             </h3>
           </div>
-<<<<<<< HEAD
           <div className="flex items-center gap-2 text-xs text-slate-300">
             <span>Listing Count:</span>
             <span className="rounded-full bg-white/10 px-2.5 py-0.5 font-bold text-white">
               {filteredProducts.length} of {products.length} products
-=======
-          <button
-            type="button"
-            onClick={() => setActionSuccess('')}
-            className="text-emerald-700 hover:text-emerald-950"
-          >
-            <XCircle className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Error Alert */}
-      {error && (
-        <div className="mb-4 flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={() => setError('')}
-            className="text-rose-700 hover:text-rose-950"
-          >
-            <XCircle className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      {searchQuery && (
-        <div className="mb-4 flex items-center justify-between rounded-xl border border-primary-200 bg-primary-50/70 px-4 py-2.5 text-sm text-primary-900">
-          <div className="flex items-center gap-2">
-            <Search className="h-4 w-4 text-primary shrink-0" />
-            <span>
-              Searching for <strong className="font-semibold text-primary-950">&quot;{searchQuery}&quot;</strong> ({filteredProducts.length} results found)
->>>>>>> origin/main
             </span>
           </div>
         </div>

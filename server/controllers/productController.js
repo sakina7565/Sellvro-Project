@@ -759,11 +759,8 @@ async function enrichProductsWithSupplier(products) {
 
     return safeObj
   })
-<<<<<<< HEAD
 
   return enriched
-=======
->>>>>>> origin/main
 }
 
 export const listMyProducts = async (req, res) => {

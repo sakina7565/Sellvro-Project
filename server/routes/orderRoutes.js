@@ -78,35 +78,19 @@ router.get('/supplier', protect, authorize('supplier'), requireApproved, listSup
 router.get('/', protect, authorize('admin'), listAllOrders)
 
 // WMS Live Direct Integration Endpoints
-<<<<<<< HEAD
 router.get('/wms/live-list', protect, authorize('supplier', 'admin'), requireApproved, listLiveWmsOrders)
-router.get('/wms/supplier/:clientId', getWmsSupplierOrders)
-router.post('/wms/update-dispatch', updateWmsOrderDispatch)
-
-router.get('/:id/track-wms', protect, authorize('user', 'supplier', 'admin'), trackWmsOrder)
-router.post('/:id/cancel', protect, authorize('user', 'supplier', 'admin'), requireApproved, cancelOrder)
-router.post('/:id/supplier-review', protect, authorize('supplier', 'admin'), requireApproved, reviewSupplierOrder)
-router.post('/:id/request-cancel', protect, authorize('user', 'supplier', 'admin'), requireApproved, requestOrderCancellation)
-router.post('/:id/approve-cancel', protect, authorize('admin'), approveOrderCancellation)
-router.post('/:id/reject-cancel', protect, authorize('admin'), rejectOrderCancellation)
-router.patch('/:id/user-tracking', protect, authorize('user', 'supplier', 'admin'), requireApproved, updateUserOrderTracking)
-router.patch('/:id/status', protect, authorize('admin', 'supplier'), requireApproved, updateOrderStatus)
-router.patch('/:id/tracking', protect, authorize('admin', 'supplier'), requireApproved, updateOrderTracking)
-router.post('/:id/push-wms', protect, authorize('admin', 'supplier'), requireApproved, pushOrderToWmsManual)
-=======
-router.get('/wms/live-list', protect, authorize('supplier', 'admin'), listLiveWmsOrders)
 router.get('/wms/supplier/:clientId', requireWmsSecret, getWmsSupplierOrders)
 router.post('/wms/update-dispatch', requireWmsSecret, updateWmsOrderDispatch)
 
 router.get('/:id/track-wms', protect, authorize('user', 'supplier', 'admin'), trackWmsOrder)
-router.post('/:id/cancel', protect, authorize('user', 'supplier', 'admin'), ...adminNeedsSalesManage, cancelOrder)
-router.post('/:id/request-cancel', protect, authorize('user', 'supplier', 'admin'), requestOrderCancellation)
+router.post('/:id/cancel', protect, authorize('user', 'supplier', 'admin'), requireApproved, ...adminNeedsSalesManage, cancelOrder)
+router.post('/:id/supplier-review', protect, authorize('supplier', 'admin'), requireApproved, ...adminNeedsSalesManage, reviewSupplierOrder)
+router.post('/:id/request-cancel', protect, authorize('user', 'supplier', 'admin'), requireApproved, requestOrderCancellation)
 router.post('/:id/approve-cancel', protect, authorize('admin'), ...adminNeedsSalesManage, approveOrderCancellation)
 router.post('/:id/reject-cancel', protect, authorize('admin'), ...adminNeedsSalesManage, rejectOrderCancellation)
-router.patch('/:id/user-tracking', protect, authorize('user', 'supplier', 'admin'), ...adminNeedsSalesManage, updateUserOrderTracking)
-router.patch('/:id/status', protect, authorize('admin', 'supplier'), ...adminNeedsSalesManage, updateOrderStatus)
-router.patch('/:id/tracking', protect, authorize('admin', 'supplier'), ...adminNeedsSalesManage, updateOrderTracking)
-router.post('/:id/push-wms', protect, authorize('admin', 'supplier'), ...adminNeedsSalesManage, pushOrderToWmsManual)
->>>>>>> origin/main
+router.patch('/:id/user-tracking', protect, authorize('user', 'supplier', 'admin'), requireApproved, ...adminNeedsSalesManage, updateUserOrderTracking)
+router.patch('/:id/status', protect, authorize('admin', 'supplier'), requireApproved, ...adminNeedsSalesManage, updateOrderStatus)
+router.patch('/:id/tracking', protect, authorize('admin', 'supplier'), requireApproved, ...adminNeedsSalesManage, updateOrderTracking)
+router.post('/:id/push-wms', protect, authorize('admin', 'supplier'), requireApproved, ...adminNeedsSalesManage, pushOrderToWmsManual)
 
 export default router

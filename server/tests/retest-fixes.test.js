@@ -213,11 +213,18 @@ test('N5: a sub-admin with sales.manage and a Super Admin can approve', async ()
   assert.equal((await runRouteGuards('/:id/approve-cancel', 'post', superAdmin)).statusCode, 'reached-controller')
 })
 
-test('N5: buyers and suppliers are not blocked by the admin permission guard', async () => {
-  const buyer = { user: { _id: new mongoose.Types.ObjectId(), role: 'user' } }
+test('N5: approved buyers and suppliers are not blocked by the admin permission guard', async () => {
+  const buyer = { user: { _id: new mongoose.Types.ObjectId(), role: 'user', status: 'approved' } }
   assert.equal((await runRouteGuards('/:id/cancel', 'post', buyer)).statusCode, 'reached-controller')
-  const supplier = { user: { _id: new mongoose.Types.ObjectId(), role: 'supplier' } }
+  const supplier = { user: { _id: new mongoose.Types.ObjectId(), role: 'supplier', status: 'approved' } }
   assert.equal((await runRouteGuards('/:id/status', 'patch', supplier)).statusCode, 'reached-controller')
+})
+
+test('order routes keep both guards: unapproved accounts are still blocked by requireApproved', async () => {
+  const pendingBuyer = { user: { _id: new mongoose.Types.ObjectId(), role: 'user', status: 'pending_approval' } }
+  assert.equal((await runRouteGuards('/:id/cancel', 'post', pendingBuyer)).statusCode, 403)
+  const pendingSupplier = { user: { _id: new mongoose.Types.ObjectId(), role: 'supplier', status: 'pending_approval' } }
+  assert.equal((await runRouteGuards('/:id/supplier-review', 'post', pendingSupplier)).statusCode, 403)
 })
 
 // ---------- H4: anonymous order lookup ----------
