@@ -101,6 +101,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    // Login sync with WMS (services/wmsSyncService.js)
+    wmsSyncPending: { type: Boolean, default: false, index: true },
+    wmsSyncedAt: { type: Date, default: null },
+    wmsSyncError: { type: String, default: '' }, // e.g. 'not_linked': needs admin review, not retried
+    passwordChangedAt: { type: Date, default: null },
     // Supplier Business & Owner Registration Details
     companyName: { type: String, trim: true, default: '' },
     companyEmail: { type: String, trim: true, lowercase: true, default: '' },
@@ -177,6 +182,23 @@ userSchema.pre('save', async function setDisplayIdAndHash(next) {
   if (!this.isModified('password')) return next()
   this.password = await bcrypt.hash(this.password, 10)
   return next()
+})
+
+// WMS login sync: note password changes and copy new/changed suppliers to WMS after saving.
+userSchema.pre('save', function markWmsSync(next) {
+  if (this.$locals.skipWmsSync) return next()
+  if (this.isModified('password')) this.passwordChangedAt = new Date()
+  this.$locals.queueWmsSync =
+    this.role === 'supplier' && (this.isNew || this.isModified('password') || this.isModified('email') || this.isModified('fullName'))
+  return next()
+})
+
+userSchema.post('save', function pushToWms(doc) {
+  if (!doc.$locals.queueWmsSync) return
+  doc.$locals.queueWmsSync = false
+  import('../services/wmsSyncService.js') // dynamic: the service imports this model
+    .then(({ queueSupplierSync }) => queueSupplierSync(doc._id))
+    .catch((err) => console.warn('[WMS Sync] hook error:', err.message))
 })
 
 userSchema.methods.matchPassword = async function matchPassword(enteredPassword) {

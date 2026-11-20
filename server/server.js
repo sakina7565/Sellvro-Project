@@ -19,6 +19,8 @@ import disputeRoutes from './routes/disputeRoutes.js'
 import financeRoutes from './routes/financeRoutes.js'
 import notificationRoutes from './routes/notificationRoutes.js'
 import searchRoutes from './routes/searchRoutes.js'
+import integrationRoutes from './routes/integrationRoutes.js'
+import { startWmsSyncRetryLoop } from './services/wmsSyncService.js'
 import { UPLOADS_DIR } from './middleware/upload.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -136,6 +138,7 @@ app.use('/api/disputes', disputeRoutes)
 app.use('/api/finance', financeRoutes)
 app.use('/api/notifications', notificationRoutes)
 app.use('/api/search', searchRoutes)
+app.use('/api/integration', integrationRoutes) // server-to-server (WMS), key-protected
 
 // M5: Unknown API routes return JSON 404 (not HTML)
 app.use('/api', (req, res) => {
@@ -171,6 +174,9 @@ app.use((err, _req, res, _next) => {
 
 // Connect to WMS MySQL
 checkMySQLConnection().catch(() => { })
+
+// Retry supplier login syncs to WMS (each tick skips itself while MongoDB is down)
+startWmsSyncRetryLoop()
 
 // Connect to MongoDB
 connectDB()
