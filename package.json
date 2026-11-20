@@ -14,11 +14,7 @@
     "start": "node app.cjs",
     "build": "vite build",
     "lint": "eslint .",
-<<<<<<< HEAD
-    "test": "node --test server/tests/critical-fixes.test.js server/tests/order-cancellation.test.js server/tests/sister-skus.test.js server/tests/product-research.test.js server/tests/supplier-order-review.test.js server/tests/supplier-product-management.test.js server/tests/cnic-verification.test.js server/tests/account-approval-rbac.test.js",
-=======
-    "test": "node --test server/tests/critical-fixes.test.js server/tests/order-cancellation.test.js server/tests/retest-fixes.test.js",
->>>>>>> origin/main
+    "test": "node --test server/tests/critical-fixes.test.js server/tests/order-cancellation.test.js server/tests/sister-skus.test.js server/tests/product-research.test.js server/tests/supplier-order-review.test.js server/tests/supplier-product-management.test.js server/tests/cnic-verification.test.js server/tests/account-approval-rbac.test.js server/tests/retest-fixes.test.js server/tests/wms-sync.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

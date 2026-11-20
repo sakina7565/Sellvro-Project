@@ -1,9 +1,5 @@
 import crypto from 'crypto'
-import {
-  findWmsUserByEmail,
-  registerWmsSupplier,
-  verifyWmsSupplierCredentials,
-} from '../services/wmsSqlService.js'
+import { queueSupplierSync } from '../services/wmsSyncService.js'
 import mongoose from 'mongoose'
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
@@ -196,35 +192,7 @@ export const register = async (req, res) => {
       return res.status(400).json({ message: 'An account with this email already exists.' })
     }
 
-    // ── Unified Supplier Registration in Master WMS MySQL ──
-    let wmsSupplier = null
-    if (role === 'supplier') {
-      try {
-        const existingWmsUser = await findWmsUserByEmail(effectiveEmail)
-        if (existingWmsUser) {
-          wmsSupplier = existingWmsUser
-        } else {
-          wmsSupplier = await registerWmsSupplier({
-            name: effectiveName,
-            email: effectiveEmail,
-            password,
-            companyName: companyName?.trim() || effectiveName,
-            companyEmail: (companyEmail || effectiveEmail)?.toLowerCase()?.trim(),
-            companyPhone: companyPhone?.trim() || '',
-            companyAddress: companyAddress?.trim() || '',
-            registrationEntity: registrationEntity?.trim() || '',
-            registrationNo: registrationNo?.trim() || '',
-            ownerName: (ownerName || effectiveName)?.trim(),
-            ownerEmail: (ownerEmail || effectiveEmail)?.toLowerCase()?.trim(),
-            ownerPhone: ownerPhone?.trim() || '',
-            ownerAddress: ownerAddress?.trim() || '',
-            idCardUrl: idCardUrl || '',
-          })
-        }
-      } catch (wmsErr) {
-        console.warn('[Register] WMS MySQL registration notice:', wmsErr.message)
-      }
-    }
+    // New suppliers are copied to WMS by the User model's save hook (services/wmsSyncService.js).
 
     // Both Suppliers and Users submit complete verification details upfront, so status is pending_approval
     const status = role === 'admin' ? 'approved' : 'pending_approval'
@@ -252,10 +220,6 @@ export const register = async (req, res) => {
       accountHolderName: accountHolderName?.trim() || '',
       accountNumberOrIban: accountNumberOrIban?.trim() || '',
       googleId: googleId?.trim() || undefined,
-      isWmsRegistered: Boolean(wmsSupplier),
-      wmsSupplierId: wmsSupplier?.id || null,
-      wmsClientId: wmsSupplier?.user_unique_name || '',
-      wmsStatus: wmsSupplier?.status || 'pending',
     })
 
     // Upsert BusinessProfile with complete details for both suppliers and users
@@ -343,118 +307,14 @@ export const login = async (req, res) => {
     const cleanEmail = email.toLowerCase().trim()
     let user = await User.findOne({ email: cleanEmail }).select('+password')
 
-    // ── Check Master WMS MySQL first (Single Master Database) ──
-    let wmsSqlUser = null
-    const shouldCheckWms = !user || user.role === 'supplier'
-    if (shouldCheckWms) {
-      try {
-        wmsSqlUser = await verifyWmsSupplierCredentials(cleanEmail, password)
-      } catch (wmsSqlErr) {
-        console.warn('[Login] WMS MySQL verification notice:', wmsSqlErr.message)
-      }
-    }
-
-    if (wmsSqlUser) {
-      if (!user) {
-        user = await User.create({
-          fullName: wmsSqlUser.name || 'WMS Supplier',
-          email: cleanEmail,
-          password,
-          role: 'supplier',
-          status: wmsSqlUser.status === 'approved' ? 'approved' : 'pending_approval',
-          isWmsRegistered: true,
-          wmsClientId: wmsSqlUser.user_unique_name || '',
-          wmsSupplierId: wmsSqlUser.id,
-          wmsStatus: wmsSqlUser.status || 'approved',
-        })
-
-        await BusinessProfile.findOneAndUpdate(
-          { user: user._id },
-          {
-            user: user._id,
-            profileType: 'supplier',
-            businessName: wmsSqlUser.name ? `${wmsSqlUser.name}'s Store` : 'Supplier Store',
-            status: 'approved',
-          },
-          { upsert: true, new: true },
-        )
-      } else {
-        user.isWmsRegistered = true
-        user.wmsSupplierId = wmsSqlUser.id
-        user.wmsClientId = wmsSqlUser.user_unique_name || user.wmsClientId
-        user.wmsStatus = wmsSqlUser.status || user.wmsStatus
-        await user.save()
-      }
-    }
-
-    // ── Check WMS Supplier Status via Live WMS API (fallback for external token) ──
-    let wmsAuthResult = null
-    if (shouldCheckWms && !wmsSqlUser) {
-      try {
-        const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 3500)
-        const wmsRes = await fetch('https://wmsbysellvro.com/api/supplier/login', {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email: cleanEmail, password }),
-          signal: controller.signal,
-        })
-        clearTimeout(timeout)
-        const wmsData = await wmsRes.json().catch(() => null)
-        if (wmsRes.ok && wmsData?.status && wmsData?.token && wmsData?.supplier) {
-          wmsAuthResult = wmsData
-        }
-      } catch (wmsErr) {
-        console.warn('WMS login check skipped/timed out:', wmsErr.message)
-      }
-    }
-
-    // If user does not exist locally on marketplace, but authenticated on WMS as a supplier:
-    if (!user && wmsAuthResult) {
-      user = await User.create({
-        fullName: wmsAuthResult.supplier.name || 'WMS Supplier',
-        email: cleanEmail,
-        password,
-        role: 'supplier',
-        status: 'approved',
-        isWmsRegistered: true,
-        wmsToken: wmsAuthResult.token,
-        wmsClientId: wmsAuthResult.supplier.user_unique_name || '',
-        wmsSupplierId: wmsAuthResult.supplier.id,
-        wmsStatus: wmsAuthResult.supplier.status || 'approved',
-      })
-
-      await BusinessProfile.findOneAndUpdate(
-        { user: user._id },
-        {
-          user: user._id,
-          profileType: 'supplier',
-          businessName:
-            wmsAuthResult.supplier.company_name ||
-            wmsAuthResult.supplier.name ||
-            'Supplier Store',
-          status: 'approved',
-        },
-        { upsert: true, new: true },
-      )
-    }
-
     if (!user) {
       return res.status(401).json({ message: 'Invalid email or password.' })
     }
 
-    // Verify local password or WMS synced password
+    // Passwords are shared with WMS by hash sync, so the local check is the only one needed.
     const isPasswordMatch = await user.matchPassword(password)
     if (!isPasswordMatch) {
-      if (wmsSqlUser || wmsAuthResult) {
-        user.password = password
-        await user.save()
-      } else {
-        return res.status(401).json({ message: 'Invalid email or password.' })
-      }
+      return res.status(401).json({ message: 'Invalid email or password.' })
     }
 
     // Admin accounts must use the dedicated admin portal — block them here
@@ -473,30 +333,9 @@ export const login = async (req, res) => {
       return res.status(403).json({ message: 'Your account application was rejected.' })
     }
 
-    // Sync WMS registration status and credentials
-    if (wmsAuthResult) {
-      user.isWmsRegistered = true
-      user.wmsToken = wmsAuthResult.token
-      user.wmsClientId = wmsAuthResult.supplier.user_unique_name || user.wmsClientId || ''
-      user.wmsSupplierId = wmsAuthResult.supplier.id || user.wmsSupplierId
-      user.wmsStatus = wmsAuthResult.supplier.status || 'approved'
-      await user.save()
-
-      if (wmsAuthResult.supplier.company_name) {
-        await BusinessProfile.findOneAndUpdate(
-          { user: user._id },
-          {
-            $set: {
-              businessName: wmsAuthResult.supplier.company_name,
-            },
-          },
-        )
-      }
-    } else if (user.role === 'supplier' && (user.isWmsRegistered || user.wmsToken)) {
-      // User is supplier on marketplace, but WMS login did not succeed (not registered on WMS)
-      user.isWmsRegistered = false
-      user.wmsToken = ''
-      await user.save()
+    // Self-healing: a supplier not yet linked to WMS (or with a failed sync) is retried on login.
+    if (user.role === 'supplier' && (user.wmsSyncPending || (!user.wmsSupplierId && !user.wmsSyncError))) {
+      queueSupplierSync(user._id)
     }
 
     const token = signToken(user._id)

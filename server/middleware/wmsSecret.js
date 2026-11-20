@@ -15,10 +15,21 @@ export function requireWmsSecret(req, res, next) {
     return next()
   }
 
+  return secretMatches(req, expected) ? next() : res.status(401).json({ message: 'Invalid or missing WMS secret.' })
+}
+
+// Login sync (accounts + passwords): its own secret, and fails CLOSED when unset. Kept separate from
+// WMS_WEBHOOK_SECRET so turning sync on never changes how the existing order webhooks behave.
+export function requireWmsSecretStrict(req, res, next) {
+  const expected = process.env.WMS_SYNC_SECRET
+  if (!expected) {
+    return res.status(503).json({ message: 'WMS sync is not configured (WMS_SYNC_SECRET).' })
+  }
+  return secretMatches(req, expected) ? next() : res.status(401).json({ message: 'Invalid or missing WMS secret.' })
+}
+
+function secretMatches(req, expected) {
   const given = Buffer.from(String(req.headers['x-wms-secret'] || ''))
   const wanted = Buffer.from(expected)
-  if (given.length !== wanted.length || !crypto.timingSafeEqual(given, wanted)) {
-    return res.status(401).json({ message: 'Invalid or missing WMS secret.' })
-  }
-  return next()
+  return given.length === wanted.length && crypto.timingSafeEqual(given, wanted)
 }
