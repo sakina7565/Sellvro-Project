@@ -40,3 +40,4 @@ if (failed.length) {
 }
 
 await mongoose.disconnect()
+process.exit(0) // config/db.js reconnects on every disconnect, which would keep this script running
