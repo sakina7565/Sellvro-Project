@@ -41,18 +41,27 @@ export default function UserCheckoutPage() {
   const navigate = useNavigate()
   const { user, updateUser, isAuthenticated, loading: authLoading } = useAuth()
 
-  // Enforce Guest User Restriction - redirect unauthenticated visitors to login
+  // Enforce Guest & Unapproved User Restrictions - redirect to business details if pending
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      navigate('/login', {
-        replace: true,
-        state: {
-          from: location.pathname,
-          message: 'Please log in to your account before accessing checkout.',
-        },
-      })
+    if (!authLoading) {
+      if (!isAuthenticated) {
+        navigate('/login', {
+          replace: true,
+          state: {
+            from: location.pathname,
+            message: 'Please log in to your account before accessing checkout.',
+          },
+        })
+      } else if (user?.role !== 'admin' && user?.status !== 'approved') {
+        navigate('/user/business/detail', {
+          replace: true,
+          state: {
+            message: 'Your buyer account is pending admin approval. You cannot place orders until your account has been approved by the Admin.',
+          },
+        })
+      }
     }
-  }, [authLoading, isAuthenticated, location.pathname, navigate])
+  }, [authLoading, isAuthenticated, user, location.pathname, navigate])
 
   const [product, setProduct] = useState(() => {
     const raw = location.state?.product
@@ -293,6 +302,12 @@ export default function UserCheckoutPage() {
 
     if (!user && !isAuthenticated && !token) {
       setError('Please sign in to your client account to pay from your Sellvro Wallet.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+
+    if (user?.role !== 'admin' && user?.status !== 'approved') {
+      setError('Your account is pending admin approval. You cannot place orders until approved by the Admin.')
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }

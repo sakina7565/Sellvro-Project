@@ -5,6 +5,13 @@ import {
   Camera,
   X,
   Check,
+  Link2,
+  Plus,
+  Globe,
+  BarChart3,
+  Tag,
+  Award,
+  Sparkles,
 } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import Card from '../../components/ui/Card.jsx'
@@ -32,6 +39,7 @@ function EditProductPage() {
   const [locations, setLocations] = useState([])
 
   // Product Form
+  const [newSisterSku, setNewSisterSku] = useState('')
   const [form, setForm] = useState({
     name: '',
     category: '',
@@ -58,6 +66,14 @@ function EditProductPage() {
     dimensionUnit: 'cm',
     customizationAvailable: false,
     customizationInstructions: '',
+    sisterSkus: [],
+    sisterVariationType: 'Color',
+    globalSearchVolume: '0',
+    globalMonthlySales: '0',
+    usMarketAverageSales: '0',
+    productKeywords: ['', '', '', '', ''],
+    rankingPriority: 'standard',
+    adminEvaluationNotes: '',
   })
 
   // Photos: Array of 10 slots. Each item: { url?: string, file?: File, preview: string, isNew?: boolean }
@@ -72,7 +88,7 @@ function EditProductPage() {
         setCategoryObjects(list)
         setCategories(list.map((c) => (typeof c === 'string' ? c : c.name)))
       })
-      .catch(() => {})
+      .catch(() => { })
 
     adminApi
       .suppliers()
@@ -80,7 +96,7 @@ function EditProductPage() {
         const list = Array.isArray(res?.data) ? res.data : []
         setSuppliers(list)
       })
-      .catch(() => {})
+      .catch(() => { })
 
     adminApi
       .locations()
@@ -88,7 +104,7 @@ function EditProductPage() {
         const list = Array.isArray(res?.data) ? res.data : []
         setLocations(list.map((l) => (typeof l === 'string' ? l : l.name)))
       })
-      .catch(() => {})
+      .catch(() => { })
   }, [])
 
   // Load product details
@@ -135,6 +151,25 @@ function EditProductPage() {
           dimensionUnit: prod.dimensionUnit || 'cm',
           customizationAvailable: Boolean(prod.customizationAvailable),
           customizationInstructions: prod.customizationInstructions || '',
+          sisterSkus: Array.isArray(prod.sisterSkus) ? prod.sisterSkus : [],
+          sisterVariationType: prod.sisterVariationType || 'Color',
+          globalSearchVolume:
+            prod.globalSearchVolume !== undefined && prod.globalSearchVolume !== null
+              ? String(prod.globalSearchVolume)
+              : '0',
+          globalMonthlySales:
+            prod.globalMonthlySales !== undefined && prod.globalMonthlySales !== null
+              ? String(prod.globalMonthlySales)
+              : '0',
+          usMarketAverageSales:
+            prod.usMarketAverageSales !== undefined && prod.usMarketAverageSales !== null
+              ? String(prod.usMarketAverageSales)
+              : '0',
+          productKeywords: Array.isArray(prod.productKeywords)
+            ? [...prod.productKeywords, '', '', '', ''].slice(0, 5)
+            : ['', '', '', '', ''],
+          rankingPriority: prod.rankingPriority || 'standard',
+          adminEvaluationNotes: prod.adminEvaluationNotes || '',
         })
 
         // Populate photo slots
@@ -142,8 +177,8 @@ function EditProductPage() {
           Array.isArray(prod.images) && prod.images.length > 0
             ? prod.images
             : prod.image
-            ? [prod.image]
-            : []
+              ? [prod.image]
+              : []
 
         const newSlots = Array(MAX_PHOTOS).fill(null)
         existingImages.slice(0, MAX_PHOTOS).forEach((imgUrl, i) => {
@@ -299,6 +334,16 @@ function EditProductPage() {
         dimensionUnit: form.dimensionUnit,
         customizationAvailable: form.customizationAvailable ? 'true' : 'false',
         customizationInstructions: form.customizationInstructions || '',
+        sisterSkus: JSON.stringify(form.sisterSkus || []),
+        sisterVariationType: form.sisterVariationType || 'Color',
+        globalSearchVolume: Math.max(0, parseInt(form.globalSearchVolume, 10) || 0),
+        globalMonthlySales: Math.max(0, parseInt(form.globalMonthlySales, 10) || 0),
+        usMarketAverageSales: Math.max(0, parseInt(form.usMarketAverageSales, 10) || 0),
+        productKeywords: JSON.stringify(
+          (form.productKeywords || []).map((k) => k.trim()).filter(Boolean).slice(0, 5),
+        ),
+        rankingPriority: form.rankingPriority || 'standard',
+        adminEvaluationNotes: form.adminEvaluationNotes || '',
         existingImages: JSON.stringify(existingImages),
       }
 
@@ -900,6 +945,337 @@ function EditProductPage() {
                     />
                   </div>
                 )}
+              </div>
+            </Card>
+
+            {/* 6. Sister SKUs Option */}
+            <Card className="p-6">
+              <h2 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[11px] text-white font-bold">
+                  6
+                </span>
+                Sister SKUs (Link Related Variations)
+              </h2>
+
+              <div className="rounded-xl border border-sky-100 bg-sky-50/50 p-4">
+                <div className="flex items-start gap-3 mb-4">
+                  <div className="rounded-lg bg-sky-100 p-2 text-sky-700">
+                    <Link2 className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-sky-950">
+                      Connect Separately Listed Products as Sister SKUs
+                    </h4>
+                    <p className="text-xs text-sky-800 mt-0.5 leading-relaxed">
+                      Link multiple products that are essentially the same item but separately listed with different colors, sizes, or styles.
+                      When a user views this product, all linked Sister SKUs will appear as clickable suggestions: <strong>&quot;Same Product Available in Different Colors&quot;</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">Variation Attribute Type</label>
+                    <Select
+                      value={form.sisterVariationType || 'Color'}
+                      onChange={updateField('sisterVariationType')}
+                      className="w-full bg-white text-xs"
+                    >
+                      <option value="Color">Color (Same Product in Different Colors)</option>
+                      <option value="Size">Size (Same Product in Different Sizes)</option>
+                      <option value="Style">Style (Same Product in Different Styles)</option>
+                      <option value="Material">Material (Same Product in Different Materials)</option>
+                      <option value="Edition">Edition (Same Product in Different Editions)</option>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700">Add Sister SKU</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={newSisterSku}
+                        onChange={(e) => setNewSisterSku(e.target.value)}
+                        placeholder="e.g. SVRO-00042"
+                        className="bg-white uppercase text-xs font-mono"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            const val = newSisterSku.trim().toUpperCase()
+                            if (val && !form.sisterSkus.includes(val) && val !== form.sku.trim().toUpperCase()) {
+                              setForm((p) => ({ ...p, sisterSkus: [...p.sisterSkus, val] }))
+                              setNewSisterSku('')
+                            }
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const val = newSisterSku.trim().toUpperCase()
+                          if (val && !form.sisterSkus.includes(val) && val !== form.sku.trim().toUpperCase()) {
+                            setForm((p) => ({ ...p, sisterSkus: [...p.sisterSkus, val] }))
+                            setNewSisterSku('')
+                          }
+                        }}
+                        className="bg-white shrink-0"
+                      >
+                        <Plus className="h-4 w-4 mr-1 text-sky-600" />
+                        Add SKU
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-sky-100">
+                  {form.sisterSkus?.length > 0 ? (
+                    form.sisterSkus.map((sku) => (
+                      <span
+                        key={sku}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-white px-3 py-1 font-mono text-xs font-bold text-sky-950 shadow-2xs"
+                      >
+                        {sku}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm((p) => ({
+                              ...p,
+                              sisterSkus: p.sisterSkus.filter((s) => s !== sku),
+                            }))
+                          }
+                          className="text-slate-400 hover:text-rose-600"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-400 italic">No Sister SKUs linked yet.</span>
+                  )}
+                </div>
+              </div>
+            </Card>
+
+            {/* 7. Product Research & Landing Page Priority */}
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[11px] text-white font-bold">
+                    7
+                  </span>
+                  Product Research &amp; Market Evaluation (Landing Page Ranking)
+                </h2>
+                <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-bold text-indigo-700">
+                  Admin Exclusive
+                </span>
+              </div>
+
+              <div className="space-y-5">
+                {/* 3 Metric Inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* Field 1: Global Search Volume */}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      1. Global Search Volume
+                    </label>
+                    <p className="text-[11px] text-slate-500 mb-2">Total estimated search volume for this product globally</p>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={form.globalSearchVolume}
+                      onChange={updateField('globalSearchVolume')}
+                      placeholder="e.g. 50000"
+                      className="bg-white font-mono text-xs font-bold"
+                    />
+                  </div>
+
+                  {/* Field 2: Global Monthly Sales */}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      2. Global Monthly Sales
+                    </label>
+                    <p className="text-[11px] text-slate-500 mb-2">Estimated monthly units sold worldwide</p>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={form.globalMonthlySales}
+                      onChange={updateField('globalMonthlySales')}
+                      placeholder="e.g. 3500"
+                      className="bg-white font-mono text-xs font-bold"
+                    />
+                  </div>
+
+                  {/* Field 4: US Market Average Sales */}
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      3. US Market Average Sales
+                    </label>
+                    <p className="text-[11px] text-slate-500 mb-2">Average units sold in the US market</p>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={form.usMarketAverageSales}
+                      onChange={updateField('usMarketAverageSales')}
+                      placeholder="e.g. 1800"
+                      className="bg-white font-mono text-xs font-bold"
+                    />
+                  </div>
+                </div>
+
+                {/* 5 Product Keywords */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-bold text-slate-800">
+                      4. Five Product Keywords (SEO &amp; Search Discovery)
+                    </label>
+                    <span className="text-[11px] text-slate-400">Up to 5 relevant search terms</span>
+                  </div>
+                  <p className="text-xs text-slate-500 mb-3">
+                    These keywords allow buyers to discover this product on the landing page search bar.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5">
+                    {[0, 1, 2, 3, 4].map((idx) => (
+                      <div key={idx} className="relative">
+                        <Input
+                          value={(form.productKeywords && form.productKeywords[idx]) || ''}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setForm((prev) => {
+                              const copy = [...(prev.productKeywords || ['', '', '', '', ''])]
+                              copy[idx] = val
+                              return { ...prev, productKeywords: copy }
+                            })
+                          }}
+                          placeholder={`Keyword ${idx + 1}`}
+                          className="bg-white text-xs pl-7"
+                        />
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                          #{idx + 1}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Display Priority Radio Selector */}
+                {/* <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-bold text-indigo-950">
+                      5. Product Evaluation &amp; Landing Page Priority
+                    </label>
+                    <span className="text-xs font-bold text-indigo-700">
+                      Controls position on the Landing Page
+                    </span>
+                  </div>
+                  <p className="text-xs text-indigo-800 mb-3">
+                    Products with higher priority appear at the top of the landing page, medium below high, and low further down.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <label
+                      className={`flex flex-col justify-between rounded-xl border-2 p-3 cursor-pointer transition ${
+                        form.rankingPriority === 'high'
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-950 font-bold'
+                          : 'border-slate-200 bg-white text-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="rankingPriority"
+                        value="high"
+                        checked={form.rankingPriority === 'high'}
+                        onChange={updateField('rankingPriority')}
+                        className="sr-only"
+                      />
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs">High Priority</span>
+                        <span className="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                      </div>
+                      <span className="text-[11px] font-normal text-slate-500 mt-1">Top of landing page</span>
+                    </label>
+
+                    <label
+                      className={`flex flex-col justify-between rounded-xl border-2 p-3 cursor-pointer transition ${
+                        form.rankingPriority === 'medium'
+                          ? 'border-blue-500 bg-blue-50 text-blue-950 font-bold'
+                          : 'border-slate-200 bg-white text-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="rankingPriority"
+                        value="medium"
+                        checked={form.rankingPriority === 'medium'}
+                        onChange={updateField('rankingPriority')}
+                        className="sr-only"
+                      />
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs">Medium Priority</span>
+                        <span className="h-2.5 w-2.5 rounded-full bg-blue-500"></span>
+                      </div>
+                      <span className="text-[11px] font-normal text-slate-500 mt-1">Middle showcase</span>
+                    </label>
+
+                    <label
+                      className={`flex flex-col justify-between rounded-xl border-2 p-3 cursor-pointer transition ${
+                        form.rankingPriority === 'low'
+                          ? 'border-amber-500 bg-amber-50 text-amber-950 font-bold'
+                          : 'border-slate-200 bg-white text-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="rankingPriority"
+                        value="low"
+                        checked={form.rankingPriority === 'low'}
+                        onChange={updateField('rankingPriority')}
+                        className="sr-only"
+                      />
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs">Low Priority</span>
+                        <span className="h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+                      </div>
+                      <span className="text-[11px] font-normal text-slate-500 mt-1">Further down</span>
+                    </label>
+
+                    <label
+                      className={`flex flex-col justify-between rounded-xl border-2 p-3 cursor-pointer transition ${
+                        form.rankingPriority === 'standard' || !form.rankingPriority
+                          ? 'border-slate-500 bg-slate-100 text-slate-900 font-bold'
+                          : 'border-slate-200 bg-white text-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="rankingPriority"
+                        value="standard"
+                        checked={form.rankingPriority === 'standard' || !form.rankingPriority}
+                        onChange={updateField('rankingPriority')}
+                        className="sr-only"
+                      />
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs">Standard</span>
+                        <span className="h-2.5 w-2.5 rounded-full bg-slate-400"></span>
+                      </div>
+                      <span className="text-[11px] font-normal text-slate-500 mt-1">Chronological</span>
+                    </label>
+                  </div>
+                </div> */}
+
+                {/* Admin Evaluation Notes */}
+                {/* <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Admin Research Notes
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={form.adminEvaluationNotes || ''}
+                    onChange={updateField('adminEvaluationNotes')}
+                    placeholder="Internal evaluation notes about market demand, trends, target audience..."
+                    className="w-full resize-none rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div> */}
               </div>
             </Card>
 

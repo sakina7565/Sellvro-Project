@@ -15,6 +15,7 @@ import {
   Info,
   Layers,
   LayoutGrid,
+  Link2,
   Lock,
   PackagePlus,
   Palette,
@@ -185,6 +186,8 @@ const EMPTY_FORM = {
   variations: [],
   customizationAvailable: false,
   customizationInstructions: '',
+  sisterSkus: [],
+  sisterVariationType: 'Color',
 }
 
 function AddProductForm({
@@ -222,6 +225,12 @@ function AddProductForm({
   const [showVariations, setShowVariations] = useState(false)
   const [newVarName, setNewVarName] = useState('')
   const [newVarValues, setNewVarValues] = useState('')
+
+  // Sister SKUs State
+  const [myExistingProducts, setMyExistingProducts] = useState([])
+  const [selectedSisterPickSku, setSelectedSisterPickSku] = useState('')
+  const [sisterManualSku, setSisterManualSku] = useState('')
+  const [sisterSearchFilter, setSisterSearchFilter] = useState('')
 
   // Load Admin-Configured Marketplace Platform Fee & WMS Policy Fee
   useEffect(() => {
@@ -315,6 +324,7 @@ function AddProductForm({
       .mine()
       .then((res) => {
         const list = Array.isArray(res?.data) ? res.data : []
+        setMyExistingProducts(list)
         const wmsList = list.filter(
           (p) => p.fulfillBy === 'warehouse' || p.inWarehouse === true,
         )
@@ -322,6 +332,7 @@ function AddProductForm({
       })
       .catch(() => {
         setSupplierWmsProducts([])
+        setMyExistingProducts([])
       })
       .finally(() => {
         setLoadingWmsProducts(false)
@@ -521,6 +532,29 @@ function AddProductForm({
     setForm((prev) => ({ ...prev, [field]: val }))
   }
 
+  const handleAddSisterSku = (skuToAdd) => {
+    const clean = String(skuToAdd || '').trim().toUpperCase()
+    if (!clean) return
+    const currentSku = String(form.sku || '').trim().toUpperCase()
+    if (currentSku && clean === currentSku) return
+    const currentList = Array.isArray(form.sisterSkus) ? form.sisterSkus : []
+    if (currentList.includes(clean)) return
+    setForm((prev) => ({
+      ...prev,
+      sisterSkus: [...(prev.sisterSkus || []), clean],
+    }))
+    setSelectedSisterPickSku('')
+    setSisterManualSku('')
+  }
+
+  const handleRemoveSisterSku = (skuToRemove) => {
+    const clean = String(skuToRemove || '').trim().toUpperCase()
+    setForm((prev) => ({
+      ...prev,
+      sisterSkus: (prev.sisterSkus || []).filter((s) => s.toUpperCase() !== clean),
+    }))
+  }
+
   const buildPayload = (status) => ({
     name: form.name,
     category: form.category,
@@ -556,6 +590,8 @@ function AddProductForm({
     variations: form.variations,
     customizationAvailable: form.customizationAvailable ? 'true' : 'false',
     customizationInstructions: form.customizationInstructions || '',
+    sisterSkus: JSON.stringify(form.sisterSkus || []),
+    sisterVariationType: form.sisterVariationType || 'Color',
     status,
     supplier: form.supplierAssign,
     publishActive: publishActive ? 'true' : 'false',
@@ -2007,7 +2043,194 @@ function AddProductForm({
           </div>
         </AddProductSection>
 
-        {/* ── ACTION BUTTONS ──────────────────────────────────────────────── */}
+        {/* ── STEP 5: SISTER SKUS (RELATED PRODUCTS) ──────────────────────── */}
+        <AddProductSection
+          step="5"
+          title="Sister SKUs (Link Related Variations)"
+        >
+          <div className="flex flex-col gap-4">
+            <div className="rounded-xl border border-sky-100 bg-sky-50/50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-sky-100 p-2 text-sky-700">
+                  <Link2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-sky-950">
+                    Connect Separately Listed Products as Sister SKUs
+                  </h4>
+                  <p className="text-xs text-sky-800 mt-0.5 leading-relaxed">
+                    Link multiple products that are essentially the same item but separately listed with different colors, sizes, or styles.
+                    Each item maintains its own distinct SKU and inventory. When a user views this product, all linked Sister SKUs will appear as clickable suggestions: <strong>&quot;Same Product Available in Different Colors&quot;</strong>.
+                  </p>
+                </div>
+              </div>
+
+              {/* Variation Type Selector */}
+              <div className="mt-4 pt-3 border-t border-sky-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <FormLabel htmlFor="sisterVariationType">
+                    Variation Attribute Type
+                  </FormLabel>
+                  <Select
+                    id="sisterVariationType"
+                    value={form.sisterVariationType || 'Color'}
+                    onChange={updateField('sisterVariationType')}
+                    className="w-full bg-white"
+                  >
+                    <option value="Color">Color (Same Product in Different Colors)</option>
+                    <option value="Size">Size (Same Product in Different Sizes)</option>
+                    <option value="Style">Style (Same Product in Different Styles)</option>
+                    <option value="Material">Material (Same Product in Different Materials)</option>
+                    <option value="Edition">Edition (Same Product in Different Editions)</option>
+                  </Select>
+                  <p className="mt-1 text-[11px] text-sky-700">
+                    Determines the banner displayed to buyers (e.g. &quot;Same Product Available in Different Colors&quot;).
+                  </p>
+                </div>
+
+                {/* Add from Existing Listings Dropdown */}
+                <div>
+                  <FormLabel htmlFor="selectSisterProduct">
+                    Select from Your Existing Listings
+                  </FormLabel>
+                  <div className="flex gap-2">
+                    <Select
+                      id="selectSisterProduct"
+                      value={selectedSisterPickSku}
+                      onChange={(e) => {
+                        setSelectedSisterPickSku(e.target.value)
+                        if (e.target.value) {
+                          handleAddSisterSku(e.target.value)
+                        }
+                      }}
+                      className="w-full bg-white text-xs"
+                    >
+                      <option value="">-- Choose from your listed products --</option>
+                      {myExistingProducts
+                        .filter(
+                          (p) =>
+                            p.sku &&
+                            p.sku.toUpperCase() !== String(form.sku || '').toUpperCase() &&
+                            !(form.sisterSkus || []).includes(p.sku.toUpperCase()),
+                        )
+                        .map((p) => (
+                          <option key={p.id || p._id || p.sku} value={p.sku}>
+                            {p.name} ({p.sku}) {p.color ? `• ${p.color}` : ''} {p.price ? `• $${Number(p.price).toFixed(2)}` : ''}
+                          </option>
+                        ))}
+                    </Select>
+                  </div>
+                  <p className="mt-1 text-[11px] text-sky-700">
+                    Select an item from your catalog to automatically link it.
+                  </p>
+                </div>
+              </div>
+
+              {/* Manual SKU Input */}
+              <div className="mt-4 pt-3 border-t border-sky-100">
+                <FormLabel htmlFor="sisterManualSku">
+                  Or Enter Product SKU Manually
+                </FormLabel>
+                <div className="flex items-center gap-2 max-w-md">
+                  <Input
+                    id="sisterManualSku"
+                    value={sisterManualSku}
+                    onChange={(e) => setSisterManualSku(e.target.value)}
+                    placeholder="e.g. SVRO-00042 or BELT-BLK-01"
+                    className="bg-white uppercase font-mono text-xs"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleAddSisterSku(sisterManualSku)
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleAddSisterSku(sisterManualSku)}
+                    disabled={!sisterManualSku.trim()}
+                    className="shrink-0 bg-white"
+                  >
+                    <Plus className="h-4 w-4 mr-1 text-sky-600" />
+                    Add SKU
+                  </Button>
+                </div>
+              </div>
+
+              {/* Current Linked Sister SKUs Badges & Cards */}
+              <div className="mt-5">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Currently Linked Sister SKUs ({form.sisterSkus?.length || 0})
+                  </span>
+                  {form.sisterSkus?.length > 1 && (
+                    <span className="text-[11px] text-slate-500">
+                      All linked SKUs will be synchronized across each other bi-directionally
+                    </span>
+                  )}
+                </div>
+
+                {(!form.sisterSkus || form.sisterSkus.length === 0) ? (
+                  <div className="rounded-xl border border-dashed border-sky-200 bg-white/70 p-4 text-center text-xs text-slate-500">
+                    No Sister SKUs linked yet. Add related products above to connect variations.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                    {form.sisterSkus.map((sku) => {
+                      const matched = myExistingProducts.find(
+                        (p) => String(p.sku || '').toUpperCase() === sku.toUpperCase(),
+                      )
+                      const previewImg = matched?.image || (Array.isArray(matched?.images) ? matched.images[0] : null)
+                      return (
+                        <div
+                          key={sku}
+                          className="flex items-center justify-between gap-2.5 rounded-xl border border-sky-200 bg-white p-2.5 shadow-2xs"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {previewImg ? (
+                              <img
+                                src={previewImg}
+                                alt={sku}
+                                className="h-10 w-10 rounded-lg object-cover border border-slate-100 shrink-0"
+                              />
+                            ) : (
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-600 border border-sky-100 font-mono text-[10px] font-bold">
+                                SKU
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="font-mono text-xs font-bold text-slate-900 truncate">
+                                {sku}
+                              </p>
+                              <p className="text-[11px] text-slate-500 truncate">
+                                {matched?.name || 'Linked Product'}
+                              </p>
+                              {matched?.color && (
+                                <span className="inline-block mt-0.5 rounded bg-slate-100 px-1.5 py-0.2 text-[10px] font-medium text-slate-600">
+                                  {matched.color}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSisterSku(sku)}
+                            title="Remove Sister SKU"
+                            className="rounded-lg p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition shrink-0"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </AddProductSection>
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           {panel === 'admin' ? (
             <label className="flex items-center gap-2 text-sm text-slate-600">

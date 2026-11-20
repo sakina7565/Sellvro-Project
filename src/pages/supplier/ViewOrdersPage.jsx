@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Building2, Check, Clock, Copy, Eye, FileText, Info, Plus, Printer, RefreshCw, Search, Truck, Warehouse } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
+import { Building2, Check, CheckCircle2, Clock, Copy, Eye, FileText, Info, Plus, Printer, RefreshCw, Search, ShieldCheck, Truck, Warehouse, XCircle } from 'lucide-react'
 import SupplierLayout from '../../components/layout/SupplierLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import OrderDetailDrawer from '../../components/orders/OrderDetailDrawer.jsx'
@@ -7,6 +8,7 @@ import CourierHandoverModal from '../../components/orders/CourierHandoverModal.j
 import TrackingModal from '../../components/orders/TrackingModal.jsx'
 import UserUpdateTrackingModal from '../../components/orders/UserUpdateTrackingModal.jsx'
 import ShippingAirwayBillModal from '../../components/orders/ShippingAirwayBillModal.jsx'
+import SupplierOrderReviewModal from '../../components/orders/SupplierOrderReviewModal.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Badge from '../../components/ui/Badge.jsx'
 import IconAction from '../../components/ui/IconAction.jsx'
@@ -67,6 +69,7 @@ function TrackingStatusBadge({ status, trackingStatus }) {
 }
 
 function SupplierViewOrdersPage() {
+  const location = useLocation()
   const [orders, setOrders] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -76,6 +79,8 @@ function SupplierViewOrdersPage() {
   const [trackingOrder, setTrackingOrder] = useState(null)
   const [updateTrackingOrder, setUpdateTrackingOrder] = useState(null)
   const [airwayBillOrder, setAirwayBillOrder] = useState(null)
+  const [reviewModalOrder, setReviewModalOrder] = useState(null)
+  const [reviewSuccessMessage, setReviewSuccessMessage] = useState('')
   const [copiedId, setCopiedId] = useState('')
 
   // Filter states
@@ -88,7 +93,26 @@ function SupplierViewOrdersPage() {
     orderApi
       .supplier()
       .then((data) => {
-        if (active) setOrders(data.data || [])
+        if (active) {
+          const list = data.data || []
+          setOrders(list)
+
+          // Auto-open review modal if navigated from notification: ?order=...&action=review
+          const params = new URLSearchParams(location.search)
+          const targetOrderRef = params.get('order') || params.get('orderNo') || params.get('id')
+          const action = params.get('action')
+          if (targetOrderRef && (action === 'review' || !action)) {
+            const found = list.find(
+              (o) => o.id === targetOrderRef || o.orderNo === targetOrderRef || o._id === targetOrderRef,
+            )
+            if (found) {
+              setReviewModalOrder(found)
+              if (action === 'review') {
+                setActiveTab('pending_review')
+              }
+            }
+          }
+        }
       })
       .catch((err) => {
         if (active) setError(getErrorMessage(err, 'Failed to load orders.'))
@@ -99,7 +123,7 @@ function SupplierViewOrdersPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [location.search])
 
   const openOrder = (order) => {
     setSelectedId(order.id)
@@ -127,10 +151,11 @@ function SupplierViewOrdersPage() {
     }
   }
 
-  // 7 Required Status counts
+  // Status counts (including Order Review queue)
   const counts = useMemo(() => {
     const res = {
       all: orders.length,
+      pending_review: 0,
       awaiting_dispatch: 0,
       order_due: 0,
       in_process: 0,
@@ -139,6 +164,12 @@ function SupplierViewOrdersPage() {
       returned: 0,
     }
     orders.forEach((o) => {
+      const isPendingReview =
+        o.supplierReviewStatus === 'pending_review' ||
+        (!o.supplierReviewStatus && o.status !== 'cancelled' && o.status !== 'delivered')
+      if (isPendingReview) {
+        res.pending_review += 1
+      }
       const cat = getOrderCategorizedStatus(o)
       if (res[cat] !== undefined) {
         res[cat] += 1
@@ -152,7 +183,12 @@ function SupplierViewOrdersPage() {
     return orders.filter((order) => {
       const cat = getOrderCategorizedStatus(order)
 
-      if (activeTab !== 'all' && cat !== activeTab) {
+      if (activeTab === 'pending_review') {
+        const isPending =
+          order.supplierReviewStatus === 'pending_review' ||
+          (!order.supplierReviewStatus && order.status !== 'cancelled' && order.status !== 'delivered')
+        if (!isPending) return false
+      } else if (activeTab !== 'all' && cat !== activeTab) {
         return false
       }
 
@@ -180,10 +216,18 @@ function SupplierViewOrdersPage() {
     <SupplierLayout>
       <PageHeader eyebrow="Supplier Panel" title="Orders" />
 
-      {/* Status Counters / Tabs (7 Required Statuses) */}
-      <div className="mb-5 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-7">
+      {reviewSuccessMessage && (
+        <div className="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 shadow-2xs flex items-center gap-2">
+          <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+          <span>{reviewSuccessMessage}</span>
+        </div>
+      )}
+
+      {/* Status Counters / Tabs */}
+      <div className="mb-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4 lg:grid-cols-8">
         {[
           { key: 'all', label: 'All Orders', count: counts.all, color: 'text-slate-800 bg-slate-100' },
+          { key: 'pending_review', label: 'Order Review', count: counts.pending_review, color: counts.pending_review > 0 ? 'text-amber-950 bg-amber-200 border-amber-300 font-extrabold animate-pulse' : 'text-amber-800 bg-amber-50' },
           { key: 'awaiting_dispatch', label: 'Awaiting Dispatch', count: counts.awaiting_dispatch, color: 'text-sky-800 bg-sky-50' },
           { key: 'order_due', label: 'Order Due', count: counts.order_due, color: 'text-amber-800 bg-amber-50' },
           { key: 'in_process', label: 'In Process', count: counts.in_process, color: 'text-indigo-800 bg-indigo-50' },
@@ -467,6 +511,26 @@ function SupplierViewOrdersPage() {
                     {/* 11. Actions */}
                     <td className="whitespace-nowrap px-4 py-3.5">
                       <div className="flex items-center gap-2">
+                        {order.supplierReviewStatus === 'pending_review' ||
+                        (!order.supplierReviewStatus && order.status !== 'cancelled' && order.status !== 'delivered') ? (
+                          <button
+                            type="button"
+                            onClick={() => setReviewModalOrder(order)}
+                            className="inline-flex items-center gap-1 rounded-md bg-amber-500 hover:bg-amber-600 px-2.5 py-1 text-xs font-bold text-white shadow-2xs transition cursor-pointer"
+                            title="Review order details, terms & conditions, and accept or reject"
+                          >
+                            <ShieldCheck className="h-3.5 w-3.5" /> Review Order
+                          </button>
+                        ) : order.supplierReviewStatus === 'accepted' ? (
+                          <span className="inline-flex items-center gap-0.5 rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-200">
+                            ✓ Accepted
+                          </span>
+                        ) : order.supplierReviewStatus === 'rejected' ? (
+                          <span className="inline-flex items-center gap-0.5 rounded bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-800 border border-rose-200">
+                            ✕ Rejected
+                          </span>
+                        ) : null}
+
                         <button
                           type="button"
                           onClick={() => setAirwayBillOrder(order)}
@@ -559,7 +623,26 @@ function SupplierViewOrdersPage() {
                     {order.warehouseLocation === 'wms_hub' ? '🏢 WMS Hub' : '🏭 Supplier Whse'}
                   </span>
                 </div>
-                <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+                <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 flex-wrap">
+                  {order.supplierReviewStatus === 'pending_review' ||
+                  (!order.supplierReviewStatus && order.status !== 'cancelled' && order.status !== 'delivered') ? (
+                    <button
+                      type="button"
+                      onClick={() => setReviewModalOrder(order)}
+                      className="rounded-md bg-amber-500 hover:bg-amber-600 px-2.5 py-1 text-xs font-bold text-white inline-flex items-center gap-1 shadow-2xs"
+                    >
+                      <ShieldCheck className="h-3.5 w-3.5" /> Review Order
+                    </button>
+                  ) : order.supplierReviewStatus === 'accepted' ? (
+                    <span className="rounded bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
+                      ✓ Accepted
+                    </span>
+                  ) : order.supplierReviewStatus === 'rejected' ? (
+                    <span className="rounded bg-rose-50 px-2 py-1 text-xs font-bold text-rose-800 border border-rose-200">
+                      ✕ Rejected
+                    </span>
+                  ) : null}
+
                   <button
                     type="button"
                     onClick={() => setAirwayBillOrder(order)}
@@ -644,6 +727,20 @@ function SupplierViewOrdersPage() {
           order={airwayBillOrder}
           open={Boolean(airwayBillOrder)}
           onClose={() => setAirwayBillOrder(null)}
+        />
+      )}
+
+      {/* Supplier Order Fulfillment Review Modal */}
+      {reviewModalOrder && (
+        <SupplierOrderReviewModal
+          order={reviewModalOrder}
+          open={Boolean(reviewModalOrder)}
+          onClose={() => setReviewModalOrder(null)}
+          onSuccess={(updated) => {
+            handleOrderUpdated(updated)
+            setReviewSuccessMessage(`Order #${updated.orderNo || updated.id} review completed successfully (${updated.supplierReviewStatus?.toUpperCase() || 'UPDATED'}).`)
+            setTimeout(() => setReviewSuccessMessage(''), 5000)
+          }}
         />
       )}
     </SupplierLayout>

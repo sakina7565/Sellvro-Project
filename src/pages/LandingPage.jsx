@@ -7,6 +7,8 @@ import {
   ShieldCheck,
   Zap,
   LayoutDashboard,
+  Clock,
+  ArrowRight,
 } from 'lucide-react'
 import MarketplaceTopBar from '../components/marketplace/MarketplaceTopBar.jsx'
 import MarketplaceSearchHeader from '../components/marketplace/MarketplaceSearchHeader.jsx'
@@ -232,6 +234,26 @@ function LandingPage() {
 
       {/* 1. Micro Utility Header (eBay style) */}
       <MarketplaceTopBar />
+
+      {/* Account Verification & Approval Notice Banner */}
+      {user && user.role === 'user' && user.status !== 'approved' && (
+        <div className="border-b border-amber-200 bg-linear-to-r from-amber-50 via-orange-50 to-amber-50 px-4 py-2.5 text-xs text-amber-900 shadow-xs">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 shrink-0 text-amber-600 animate-pulse" />
+              <span>
+                <strong className="font-semibold">Account Pending Admin Approval:</strong> Complete account access, product ordering, and wallet services are restricted until an administrator verifies and approves your account.
+              </span>
+            </div>
+            <Link
+              to="/user/business/detail"
+              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs transition hover:bg-amber-700"
+            >
+              View Verification Status <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* 2. Main Search & Brand Header (eBay style) */}
       <MarketplaceSearchHeader

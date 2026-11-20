@@ -36,6 +36,7 @@ import SupplierBusinessDetailsPage from './pages/supplier/BusinessDetailsPage.js
 import SupplierDashboardPage from './pages/supplier/DashboardPage.jsx'
 import SupplierProductsPage from './pages/supplier/ProductsPage.jsx'
 import SupplierAddProductPage from './pages/supplier/AddProductPage.jsx'
+import SupplierEditProductPage from './pages/supplier/EditProductPage.jsx'
 import SupplierSkuReportingPage from './pages/supplier/SkuReportingPage.jsx'
 import SupplierBusinessReportingPage from './pages/supplier/BusinessReportingPage.jsx'
 import SupplierViewOrdersPage from './pages/supplier/ViewOrdersPage.jsx'
@@ -168,6 +169,9 @@ function App() {
       />
       <Route path="/supplier/dashboard" element={<SupplierRoute><SupplierDashboardPage /></SupplierRoute>} />
       <Route path="/supplier/products" element={<SupplierRoute><SupplierProductsPage /></SupplierRoute>} />
+      <Route path="/supplier/products/:id/edit" element={<SupplierRoute><SupplierEditProductPage /></SupplierRoute>} />
+      <Route path="/supplier/product/edit/:id" element={<SupplierRoute><SupplierEditProductPage /></SupplierRoute>} />
+      <Route path="/supplier/product/edits/:id" element={<SupplierRoute><SupplierEditProductPage /></SupplierRoute>} />
       <Route path="/supplier/product/create" element={<SupplierRoute><SupplierAddProductPage /></SupplierRoute>} />
       <Route path="/supplier/inventory/sku-reporting" element={<SupplierRoute><SupplierSkuReportingPage /></SupplierRoute>} />
       <Route path="/supplier/products/sku-report" element={<SupplierRoute><SupplierSkuReportingPage /></SupplierRoute>} />
@@ -175,6 +179,9 @@ function App() {
       <Route path="/supplier/inventory/store-reporting" element={<SupplierRoute><SupplierBusinessReportingPage /></SupplierRoute>} />
       <Route path="/supplier/store-reporting" element={<SupplierRoute><SupplierBusinessReportingPage /></SupplierRoute>} />
       <Route path="/supplier/sales/details" element={<SupplierRoute><SupplierViewOrdersPage /></SupplierRoute>} />
+      <Route path="/supplier/orders" element={<SupplierRoute><SupplierViewOrdersPage /></SupplierRoute>} />
+      <Route path="/supplier/view-orders" element={<SupplierRoute><SupplierViewOrdersPage /></SupplierRoute>} />
+      <Route path="/supplier/orders/review/:orderId" element={<SupplierRoute><SupplierViewOrdersPage /></SupplierRoute>} />
       <Route path="/supplier/finance/index" element={<SupplierRoute><SupplierFinancePage /></SupplierRoute>} />
       <Route path="/supplier/disputes" element={<SupplierRoute><SupplierDisputesPortalPage /></SupplierRoute>} />
 

@@ -1184,21 +1184,24 @@ function UserBusinessDetailsPage() {
                   <div className="flex flex-col justify-between space-y-3">
                     <Input
                       id="idCardNumber"
-                      label="Extracted CNIC / ID Card Number"
+                      label="Extracted CNIC / ID Card Number *"
                       placeholder="e.g. 42101-1234567-1 (Auto-extracted from photo)"
                       value={idCardNumber}
-                      onChange={(e) => setIdCardNumber(e.target.value)}
-                      readOnly={Boolean(scanSuccess && idCardNumber)}
-                      className={scanSuccess ? 'bg-emerald-50/50 font-mono font-bold text-emerald-950 border-emerald-300' : 'font-mono'}
+                      readOnly={true}
+                      className={
+                        scanSuccess && idCardNumber
+                          ? 'bg-emerald-50/50 font-mono font-bold text-emerald-950 border-emerald-300'
+                          : 'font-mono bg-slate-50 cursor-not-allowed text-slate-600'
+                      }
                       required
                       helperText={
-                        scanSuccess ? (
+                        scanSuccess && idCardNumber ? (
                           <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-semibold">
-                            <CheckCircle2 className="h-3.5 w-3.5" /> Automatically extracted from verified Pakistani CNIC card!
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Automatically extracted & verified from Pakistani CNIC card!
                           </span>
                         ) : (
                           <span className="text-[11px] text-slate-500">
-                            Upload a sharp Pakistani CNIC image above to automatically extract and verify your CNIC number.
+                            Upload your Pakistani CNIC image above to automatically extract and lock your CNIC number. Manual entry is restricted.
                           </span>
                         )
                       }

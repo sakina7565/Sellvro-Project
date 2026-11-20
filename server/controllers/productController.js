@@ -117,12 +117,91 @@ function readProductFields(body) {
     height: String(body.height || '').trim(),
     dimensionUnit: body.dimensionUnit || 'cm',
     image: String(body.image || '').trim(),
+    videoUrl: String(body.videoUrl || '').trim(),
+    stockAlert: Number(body.stockAlert || 10),
+    stockExpiry: String(body.stockExpiry || '').trim(),
     customizationAvailable:
       body.customizationAvailable === true ||
       body.customizationAvailable === 'true' ||
       body.customizationAvailable === '1',
     customizationInstructions: String(body.customizationInstructions || '').trim(),
+    sisterSkus: (() => {
+      let list = []
+      if (body.sisterSkus) {
+        if (Array.isArray(body.sisterSkus)) {
+          list = body.sisterSkus.map((s) => String(s).trim().toUpperCase()).filter(Boolean)
+        } else if (typeof body.sisterSkus === 'string') {
+          try {
+            const parsed = JSON.parse(body.sisterSkus)
+            if (Array.isArray(parsed)) {
+              list = parsed.map((s) => String(s).trim().toUpperCase()).filter(Boolean)
+            } else {
+              list = body.sisterSkus.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
+            }
+          } catch {
+            list = body.sisterSkus.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
+          }
+        }
+      }
+      return [...new Set(list)]
+    })(),
+    sisterVariationType: String(body.sisterVariationType || 'Color').trim() || 'Color',
+    // 4 Product Research Fields
+    globalSearchVolume: Math.max(0, parseInt(body.globalSearchVolume, 10) || 0),
+    globalMonthlySales: Math.max(0, parseInt(body.globalMonthlySales, 10) || 0),
+    usMarketAverageSales: Math.max(0, parseInt(body.usMarketAverageSales, 10) || 0),
+    productKeywords: (() => {
+      let kws = []
+      if (body.productKeywords) {
+        if (Array.isArray(body.productKeywords)) {
+          kws = body.productKeywords.map((k) => String(k).trim()).filter(Boolean)
+        } else if (typeof body.productKeywords === 'string') {
+          try {
+            const parsed = JSON.parse(body.productKeywords)
+            if (Array.isArray(parsed)) {
+              kws = parsed.map((k) => String(k).trim()).filter(Boolean)
+            } else {
+              kws = body.productKeywords.split(',').map((k) => k.trim()).filter(Boolean)
+            }
+          } catch {
+            kws = body.productKeywords.split(',').map((k) => k.trim()).filter(Boolean)
+          }
+        }
+      }
+      return [...new Set(kws)].slice(0, 5)
+    })(),
+    rankingPriority: ['high', 'medium', 'low', 'standard'].includes(String(body.rankingPriority || '').toLowerCase())
+      ? String(body.rankingPriority).toLowerCase()
+      : 'standard',
+    adminEvaluationNotes: String(body.adminEvaluationNotes || '').trim(),
   }
+}
+
+/**
+ * Calculates a composite ranking score for landing page positioning.
+ * High priority products get highest tier boost, followed by Medium, Low, and Standard.
+ * Within each priority tier, products are ranked by Global Monthly Sales, US Market Sales, Search Volume, and Keywords.
+ */
+export function calculateRankingScore({
+  rankingPriority = 'standard',
+  globalMonthlySales = 0,
+  globalSearchVolume = 0,
+  usMarketAverageSales = 0,
+  productKeywords = [],
+}) {
+  const priorityWeights = {
+    high: 10000000,
+    medium: 5000000,
+    low: 1000000,
+    standard: 0,
+  }
+  const pWeight = priorityWeights[rankingPriority] || 0
+  const salesScore = Math.max(0, Number(globalMonthlySales) || 0) * 100
+  const usScore = Math.max(0, Number(usMarketAverageSales) || 0) * 150
+  const searchScore = Math.max(0, Number(globalSearchVolume) || 0) * 1
+  const kwCount = Array.isArray(productKeywords) ? productKeywords.filter(Boolean).length : 0
+  const kwScore = kwCount * 500
+  return pWeight + salesScore + usScore + searchScore + kwScore
 }
 
 function validateUploadedImageResolutions(files) {
@@ -148,6 +227,54 @@ function validateUploadedImageResolutions(files) {
   return null
 }
 
+/**
+ * Synchronizes sister SKUs bi-directionally across the connected group of products.
+ * If Product A has sister SKUs [B, C], then B will have [A, C], and C will have [A, B].
+ * If B is removed from A, then A is removed from B's sister SKUs.
+ */
+export async function syncSisterSkusForProduct(product, newSisterSkus = []) {
+  if (!product || !product.sku) return
+
+  const currentSku = String(product.sku).trim().toUpperCase()
+  const targetSisterSkus = [...new Set(newSisterSkus.map((s) => String(s).trim().toUpperCase()))].filter(
+    (s) => s && s !== currentSku,
+  )
+
+  const oldSisterSkus = Array.isArray(product.sisterSkus)
+    ? product.sisterSkus.map((s) => String(s).trim().toUpperCase())
+    : []
+
+  // Update current product's sisterSkus
+  product.sisterSkus = targetSisterSkus
+  await product.save()
+
+  // Find removed SKUs that were previously in oldSisterSkus but not in target
+  const removedSkus = oldSisterSkus.filter((s) => !targetSisterSkus.includes(s))
+  if (removedSkus.length > 0) {
+    await Product.updateMany(
+      { sku: { $in: removedSkus } },
+      { $pull: { sisterSkus: currentSku } },
+    ).catch(() => {})
+  }
+
+  if (targetSisterSkus.length === 0) return
+
+  // Full group of connected SKUs
+  const fullGroupSkus = [currentSku, ...targetSisterSkus]
+
+  // For each peer in targetSisterSkus, ensure it links to all other peers in fullGroupSkus
+  for (const peerSku of targetSisterSkus) {
+    const peersForThisOne = fullGroupSkus.filter((s) => s !== peerSku)
+    await Product.updateOne(
+      { sku: peerSku },
+      {
+        $addToSet: { sisterSkus: { $each: peersForThisOne } },
+        ...(product.sisterVariationType ? { sisterVariationType: product.sisterVariationType } : {}),
+      },
+    ).catch(() => {})
+  }
+}
+
 function cleanupUploadedFiles(files) {
   if (!Array.isArray(files)) return
   for (const file of files) {
@@ -159,6 +286,16 @@ function cleanupUploadedFiles(files) {
 
 export const createProduct = async (req, res) => {
   try {
+    if (req.user?.role !== 'admin' && req.user?.status !== 'approved') {
+      cleanupUploadedFiles(req.files)
+      return res.status(403).json({
+        message: req.user?.status === 'suspended'
+          ? `Your supplier account has been suspended: ${req.user?.suspensionReason || 'Violation'}. Product creation is blocked.`
+          : 'Your account is pending admin approval. You cannot add products until your account has been approved by the Admin.',
+        status: req.user?.status,
+      })
+    }
+
     const fields = readProductFields(req.body)
     const asDraft = req.body.status === 'draft'
 
@@ -279,15 +416,28 @@ export const createProduct = async (req, res) => {
       console.warn('[Create Product] WMS MySQL creation notice:', wmsProdErr.message)
     }
 
+    const rankingScore = calculateRankingScore({
+      rankingPriority: fields.rankingPriority || 'standard',
+      globalMonthlySales: fields.globalMonthlySales,
+      usMarketAverageSales: fields.usMarketAverageSales,
+      globalSearchVolume: fields.globalSearchVolume,
+      productKeywords: fields.productKeywords,
+    })
+
     const product = await Product.create({
       ...fields,
       sku,
       image,
       images,
+      rankingScore,
       supplier: req.user._id,
       status,
       wmsProductId: wmsCreated?.id || null,
     })
+
+    if (fields.sisterSkus && fields.sisterSkus.length > 0) {
+      await syncSisterSkusForProduct(product, fields.sisterSkus).catch(() => {})
+    }
 
     if (!asDraft) {
       createNotification({
@@ -319,6 +469,16 @@ export const createProduct = async (req, res) => {
 
 export const updateMyProduct = async (req, res) => {
   try {
+    if (req.user?.role !== 'admin' && req.user?.status !== 'approved') {
+      cleanupUploadedFiles(req.files)
+      return res.status(403).json({
+        message: req.user?.status === 'suspended'
+          ? `Your supplier account has been suspended: ${req.user?.suspensionReason || 'Violation'}. Product editing is blocked.`
+          : 'Your account is pending admin approval. You cannot edit products until your account has been approved by the Admin.',
+        status: req.user?.status,
+      })
+    }
+
     const asDraft = req.body.status === 'draft'
     if (!asDraft) {
       const lowResFile = validateUploadedImageResolutions(req.files)
@@ -442,7 +602,18 @@ export const updateMyProduct = async (req, res) => {
       product.status = 'pending_approval'
     }
 
+    product.rankingScore = calculateRankingScore({
+      rankingPriority: product.rankingPriority || 'standard',
+      globalMonthlySales: product.globalMonthlySales,
+      usMarketAverageSales: product.usMarketAverageSales,
+      globalSearchVolume: product.globalSearchVolume,
+      productKeywords: product.productKeywords,
+    })
+
     await product.save()
+    if (fields.sisterSkus !== undefined) {
+      await syncSisterSkusForProduct(product, fields.sisterSkus).catch(() => {})
+    }
     await product.populate('supplier', 'fullName email')
 
     if (wasActive && isMaterialChange) {
@@ -564,7 +735,7 @@ async function enrichProductsWithSupplier(products) {
     }
   }
 
-  return products.map((product) => {
+  const enriched = products.map((product) => {
     const safeObj = typeof product.toSafeObject === 'function' ? product.toSafeObject() : { ...product }
     const sId = product.supplier?._id?.toString?.() || product.supplier?.toString?.() || safeObj.supplierId
     const profile = sId ? profilesMap.get(sId) : null
@@ -599,14 +770,6 @@ async function enrichProductsWithSupplier(products) {
     return safeObj
   })
 
-  // Ensure products are in strictly serial SKU order
-  enriched.sort((a, b) => {
-    const numA = parseInt(String(a.sku).replace(/\D+/g, ''), 10) || 0
-    const numB = parseInt(String(b.sku).replace(/\D+/g, ''), 10) || 0
-    if (numA !== numB) return numA - numB
-    return String(a.sku).localeCompare(String(b.sku))
-  })
-
   return enriched
 }
 
@@ -627,9 +790,24 @@ export const listApprovedProducts = async (_req, res) => {
   try {
     const products = await Product.find({ status: { $in: ['active', 'approved'] } })
       .populate('supplier', 'fullName email phone clientId')
-      .sort({ createdAt: -1 })
+      .sort({ rankingScore: -1, createdAt: -1 })
 
     const enriched = await enrichProductsWithSupplier(products)
+
+    // Automatically tag Hot-Selling Products (Top 20 highest-performing based on Admin data)
+    let hotRank = 0
+    enriched.forEach((item) => {
+      const score = Number(item.rankingScore || 0)
+      if (score > 0 && hotRank < 20) {
+        hotRank += 1
+        item.isHotSelling = true
+        item.hotSellingRank = hotRank
+      } else {
+        item.isHotSelling = false
+        item.hotSellingRank = null
+      }
+    })
+
     return res.json({ data: enriched })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to load products.' })
@@ -697,6 +875,49 @@ export const getProductById = async (req, res) => {
     }
 
     const [enriched] = await enrichProductsWithSupplier([product])
+
+    // Calculate Hot-Selling status and rank if applicable
+    const score = Number(product.rankingScore || 0)
+    if (score > 0 && (product.status === 'active' || product.status === 'approved')) {
+      const higherCount = await Product.countDocuments({
+        status: { $in: ['active', 'approved'] },
+        $or: [
+          { rankingScore: { $gt: score } },
+          { rankingScore: score, createdAt: { $gt: product.createdAt } },
+        ],
+      })
+      const rank = higherCount + 1
+      enriched.hotSellingRank = rank
+      enriched.isHotSelling = rank <= 20
+    } else {
+      enriched.isHotSelling = false
+      enriched.hotSellingRank = null
+    }
+
+    // Load and enrich Sister Products
+    let sisterProducts = []
+    if (Array.isArray(product.sisterSkus) && product.sisterSkus.length > 0) {
+      const currentSku = String(product.sku || '').trim().toUpperCase()
+      const cleanSisterSkus = product.sisterSkus
+        .map((s) => String(s).trim().toUpperCase())
+        .filter((s) => s && s !== currentSku)
+
+      if (cleanSisterSkus.length > 0) {
+        const isStaffOrOwner =
+          req.user?.role === 'admin' ||
+          (req.user?.role === 'supplier' &&
+            (product.supplier?._id?.equals?.(req.user._id) || product.supplier?.equals?.(req.user._id)))
+        const allowedStatuses = isStaffOrOwner ? { $ne: 'rejected' } : { $in: ['active', 'approved'] }
+
+        const foundSisters = await Product.find({
+          sku: { $in: cleanSisterSkus },
+          _id: { $ne: product._id },
+          status: allowedStatuses,
+        }).populate('supplier', 'fullName email phone clientId')
+        sisterProducts = await enrichProductsWithSupplier(foundSisters)
+      }
+    }
+    enriched.sisterProducts = sisterProducts
 
     if (req.user?._id && Array.isArray(product.watchers)) {
       enriched.isWatchlisted = product.watchers.some(
@@ -1111,14 +1332,29 @@ export const createAdminProduct = async (req, res) => {
       status = 'pending_approval'
     }
 
+    const rankingScore = calculateRankingScore({
+      rankingPriority: fields.rankingPriority,
+      globalMonthlySales: fields.globalMonthlySales,
+      globalSearchVolume: fields.globalSearchVolume,
+      usMarketAverageSales: fields.usMarketAverageSales,
+      productKeywords: fields.productKeywords,
+    })
+
     const product = await Product.create({
       ...fields,
+      rankingScore,
+      evaluatedAt: new Date(),
+      evaluatedBy: req.user?._id || null,
       sku,
       image,
       images,
       supplier: supplierId,
       status,
     })
+
+    if (fields.sisterSkus && fields.sisterSkus.length > 0) {
+      await syncSisterSkusForProduct(product, fields.sisterSkus).catch(() => {})
+    }
 
     await product.populate('supplier', 'fullName email')
 
@@ -1279,7 +1515,52 @@ export const updateAdminProduct = async (req, res) => {
       product.image = updatedImages[0]
     }
 
+    if (req.body.sisterVariationType !== undefined) {
+      product.sisterVariationType = String(req.body.sisterVariationType || 'Color').trim() || 'Color'
+    }
+
+    if (req.body.globalSearchVolume !== undefined) {
+      product.globalSearchVolume = Math.max(0, parseInt(req.body.globalSearchVolume, 10) || 0)
+    }
+    if (req.body.globalMonthlySales !== undefined) {
+      product.globalMonthlySales = Math.max(0, parseInt(req.body.globalMonthlySales, 10) || 0)
+    }
+    if (req.body.usMarketAverageSales !== undefined) {
+      product.usMarketAverageSales = Math.max(0, parseInt(req.body.usMarketAverageSales, 10) || 0)
+    }
+    if (req.body.productKeywords !== undefined) {
+      const parsedFields = readProductFields(req.body)
+      product.productKeywords = parsedFields.productKeywords
+    }
+    if (req.body.rankingPriority !== undefined) {
+      const p = String(req.body.rankingPriority).toLowerCase().trim()
+      if (['high', 'medium', 'low', 'standard'].includes(p)) {
+        product.rankingPriority = p
+      }
+    }
+    if (req.body.adminEvaluationNotes !== undefined) {
+      product.adminEvaluationNotes = String(req.body.adminEvaluationNotes || '').trim()
+    }
+
+    product.rankingScore = calculateRankingScore({
+      rankingPriority: product.rankingPriority,
+      globalMonthlySales: product.globalMonthlySales,
+      globalSearchVolume: product.globalSearchVolume,
+      usMarketAverageSales: product.usMarketAverageSales,
+      productKeywords: product.productKeywords,
+    })
+    product.evaluatedAt = new Date()
+    if (req.user?._id) {
+      product.evaluatedBy = req.user._id
+    }
+
     await product.save()
+
+    if (req.body.sisterSkus !== undefined) {
+      const parsedFields = readProductFields(req.body)
+      await syncSisterSkusForProduct(product, parsedFields.sisterSkus).catch(() => {})
+    }
+
     await product.populate('supplier', 'fullName email clientId')
 
     return res.json({
@@ -1294,6 +1575,63 @@ export const updateAdminProduct = async (req, res) => {
       return res.status(400).json({ message: 'This SKU is already in use.' })
     }
     return res.status(500).json({ message: error.message || 'Failed to update product.' })
+  }
+}
+
+/**
+ * Dedicated endpoint for Admin Product Research & Evaluation
+ * PATCH /api/admin/products/:id/research
+ */
+export const updateProductResearch = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found.' })
+    }
+
+    const parsedFields = readProductFields(req.body)
+
+    if (req.body.globalSearchVolume !== undefined) {
+      product.globalSearchVolume = parsedFields.globalSearchVolume
+    }
+    if (req.body.globalMonthlySales !== undefined) {
+      product.globalMonthlySales = parsedFields.globalMonthlySales
+    }
+    if (req.body.usMarketAverageSales !== undefined) {
+      product.usMarketAverageSales = parsedFields.usMarketAverageSales
+    }
+    if (req.body.productKeywords !== undefined) {
+      product.productKeywords = parsedFields.productKeywords
+    }
+    if (req.body.rankingPriority !== undefined) {
+      product.rankingPriority = parsedFields.rankingPriority
+    }
+    if (req.body.adminEvaluationNotes !== undefined) {
+      product.adminEvaluationNotes = parsedFields.adminEvaluationNotes
+    }
+
+    product.rankingScore = calculateRankingScore({
+      rankingPriority: product.rankingPriority,
+      globalMonthlySales: product.globalMonthlySales,
+      globalSearchVolume: product.globalSearchVolume,
+      usMarketAverageSales: product.usMarketAverageSales,
+      productKeywords: product.productKeywords,
+    })
+    product.evaluatedAt = new Date()
+    if (req.user?._id) {
+      product.evaluatedBy = req.user._id
+    }
+
+    await product.save()
+    await product.populate('supplier', 'fullName email clientId')
+
+    return res.json({
+      success: true,
+      message: 'Product research & evaluation saved successfully.',
+      product: product.toSafeObject(),
+    })
+  } catch (error) {
+    return res.status(500).json({ message: error.message || 'Failed to update product research.' })
   }
 }
 
@@ -1476,6 +1814,24 @@ export const getWmsProductBySku = async (req, res) => {
 
     const [enriched] = await enrichProductsWithSupplier([product])
 
+    // Calculate Hot-Selling status and rank if applicable
+    const score = Number(product.rankingScore || 0)
+    if (score > 0 && (product.status === 'active' || product.status === 'approved')) {
+      const higherCount = await Product.countDocuments({
+        status: { $in: ['active', 'approved'] },
+        $or: [
+          { rankingScore: { $gt: score } },
+          { rankingScore: score, createdAt: { $gt: product.createdAt } },
+        ],
+      })
+      const rank = higherCount + 1
+      enriched.hotSellingRank = rank
+      enriched.isHotSelling = rank <= 20
+    } else {
+      enriched.isHotSelling = false
+      enriched.hotSellingRank = null
+    }
+
     return res.json({
       success: true,
       data: enriched,
@@ -1596,6 +1952,24 @@ export const attachWmsProductMedia = async (req, res) => {
 
     const [enriched] = await enrichProductsWithSupplier([product])
 
+    // Calculate Hot-Selling status and rank if applicable
+    const score = Number(product.rankingScore || 0)
+    if (score > 0 && (product.status === 'active' || product.status === 'approved')) {
+      const higherCount = await Product.countDocuments({
+        status: { $in: ['active', 'approved'] },
+        $or: [
+          { rankingScore: { $gt: score } },
+          { rankingScore: score, createdAt: { $gt: product.createdAt } },
+        ],
+      })
+      const rank = higherCount + 1
+      enriched.hotSellingRank = rank
+      enriched.isHotSelling = rank <= 20
+    } else {
+      enriched.isHotSelling = false
+      enriched.hotSellingRank = null
+    }
+
     return res.json({
       success: true,
       message: `Product is now LIVE on Sellvro Marketplace! No admin approval required for pre-verified WMS inventory.`,
@@ -1676,6 +2050,24 @@ export const verifyProductWithWms = async (req, res) => {
 
     const [enriched] = await enrichProductsWithSupplier([product])
 
+    // Calculate Hot-Selling status and rank if applicable
+    const score = Number(product.rankingScore || 0)
+    if (score > 0 && (product.status === 'active' || product.status === 'approved')) {
+      const higherCount = await Product.countDocuments({
+        status: { $in: ['active', 'approved'] },
+        $or: [
+          { rankingScore: { $gt: score } },
+          { rankingScore: score, createdAt: { $gt: product.createdAt } },
+        ],
+      })
+      const rank = higherCount + 1
+      enriched.hotSellingRank = rank
+      enriched.isHotSelling = rank <= 20
+    } else {
+      enriched.isHotSelling = false
+      enriched.hotSellingRank = null
+    }
+
     return res.json({
       success: true,
       message: `Product "${product.name}" (${product.sku}) is now WMS Verified! Live warehouse stock verified at ${product.quantity} units, and marketplace fee adjusted to WMS fulfillment policy (${wmsFee}%).`,
@@ -1725,6 +2117,24 @@ export const syncWmsStock = async (req, res) => {
       await product.save()
       const [enriched] = await enrichProductsWithSupplier([product])
 
+    // Calculate Hot-Selling status and rank if applicable
+    const score = Number(product.rankingScore || 0)
+    if (score > 0 && (product.status === 'active' || product.status === 'approved')) {
+      const higherCount = await Product.countDocuments({
+        status: { $in: ['active', 'approved'] },
+        $or: [
+          { rankingScore: { $gt: score } },
+          { rankingScore: score, createdAt: { $gt: product.createdAt } },
+        ],
+      })
+      const rank = higherCount + 1
+      enriched.hotSellingRank = rank
+      enriched.isHotSelling = rank <= 20
+    } else {
+      enriched.isHotSelling = false
+      enriched.hotSellingRank = null
+    }
+
       return res.json({
         success: true,
         message: `Stock updated to ${liveStock} units directly from Master Sellvro WMS.`,
@@ -1766,6 +2176,24 @@ export const syncWmsStock = async (req, res) => {
     await product.save()
 
     const [enriched] = await enrichProductsWithSupplier([product])
+
+    // Calculate Hot-Selling status and rank if applicable
+    const score = Number(product.rankingScore || 0)
+    if (score > 0 && (product.status === 'active' || product.status === 'approved')) {
+      const higherCount = await Product.countDocuments({
+        status: { $in: ['active', 'approved'] },
+        $or: [
+          { rankingScore: { $gt: score } },
+          { rankingScore: score, createdAt: { $gt: product.createdAt } },
+        ],
+      })
+      const rank = higherCount + 1
+      enriched.hotSellingRank = rank
+      enriched.isHotSelling = rank <= 20
+    } else {
+      enriched.isHotSelling = false
+      enriched.hotSellingRank = null
+    }
 
     return res.json({
       success: true,

@@ -22,7 +22,7 @@ export function getRedirectForUser(user) {
   }
 
   if (user.role === 'user') {
-    return '/'
+    return user.status === 'approved' ? '/' : '/user/business/detail'
   }
 
   return '/'
@@ -31,8 +31,10 @@ export function getRedirectForUser(user) {
 export function getDashboardPathForUser(user) {
   if (!user) return '/login'
   if (user.role === 'admin') return '/admin/dashboard'
-  if (user.role === 'supplier') return '/supplier/dashboard'
-  return '/user/dashboard'
+  if (user.role === 'supplier') {
+    return user.status === 'approved' ? '/supplier/dashboard' : '/supplier/business/details'
+  }
+  return user.status === 'approved' ? '/user/dashboard' : '/user/business/detail'
 }
 
 export function canAccessPath(user, path) {
@@ -60,7 +62,15 @@ export function canAccessPath(user, path) {
 
   if (path.startsWith('/user')) {
     if (user.role !== 'user' && user.role !== 'admin') return false
-    return true
+    if (path.startsWith('/user/business')) {
+      return ['pending_details', 'pending_approval', 'approved'].includes(user.status)
+    }
+    return user.status === 'approved'
+  }
+
+  if (path.startsWith('/checkout')) {
+    if (user.role !== 'user' && user.role !== 'admin') return false
+    return user.status === 'approved'
   }
 
   return true

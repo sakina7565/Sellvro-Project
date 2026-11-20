@@ -14,9 +14,11 @@ import {
   Truck,
   RotateCcw,
   Sparkles,
+  Palette,
   Search,
   ExternalLink,
   ChevronDown,
+  Flame,
 } from 'lucide-react'
 import { mediaUrl } from '../../lib/api.js'
 import { FEATURED_DEALS, MARKETPLACE_CATEGORIES } from './marketplaceData.js'
@@ -184,7 +186,7 @@ export default function MarketplaceCategoryView({
   const { isAuthenticated } = useAuth()
   const [viewMode, setViewMode] = useState('list') // 'list' or 'grid' (eBay default in screenshot is list)
   const [wishlist, setWishlist] = useState({})
-  const [sortBy, setSortBy] = useState('newest') // 'newest' (default: latest added first), 'price_asc', 'price_desc', 'rating', 'best_match'
+  const [sortBy, setSortBy] = useState('best_match') // 'best_match' (default: product ranking by research priority), 'newest', 'price_asc', 'price_desc', 'rating'
   const [pillFilter, setPillFilter] = useState('all') // 'all', 'warehouse', 'free_shipping', 'under_50', '50_150', 'over_150', 'top_rated'
   const [priceMin, setPriceMin] = useState(minPriceQuery || '')
   const [priceMax, setPriceMax] = useState(maxPriceQuery || '')
@@ -317,7 +319,11 @@ export default function MarketplaceCategoryView({
           (item.description && item.description.toLowerCase().includes(q)) ||
           (item.sku && item.sku.toLowerCase().includes(q)) ||
           (item.category && item.category.toLowerCase().includes(q)) ||
-          (item.brand && item.brand.toLowerCase().includes(q))
+          (item.brand && item.brand.toLowerCase().includes(q)) ||
+          (item.color && item.color.toLowerCase().includes(q)) ||
+          (Array.isArray(item.sisterSkus) && item.sisterSkus.some((s) => String(s).toLowerCase().includes(q))) ||
+          (Array.isArray(item.productKeywords) &&
+            item.productKeywords.some((k) => String(k).toLowerCase().includes(q)))
         if (!match) return false
       }
 
@@ -411,7 +417,7 @@ export default function MarketplaceCategoryView({
     minRating,
   ])
 
-  // Sort the filtered products (default: newest first in descending order)
+  // Sort the filtered products (default: landing page priority & research score)
   const sortedProducts = useMemo(() => {
     const list = [...filteredProducts]
     if (sortBy === 'price_asc') {
@@ -420,12 +426,50 @@ export default function MarketplaceCategoryView({
       list.sort((a, b) => (b.price || 0) - (a.price || 0))
     } else if (sortBy === 'rating') {
       list.sort((a, b) => (b.rating || 0) - (a.rating || 0))
-    } else {
-      // 'newest' & 'best_match': latest added products first (descending order)
+    } else if (sortBy === 'newest') {
       list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    } else {
+      // 'best_match' (Landing Page Product Ranking):
+      // Highest-ranked products appear at the top in descending order of performance score.
+      // Top 20 performers are Hot-Selling products.
+      list.sort((a, b) => {
+        const scoreA = Number(a.rankingScore || 0)
+        const scoreB = Number(b.rankingScore || 0)
+        if (scoreB !== scoreA) return scoreB - scoreA
+        const priorityWeights = { high: 3, medium: 2, low: 1, standard: 0 }
+        const pA = priorityWeights[a.rankingPriority] ?? 0
+        const pB = priorityWeights[b.rankingPriority] ?? 0
+        if (pB !== pA) return pB - pA
+        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+      })
     }
     return list
   }, [filteredProducts, sortBy])
+
+  // Pagination (25 products per page)
+  const ITEMS_PER_PAGE = 25
+  const [currentPage, setCurrentPage] = useState(1)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [
+    searchQuery,
+    skuQuery,
+    activeCategory,
+    activeSubcategory,
+    appliedMin,
+    appliedMax,
+    inWarehouseOnly,
+    freeShippingOnly,
+    minRating,
+    sortBy,
+  ])
+
+  const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ITEMS_PER_PAGE))
+  const paginatedProducts = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+    return sortedProducts.slice(startIndex, startIndex + ITEMS_PER_PAGE)
+  }, [sortedProducts, currentPage])
 
   // Related products to show if results are small or empty
   const relatedProducts = useMemo(() => {
@@ -449,6 +493,14 @@ export default function MarketplaceCategoryView({
         state: {
           from: `/checkout/${itemId}`,
           message: 'Please sign in to your account before placing an order.',
+        },
+      })
+      return
+    }
+    if (user?.role !== 'admin' && user?.status !== 'approved') {
+      navigate('/user/business/detail', {
+        state: {
+          message: 'Your buyer account is pending admin approval. You cannot place orders until approved by the Admin.',
         },
       })
       return
@@ -929,11 +981,11 @@ export default function MarketplaceCategoryView({
                   onChange={(e) => setSortBy(e.target.value)}
                   className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-800 focus:border-blue-500 focus:outline-none"
                 >
-                  <option value="best_match">Best Match</option>
+                  <option value="best_match">Marketplace Ranking (Priority &amp; Research)</option>
+                  <option value="newest">Newest First</option>
                   <option value="price_asc">Price: Low to High</option>
                   <option value="price_desc">Price: High to Low</option>
                   <option value="rating">Highest Rating</option>
-                  <option value="newest">Newest First</option>
                 </select>
               </div>
 
@@ -969,10 +1021,11 @@ export default function MarketplaceCategoryView({
 
           {/* ── Product Listings (List vs Grid) ── */}
           {sortedProducts.length > 0 ? (
-            viewMode === 'list' ? (
+            <>
+              {viewMode === 'list' ? (
               /* ── LIST VIEW (Matches eBay screenshot exactly) ── */
               <div className="space-y-4">
-                {sortedProducts.map((item) => {
+                {paginatedProducts.map((item) => {
                   const itemId = item._id || item.id
                   const productLink = itemId ? `/user/products/${itemId}` : '/'
                   const isWishlisted = Boolean(wishlist[itemId])
@@ -1001,6 +1054,14 @@ export default function MarketplaceCategoryView({
                     >
                       {/* Product Thumbnail */}
                       <div className="relative h-44 w-44 shrink-0 overflow-hidden rounded-xl bg-slate-50 border border-slate-100 mx-auto sm:mx-0">
+                        {Boolean(item.isHotSelling || (item.hotSellingRank && item.hotSellingRank <= 20)) && (
+                          <div className="absolute top-2 left-2 z-10">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-600 to-amber-500 px-2 py-0.5 text-[9.5px] font-black text-white shadow-xs">
+                              <Flame className="h-3 w-3 fill-white" />
+                              <span>Hot Selling #{item.hotSellingRank || 1}</span>
+                            </span>
+                          </div>
+                        )}
                         <Link to={productLink} className="block h-full w-full">
                           <img
                             src={displayImg}
@@ -1095,6 +1156,27 @@ export default function MarketplaceCategoryView({
                               Stock: <strong className="text-slate-700">{stockCount}</strong> available
                             </span>
                           )}
+
+                          {Array.isArray(item.sisterSkus) && item.sisterSkus.length > 0 && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-bold text-sky-700 border border-sky-200">
+                              <Palette className="h-3 w-3 text-sky-600" />
+                              <span>Also in {item.sisterSkus.length} {item.sisterVariationType || 'Color'}{item.sisterSkus.length > 1 ? 's' : ''}</span>
+                            </span>
+                          )}
+
+                          {Boolean(item.isHotSelling || (item.hotSellingRank && item.hotSellingRank <= 20)) && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-600 to-amber-500 px-2.5 py-0.5 text-[11px] font-black text-white shadow-xs">
+                              <Flame className="h-3 w-3 fill-white" />
+                              <span>Top 20 Hot-Selling #{item.hotSellingRank || 1}</span>
+                            </span>
+                          )}
+
+                          {item.rankingPriority === 'high' && !item.isHotSelling && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-bold text-indigo-700 border border-indigo-200">
+                              <Sparkles className="h-3 w-3 text-indigo-600" />
+                              <span>Top Trending &bull; High Demand</span>
+                            </span>
+                          )}
                         </div>
 
                         {/* Shipping note */}
@@ -1146,7 +1228,7 @@ export default function MarketplaceCategoryView({
             ) : (
               /* ── GRID VIEW ── */
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-                {sortedProducts.map((item) => {
+                {paginatedProducts.map((item) => {
                   const itemId = item._id || item.id
                   const productLink = itemId ? `/user/products/${itemId}` : '/'
                   const isWishlisted = Boolean(wishlist[itemId])
@@ -1173,6 +1255,14 @@ export default function MarketplaceCategoryView({
                       <div>
                         {/* Square image */}
                         <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-slate-50 border border-slate-100">
+                          {Boolean(item.isHotSelling || (item.hotSellingRank && item.hotSellingRank <= 20)) && (
+                            <div className="absolute top-2 left-2 z-10">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-600 to-amber-500 px-2 py-0.5 text-[9px] font-black text-white shadow-xs">
+                                <Flame className="h-2.5 w-2.5 fill-white" />
+                                <span>#{item.hotSellingRank || 1} Hot</span>
+                              </span>
+                            </div>
+                          )}
                           <Link to={productLink} className="block h-full w-full">
                             <img
                               src={displayImg}
@@ -1214,14 +1304,32 @@ export default function MarketplaceCategoryView({
                         </div>
 
                         {/* Badge */}
-                        {inWarehouse && (
-                          <div className="mt-2">
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {Boolean(item.isHotSelling || (item.hotSellingRank && item.hotSellingRank <= 20)) && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-600 to-amber-500 px-2 py-0.5 text-[10px] font-black text-white">
+                              <Flame className="h-2.5 w-2.5 fill-white" />
+                              <span>Top 20 Hot</span>
+                            </span>
+                          )}
+                          {inWarehouse && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
                               <Warehouse className="h-2.5 w-2.5" />
                               <span>3PL Warehouse</span>
                             </span>
-                          </div>
-                        )}
+                          )}
+                          {Array.isArray(item.sisterSkus) && item.sisterSkus.length > 0 && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">
+                              <Palette className="h-2.5 w-2.5 text-sky-600" />
+                              <span>+{item.sisterSkus.length} {item.sisterVariationType || 'Colors'}</span>
+                            </span>
+                          )}
+                          {item.rankingPriority === 'high' && !item.isHotSelling && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                              <Sparkles className="h-2.5 w-2.5 text-indigo-600" />
+                              <span>Top Demand</span>
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Bottom Price & Order */}
@@ -1244,7 +1352,80 @@ export default function MarketplaceCategoryView({
                   )
                 })}
               </div>
-            )
+            )}
+
+            {/* Pagination Controls (25 products per page) */}
+            {totalPages > 1 && (
+              <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
+                <div className="text-xs text-slate-500 font-medium">
+                  Showing{' '}
+                  <strong className="text-slate-900 font-bold">
+                    {(currentPage - 1) * ITEMS_PER_PAGE + 1}–
+                    {Math.min(currentPage * ITEMS_PER_PAGE, sortedProducts.length)}
+                  </strong>{' '}
+                  of <strong className="text-slate-900 font-bold">{sortedProducts.length}</strong> products
+                  <span className="text-slate-400 ml-1.5">(25 per page)</span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentPage((p) => Math.max(1, p - 1))
+                      document.getElementById('marketplace-category-view')?.scrollIntoView({ behavior: 'smooth' })
+                    }}
+                    disabled={currentPage === 1}
+                    className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs"
+                  >
+                    Previous
+                  </button>
+
+                  {Array.from({ length: totalPages }, (_, idx) => idx + 1)
+                    .filter((page) => {
+                      if (totalPages <= 7) return true
+                      if (page === 1 || page === totalPages) return true
+                      return Math.abs(page - currentPage) <= 1
+                    })
+                    .map((page, i, arr) => {
+                      const prev = arr[i - 1]
+                      return (
+                        <span key={page} className="flex items-center">
+                          {prev && page - prev > 1 && (
+                            <span className="px-1 text-xs text-slate-400">...</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCurrentPage(page)
+                              document.getElementById('marketplace-category-view')?.scrollIntoView({ behavior: 'smooth' })
+                            }}
+                            className={`min-w-8 h-8 rounded-xl px-2.5 text-xs font-bold transition shadow-2xs ${
+                              currentPage === page
+                                ? 'bg-blue-600 text-white shadow-xs'
+                                : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        </span>
+                      )
+                    })}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                      document.getElementById('marketplace-category-view')?.scrollIntoView({ behavior: 'smooth' })
+                    }}
+                    disabled={currentPage === totalPages}
+                    className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-2xs"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
           ) : (
             /* ── EMPTY STATE (No matching items) ── */
             <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-2xs space-y-4">

@@ -605,6 +605,25 @@ export let createOrder = async (req, res) => {
       })
     }
 
+    if (buyer.role === 'supplier') {
+      return res.status(403).json({
+        message: 'Suppliers cannot place customer orders. Orders must be placed using a verified Buyer account.',
+      })
+    }
+
+    if (buyer.role !== 'admin' && buyer.status !== 'approved') {
+      const isSuspended = buyer.status === 'suspended'
+      const isRejected = buyer.status === 'rejected'
+      return res.status(403).json({
+        message: isSuspended
+          ? `Your account has been suspended: ${buyer.suspensionReason || 'Performance violation'}. Order placement is restricted.`
+          : isRejected
+          ? 'Your account application was rejected. You cannot place orders.'
+          : 'Your account is pending admin approval. You cannot place orders or use wallet balance until your account has been approved by the Admin.',
+        status: buyer.status,
+      })
+    }
+
     if (paymentMethod === 'wallet') {
       const updatedBuyer = await User.findOneAndUpdate(
         { _id: buyer._id, walletBalance: { $gte: total } },
@@ -765,13 +784,15 @@ export let createOrder = async (req, res) => {
         recipient: product.supplier,
         targetRole: 'supplier',
         type: 'order',
-        title: `New WMS-Fulfilled Order (${orderNo})`,
-        message: `New warehouse-fulfilled order #${orderNo} received for ${quantity}x "${product.name}" ($${total.toFixed(2)}). Order automatically pushed to WMS Warehouse for picking & dispatch.`,
-        link: '/supplier/orders',
+        title: `New WMS-Fulfilled Order (${orderNo}) - Review Required`,
+        message: `New warehouse-fulfilled order #${orderNo} received for ${quantity}x "${product.name}" ($${total.toFixed(2)}). Please review order details and fulfillment terms.`,
+        link: `/supplier/sales/details?order=${orderNo}&action=review`,
         metadata: {
           orderNo,
+          orderId: order._id,
           isWms: true,
           fulfillmentId: wmsResult?.fulfillmentId,
+          action: 'review',
         },
       })
 
@@ -781,9 +802,10 @@ export let createOrder = async (req, res) => {
         type: 'order',
         title: `WMS Order Pushed to Warehouse (#${orderNo})`,
         message: `Buyer ${buyer.fullName || 'User'} placed order #${orderNo} for ${quantity}x "${product.name}" ($${total.toFixed(2)}). Product is warehouse-fulfilled and was automatically pushed to WMS API (Fulfillment ID: ${wmsResult?.fulfillmentId}).`,
-        link: '/admin/orders',
+        link: '/admin/sales',
         metadata: {
           orderNo,
+          orderId: order._id,
           isWms: true,
           fulfillmentId: wmsResult?.fulfillmentId,
         },
@@ -802,9 +824,14 @@ export let createOrder = async (req, res) => {
         recipient: product.supplier,
         targetRole: 'supplier',
         type: 'order',
-        title: `New Order Received (${orderNo})`,
-        message: `A new order has been placed for ${quantity}x ${product.name} ($${total.toFixed(2)}).`,
-        link: '/supplier/orders',
+        title: `New Order Received (${orderNo}) - Review & Accept/Reject`,
+        message: `A new order has been placed for ${quantity}x "${product.name}" ($${total.toFixed(2)}). Please review order details, terms & conditions, and accept or reject the order.`,
+        link: `/supplier/sales/details?order=${orderNo}&action=review`,
+        metadata: {
+          orderNo,
+          orderId: order._id,
+          action: 'review',
+        },
       })
 
       createNotification({
@@ -812,7 +839,7 @@ export let createOrder = async (req, res) => {
         type: 'order',
         title: `Order Placed (#${orderNo})`,
         message: `${buyer.fullName || 'User'} placed an order for ${product.name} totaling $${total.toFixed(2)}.`,
-        link: '/admin/orders',
+        link: '/admin/sales',
       })
     }
 
@@ -2366,6 +2393,275 @@ export const parseOrderLabel = async (req, res) => {
     return res.status(500).json({ message: err.message || 'Failed to parse shipping label.' })
   }
 }
+
+/**
+ * Supplier Order Review Endpoint
+ * Allows Supplier (or Admin) to review order details, accept or reject the order based on terms and conditions.
+ * POST /api/orders/:id/supplier-review
+ * Body: { decision: 'accept' | 'reject', rejectionReason: string, termsAccepted: boolean }
+ */
+export const reviewSupplierOrder = async (req, res) => {
+  try {
+    const order = await populateOrder(Order.findById(req.params.id))
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found.' })
+    }
+
+    const isAdmin = req.user.role === 'admin'
+    const isSupplierOwner =
+      req.user.role === 'supplier' &&
+      order.supplier &&
+      (order.supplier._id?.equals?.(req.user._id) ||
+        order.supplier.equals?.(req.user._id) ||
+        String(order.supplier._id || order.supplier) === String(req.user._id))
+
+    if (!isAdmin && !isSupplierOwner) {
+      return res.status(403).json({ message: 'You are not authorized to review this supplier order.' })
+    }
+
+    if (order.status === 'cancelled' || order.isRefunded) {
+      return res.status(400).json({ message: 'This order is already cancelled and cannot be reviewed.' })
+    }
+
+    if (order.status === 'delivered') {
+      return res.status(400).json({ message: 'This order has already been delivered.' })
+    }
+
+    const rawDecision = String(req.body.decision || '').trim().toLowerCase()
+    if (rawDecision !== 'accept' && rawDecision !== 'reject') {
+      return res.status(400).json({ message: "Invalid decision. Must be either 'accept' or 'reject'." })
+    }
+
+    const supplierName = req.user.businessName || req.user.fullName || 'Supplier'
+
+    // ==========================================
+    // 1. DECISION: ACCEPT ORDER
+    // ==========================================
+    if (rawDecision === 'accept') {
+      const termsAccepted = Boolean(req.body.termsAccepted)
+      if (!termsAccepted) {
+        return res.status(400).json({
+          message: 'You must review and agree to the Sellvro Supplier Fulfillment Terms & Conditions before accepting the order.',
+        })
+      }
+
+      order.supplierReviewStatus = 'accepted'
+      order.supplierReviewedAt = new Date()
+      order.supplierTermsAccepted = true
+      order.supplierTermsAcceptedAt = new Date()
+      order.supplierRejectionReason = ''
+
+      // Transition order status to in_process / awaiting_dispatch
+      const newStatus = order.isDispatched ? 'in_process' : 'awaiting_dispatch'
+      if (order.status === 'placed' || order.status === 'pending') {
+        order.status = 'awaiting_dispatch'
+      }
+
+      if (!Array.isArray(order.trackingTimeline)) {
+        order.trackingTimeline = []
+      }
+      order.trackingTimeline.push({
+        status: order.trackingStatus || 'processing',
+        title: 'Order Reviewed & Accepted by Supplier',
+        location: order.warehouseLocationLabel || 'Supplier Facility',
+        timestamp: new Date(),
+        note: `Supplier ${supplierName} reviewed complete order details and accepted fulfillment terms. Packaging and dispatch SLA initiated.`,
+      })
+
+      await order.save()
+
+      // Notify Buyer
+      const buyerId = order.user?._id || order.user
+      if (buyerId) {
+        await createNotification({
+          recipient: buyerId,
+          targetRole: 'user',
+          type: 'order',
+          title: `Order #${order.orderNo} Accepted by Supplier`,
+          message: `Good news! Supplier ${supplierName} has reviewed and accepted your order for ${order.quantity}x "${order.productName || 'product'}". Packaging & dispatch preparation is underway.`,
+          link: '/user/orders',
+          metadata: {
+            orderNo: order.orderNo,
+            orderId: order._id,
+            status: 'accepted',
+          },
+        }).catch(() => {})
+      }
+
+      // Notify Admin
+      await createNotification({
+        targetRole: 'admin',
+        type: 'order',
+        title: `Supplier Accepted Order #${order.orderNo}`,
+        message: `Supplier ${supplierName} reviewed and accepted Order #${order.orderNo} for "${order.productName || 'product'}" ($${Number(order.total || 0).toFixed(2)}).`,
+        link: '/admin/sales',
+        metadata: {
+          orderNo: order.orderNo,
+          orderId: order._id,
+          status: 'accepted',
+        },
+      }).catch(() => {})
+
+      return res.json({
+        success: true,
+        message: 'Order accepted successfully. Fulfillment terms acknowledged.',
+        order: order.toSafeObject(),
+      })
+    }
+
+    // ==========================================
+    // 2. DECISION: REJECT ORDER
+    // ==========================================
+    if (rawDecision === 'reject') {
+      if (Boolean(order.isDispatched) || ['in_transit', 'out_for_delivery'].includes(String(order.trackingStatus || '').toLowerCase())) {
+        return res.status(400).json({
+          message: 'Order cannot be rejected because it has already been dispatched / handed over to courier.',
+        })
+      }
+
+      const rejectionReason = String(req.body.rejectionReason || req.body.reason || '').trim()
+      if (!rejectionReason || rejectionReason.length < 5) {
+        return res.status(400).json({
+          message: 'A valid rejection reason (minimum 5 characters) explaining why this order cannot be fulfilled is required.',
+        })
+      }
+
+      order.supplierReviewStatus = 'rejected'
+      order.supplierReviewedAt = new Date()
+      order.supplierRejectionReason = rejectionReason
+      order.status = 'cancelled'
+      order.trackingStatus = 'cancelled'
+      order.payoutStatus = 'cancelled'
+      order.isRefunded = true
+      order.refundedAt = new Date()
+      order.refundAmount = Number(order.total || 0)
+
+      const totalRefund = Number(Number(order.total || 0).toFixed(2))
+      const commissionRefunded = Number(Number(order.commission || 0).toFixed(2))
+      const supplierAmount = Number((totalRefund - commissionRefunded).toFixed(2))
+
+      if (!Array.isArray(order.trackingTimeline)) {
+        order.trackingTimeline = []
+      }
+      order.trackingTimeline.push({
+        status: 'cancelled',
+        title: 'Order Rejected by Supplier',
+        location: 'Supplier Facility',
+        timestamp: new Date(),
+        note: `Supplier ${supplierName} declined order fulfillment: "${rejectionReason}". Full 100% refund of $${totalRefund.toFixed(2)} automatically returned to customer wallet.`,
+      })
+
+      // Refund to Buyer's wallet & generate 26-W-XXXXX transaction log
+      let refundTxId = ''
+      if (order.paymentMethod === 'wallet' || totalRefund > 0) {
+        const buyer = await User.findById(order.user?._id || order.user)
+        if (buyer) {
+          buyer.walletBalance = Number(((buyer.walletBalance || 0) + totalRefund).toFixed(2))
+          await buyer.save()
+
+          try {
+            refundTxId = await getNextWalletTxId()
+          } catch (_txErr) {
+            refundTxId = `26-W-${Date.now().toString().slice(-5)}`
+          }
+          order.refundTxId = refundTxId
+
+          await WalletRequest.create({
+            transactionId: refundTxId,
+            user: buyer._id,
+            amount: totalRefund,
+            depositCurrency: 'USD',
+            depositAmount: totalRefund,
+            exchangeRate: 1,
+            grossAmount: totalRefund,
+            conversionFeeRate: 0,
+            conversionFee: 0,
+            bankTid: `SUPPLIER-REJECT-${order.orderNo}`,
+            paymentMethod: 'wallet_refund',
+            order: order._id,
+            orderNo: order.orderNo,
+            refundType: 'supplier_rejection',
+            supplierAmount,
+            commissionRefunded,
+            status: 'approved',
+            adminNote: `Automatic 100% refund for Order #${order.orderNo} rejected by Supplier (${supplierName}): "${rejectionReason}". Full $${totalRefund.toFixed(2)} refunded to User Wallet ($${supplierAmount.toFixed(2)} supplier payable reversed, $${commissionRefunded.toFixed(2)} marketplace commission refunded).`,
+          }).catch((err) => console.warn('[Supplier Reject Order] Failed to create wallet transaction log:', err.message))
+        }
+      }
+
+      // Restore Product Stock in MongoDB
+      const product = await Product.findById(order.product?._id || order.product)
+      if (product) {
+        product.quantity = (product.quantity || 0) + order.quantity
+        await product.save()
+      }
+
+      // Cancel in WMS MySQL if applicable
+      await cancelWmsOrder({
+        requestNumber: order.wmsRequestNumber || `REQ-${order.orderNo.replace('ORD-', '')}`,
+        orderNo: order.orderNo,
+        sku: product?.sku,
+        quantity: order.quantity,
+      }).catch(() => { })
+
+      await order.save()
+
+      // Notify Buyer
+      const buyerId = order.user?._id || order.user
+      if (buyerId) {
+        await createNotification({
+          recipient: buyerId,
+          targetRole: 'user',
+          type: 'order',
+          title: `Order #${order.orderNo} Declined by Supplier - Refund Issued`,
+          message: `The supplier was unable to fulfill your order for ${order.quantity}x "${order.productName || 'product'}" (Reason: ${rejectionReason}). A full 100% refund of $${totalRefund.toFixed(2)} has been credited to your Sellvro Wallet.`,
+          link: '/user/orders',
+          metadata: {
+            orderNo: order.orderNo,
+            orderId: order._id,
+            status: 'rejected',
+            rejectionReason,
+            refundAmount: totalRefund,
+            refundTxId,
+          },
+        }).catch(() => {})
+      }
+
+      // Notify Admin
+      await createNotification({
+        targetRole: 'admin',
+        type: 'order',
+        title: `Supplier Rejected Order #${order.orderNo}`,
+        message: `Supplier ${supplierName} rejected Order #${order.orderNo} for "${order.productName || 'product'}". Reason: "${rejectionReason}". Automatic full refund of $${totalRefund.toFixed(2)} was credited to buyer.`,
+        link: '/admin/sales',
+        metadata: {
+          orderNo: order.orderNo,
+          orderId: order._id,
+          status: 'rejected',
+          rejectionReason,
+          refundAmount: totalRefund,
+          refundTxId,
+        },
+      }).catch(() => {})
+
+      return res.json({
+        success: true,
+        message: 'Order has been rejected. Full 100% refund has been issued to buyer and inventory restored.',
+        order: order.toSafeObject(),
+        refundTxId,
+        refundBreakdown: {
+          totalRefund,
+          supplierAmountReversed: supplierAmount,
+          commissionRefunded,
+        },
+      })
+    }
+  } catch (error) {
+    console.error('Review supplier order error:', error)
+    return res.status(500).json({ message: error.message || 'Failed to submit supplier order review.' })
+  }
+}
+
 
 
 

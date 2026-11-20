@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useMemo } from 'react'
-import { Ban, Building2, Check, Clock, ExternalLink, Plus, Printer, RefreshCw, ShieldAlert, Star, Tag, Truck, Warehouse, X } from 'lucide-react'
+import { Ban, Building2, Check, Clock, ExternalLink, Plus, Printer, RefreshCw, ShieldAlert, ShieldCheck, Star, Tag, Truck, Warehouse, X } from 'lucide-react'
 import Badge from '../ui/Badge.jsx'
 import Button from '../ui/Button.jsx'
 import TrackingModal from './TrackingModal.jsx'
@@ -8,6 +8,7 @@ import OrderReviewModal from './OrderReviewModal.jsx'
 import UserCancelOrderModal from './UserCancelOrderModal.jsx'
 import UserUpdateTrackingModal from './UserUpdateTrackingModal.jsx'
 import ShippingAirwayBillModal from './ShippingAirwayBillModal.jsx'
+import SupplierOrderReviewModal from './SupplierOrderReviewModal.jsx'
 import { getErrorMessage, orderApi, mediaUrl } from '../../lib/api.js'
 import { formatSupplierId, formatUserId } from '../../lib/idFormatters.js'
 import { getCourierExternalTrackingUrl } from '../../lib/courierHelpers.js'
@@ -63,6 +64,8 @@ function OrderDetailDrawer({
 
   const { user: authUser } = useAuth()
   const isAdmin = authUser?.role === 'admin'
+  const isSupplier = authUser?.role === 'supplier'
+  const [supplierReviewModalOpen, setSupplierReviewModalOpen] = useState(false)
 
   const { isExpired, hoursElapsed, hoursRemaining, minutesRemaining } = useMemo(() => {
     if (!order?.createdAt) return { isExpired: false, hoursElapsed: 0, hoursRemaining: 12, minutesRemaining: 0 }
@@ -391,6 +394,56 @@ function OrderDetailDrawer({
                   </div>
                 )
               })()}
+
+              {/* Supplier Review & Terms Agreement Section */}
+              <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <ShieldCheck className="h-4 w-4 text-indigo-600 shrink-0" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                      Supplier Review &amp; Fulfillment Terms
+                    </span>
+                  </div>
+                  {order.supplierReviewStatus === 'accepted' ? (
+                    <Badge tone="success" className="bg-emerald-100 text-emerald-900 border-emerald-300">
+                      ✓ Accepted
+                    </Badge>
+                  ) : order.supplierReviewStatus === 'rejected' ? (
+                    <Badge tone="danger" className="bg-rose-100 text-rose-900 border-rose-300">
+                      ✕ Rejected
+                    </Badge>
+                  ) : (
+                    <Badge tone="warning" className="bg-amber-100 text-amber-900 border-amber-300 animate-pulse">
+                      Pending Review
+                    </Badge>
+                  )}
+                </div>
+
+                {order.supplierReviewStatus === 'accepted' ? (
+                  <p className="text-xs text-emerald-800 bg-emerald-50/80 p-2.5 rounded-lg border border-emerald-200 font-medium">
+                    Order fulfillment terms accepted by supplier on {order.supplierReviewedAt ? new Date(order.supplierReviewedAt).toLocaleString() : 'N/A'}. Preparing for dispatch within promised SLA.
+                  </p>
+                ) : order.supplierReviewStatus === 'rejected' ? (
+                  <p className="text-xs text-rose-800 bg-rose-50/80 p-2.5 rounded-lg border border-rose-200 font-medium">
+                    Order declined by supplier: <em>"{order.supplierRejectionReason || 'Fulfillment unavailable'}"</em>. 100% refund was issued to customer wallet.
+                  </p>
+                ) : (
+                  <div className="flex items-center justify-between gap-3 pt-1">
+                    <p className="text-xs text-slate-500">
+                      Supplier has not reviewed fulfillment details &amp; terms for this order yet.
+                    </p>
+                    {(isSupplier || isAdmin) && order.status !== 'cancelled' && order.status !== 'delivered' && (
+                      <button
+                        type="button"
+                        onClick={() => setSupplierReviewModalOpen(true)}
+                        className="rounded-lg bg-amber-500 hover:bg-amber-600 px-3 py-1.5 text-xs font-bold text-white shadow-2xs transition shrink-0 cursor-pointer"
+                      >
+                        Review Order
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {/* Warehouse Custody Banner */}
               <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -1036,6 +1089,23 @@ function OrderDetailDrawer({
           order={order}
           open={showLabelModal}
           onClose={() => setShowLabelModal(false)}
+        />
+      )}
+
+      {/* Supplier Order Fulfillment Review Modal */}
+      {supplierReviewModalOpen && order && (
+        <SupplierOrderReviewModal
+          order={order}
+          open={supplierReviewModalOpen}
+          onClose={() => setSupplierReviewModalOpen(false)}
+          onSuccess={(next) => {
+            setOrder(next)
+            setStatus(next.status || status)
+            setWarehouseLoc(next.warehouseLocation || warehouseLoc)
+            setActionSuccess(`Order #${next.orderNo || next.id} review recorded (${next.supplierReviewStatus?.toUpperCase()}).`)
+            setTimeout(() => setActionSuccess(''), 5000)
+            onUpdated?.(next)
+          }}
         />
       )}
     </div>

@@ -253,6 +253,16 @@ export const approveAccount = async (req, res) => {
       ip: req.ip,
     })
 
+    await createNotification({
+      recipient: user._id,
+      targetRole: user.role,
+      type: 'account',
+      title: 'Account Approved!',
+      message: `Congratulations! Your Sellvro ${user.role === 'supplier' ? 'Supplier' : 'Buyer'} account has been approved by the Admin. Full access to marketplace, orders, and wallet features is now activated.`,
+      link: user.role === 'supplier' ? '/supplier/dashboard' : '/user/dashboard',
+      metadata: { role: user.role, status: 'approved' },
+    }).catch(() => {})
+
     return res.json({
       message: `${user.role === 'supplier' ? 'Supplier' : 'User'} approved successfully.`,
       user: user.toSafeObject(),
@@ -384,6 +394,16 @@ export const rejectAccount = async (req, res) => {
       details: { role: user.role, email: user.email },
       ip: req.ip,
     })
+
+    await createNotification({
+      recipient: user._id,
+      targetRole: user.role,
+      type: 'account',
+      title: 'Account Verification Rejected',
+      message: `Your Sellvro ${user.role === 'supplier' ? 'Supplier' : 'Buyer'} account application has been reviewed and rejected by the Admin. Please review your submitted details.`,
+      link: user.role === 'supplier' ? '/supplier/business/details' : '/user/business/detail',
+      metadata: { role: user.role, status: 'rejected' },
+    }).catch(() => {})
 
     return res.json({
       message: 'Account rejected.',

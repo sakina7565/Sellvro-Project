@@ -148,6 +148,12 @@ export const getMarketplaceFee = async (_req, res) => {
 
 export const getBalance = async (req, res) => {
   try {
+    if (req.user?.role !== 'admin' && req.user?.status !== 'approved') {
+      return res.status(403).json({
+        message: 'Your account is pending admin approval. You cannot access or use wallet balance until approved.',
+        status: req.user?.status,
+      })
+    }
     const user = await User.findById(req.user._id)
     return res.json({
       balance: user?.walletBalance || 0,
@@ -160,6 +166,12 @@ export const getBalance = async (req, res) => {
 
 export const createWalletRequest = async (req, res) => {
   try {
+    if (req.user?.role !== 'admin' && req.user?.status !== 'approved') {
+      return res.status(403).json({
+        message: 'Your account is pending admin approval. You cannot submit wallet deposit or withdrawal requests until approved.',
+        status: req.user?.status,
+      })
+    }
     const rawCurrency = String(req.body.depositCurrency || req.body.currency || 'USD').trim().toUpperCase()
     const setting = await WalletSetting.getOrCreate()
     const rate = rawCurrency === 'PKR' ? (setting.usdRatePerPkr || 280) : 1
@@ -256,6 +268,12 @@ export const createWalletRequest = async (req, res) => {
 
 export const listMyWalletRequests = async (req, res) => {
   try {
+    if (req.user?.role !== 'admin' && req.user?.status !== 'approved') {
+      return res.status(403).json({
+        message: 'Your account is pending admin approval. You cannot access wallet requests until approved.',
+        status: req.user?.status,
+      })
+    }
     const requests = await WalletRequest.find({ user: req.user._id })
       .populate('user', 'fullName email role walletBalance status')
       .sort({ createdAt: -1 })

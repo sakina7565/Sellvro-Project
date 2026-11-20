@@ -164,27 +164,31 @@ export const register = async (req, res) => {
     }
 
     // ── CNIC Format & Duplicate Check ──
-    if (idCardNumber) {
-      const digits = String(idCardNumber).replace(/\D+/g, '')
-      if (digits.length !== 13) {
-        return res.status(400).json({
-          message: 'Valid 13-digit Pakistani CNIC number (format: XXXXX-XXXXXXX-X) is required.',
-        })
-      }
-      const province = parseInt(digits[0], 10)
-      if (province < 1 || province > 7) {
-        return res.status(400).json({
-          message: 'Invalid CNIC province code. Pakistani CNIC must begin with 1 through 7.',
-        })
-      }
-      const formattedCnic = `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12)}`
-      const existingCnic = await User.findOne({ idCardNumber: { $in: [formattedCnic, digits] } })
-      if (existingCnic) {
-        return res.status(400).json({
-          message: `Ye CNIC number (${formattedCnic}) pehle se ek doosre account k sath registered hai. Ek CNIC se sirf ek hi account register ho sakta hai.`,
-          isDuplicateCnic: true,
-        })
-      }
+    if (!idCardNumber) {
+      return res.status(400).json({
+        message: 'Valid 13-digit Pakistani CNIC number (format: XXXXX-XXXXXXX-X) is required.',
+      })
+    }
+    const digits = String(idCardNumber).replace(/\D+/g, '')
+    if (digits.length !== 13) {
+      return res.status(400).json({
+        message: 'Valid 13-digit Pakistani CNIC number (format: XXXXX-XXXXXXX-X) is required.',
+      })
+    }
+    const province = parseInt(digits[0], 10)
+    if (province < 1 || province > 7) {
+      return res.status(400).json({
+        message: 'Invalid CNIC province code. Pakistani CNIC must begin with 1 through 7.',
+      })
+    }
+    const formattedCnic = `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12)}`
+    const existingCnicUser = await User.findOne({ idCardNumber: { $in: [formattedCnic, digits] } })
+    const existingCnicProfile = await BusinessProfile.findOne({ idCardNumber: { $in: [formattedCnic, digits] } })
+    if (existingCnicUser || existingCnicProfile) {
+      return res.status(400).json({
+        message: `Ye CNIC number (${formattedCnic}) pehle se ek doosre account k sath registered hai. Ek CNIC se sirf ek hi account register ho sakta hai.`,
+        isDuplicateCnic: true,
+      })
     }
 
     const existing = await User.findOne({ email: effectiveEmail })

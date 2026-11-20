@@ -14,6 +14,7 @@ import {
   Package,
   Layers,
   Sparkles,
+  BarChart3,
 } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
@@ -27,6 +28,7 @@ import Button from '../../components/ui/Button.jsx'
 import ProductImage from '../../components/ui/ProductImage.jsx'
 import BarcodeModal from '../../components/admin/BarcodeModal.jsx'
 import CreateDisputeModal from '../../components/admin/CreateDisputeModal.jsx'
+import ProductResearchModal from '../../components/admin/ProductResearchModal.jsx'
 import { adminApi, categoryApi, getErrorMessage } from '../../lib/api.js'
 import {
   ADMIN_PRODUCT_STATUS_FILTER_OPTIONS,
@@ -44,6 +46,7 @@ const TABLE_HEAD = [
   'Price & Fee',
   'Supplier',
   'Status',
+  'Landing Priority',
   'Action',
 ]
 
@@ -87,6 +90,8 @@ function ProductsListPage() {
   const [disputeProduct, setDisputeProduct] = useState(null)
   const [isDisputeOpen, setIsDisputeOpen] = useState(false)
   const [disputeSuccessToast, setDisputeSuccessToast] = useState('')
+  const [researchProduct, setResearchProduct] = useState(null)
+  const [isResearchOpen, setIsResearchOpen] = useState(false)
 
   const loadData = async () => {
     setError('')
@@ -651,7 +656,47 @@ function ProductsListPage() {
                       </div>
                     </td>
 
-                    {/* Action with Approve (if pending), Edit, Barcode, Details, Disputes */}
+                    {/* Landing Priority Column */}
+                    <td className="whitespace-nowrap px-4 py-3 text-center">
+                      <div className="inline-flex flex-col items-center gap-1">
+                        {product.rankingPriority === 'high' ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-extrabold text-emerald-800 border border-emerald-300 shadow-2xs">
+                            <Sparkles className="h-3 w-3 text-emerald-600" />
+                            High (Top)
+                          </span>
+                        ) : product.rankingPriority === 'medium' ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-bold text-blue-800 border border-blue-200">
+                            Medium
+                          </span>
+                        ) : product.rankingPriority === 'low' ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 border border-amber-200">
+                            Low
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                            Standard
+                          </span>
+                        )}
+                        {product.globalMonthlySales > 0 ? (
+                          <span className="text-[10px] font-semibold text-slate-500">
+                            {Number(product.globalMonthlySales).toLocaleString()} sales/mo
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setResearchProduct(product)
+                              setIsResearchOpen(true)
+                            }}
+                            className="text-[10px] font-semibold text-indigo-600 hover:underline"
+                          >
+                            + Research
+                          </button>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Action with Approve (if pending), Edit, Barcode, Details, Disputes, Research */}
                     <td className="whitespace-nowrap px-5 py-4 text-center">
                       <div className="inline-flex items-center justify-center gap-2">
                         {/* Quick Approve Button for Pending Products */}
@@ -669,7 +714,21 @@ function ProductsListPage() {
                           </button>
                         )}
 
-                        {/* 1. Edit */}
+                        {/* 1. Research & Ranking */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResearchProduct(product)
+                            setIsResearchOpen(true)
+                          }}
+                          title="Product Research & Landing Page Priority"
+                          aria-label="Product Research & Priority"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-purple-200 bg-purple-50 text-purple-700 shadow-xs transition-all hover:border-purple-400 hover:bg-purple-100 hover:text-purple-800 active:scale-95 cursor-pointer"
+                        >
+                          <BarChart3 className="h-4 w-4" />
+                        </button>
+
+                        {/* 2. Edit */}
                         <Link
                           to={`/admin/product/edits/${product.id}`}
                           title="Edit product"
@@ -679,7 +738,7 @@ function ProductsListPage() {
                           <SquarePen className="h-4 w-4" />
                         </Link>
 
-                        {/* 2. Barcode */}
+                        {/* 3. Barcode */}
                         <button
                           type="button"
                           onClick={() => {
@@ -693,7 +752,7 @@ function ProductsListPage() {
                           <Barcode className="h-4 w-4" />
                         </button>
 
-                        {/* 3. Details */}
+                        {/* 4. Details */}
                         <Link
                           to={`/admin/product/details/${product.id}`}
                           title="View product details"
@@ -703,7 +762,7 @@ function ProductsListPage() {
                           <Info className="h-4 w-4" />
                         </Link>
 
-                        {/* 4. Disputes */}
+                        {/* 5. Disputes */}
                         <button
                           type="button"
                           onClick={() => {
@@ -755,6 +814,17 @@ function ProductsListPage() {
                         <span>{approvingId === product.id ? '…' : 'Approve'}</span>
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setResearchProduct(product)
+                        setIsResearchOpen(true)
+                      }}
+                      title="Research & Ranking"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-purple-200 bg-purple-50 text-purple-700 shadow-xs"
+                    >
+                      <BarChart3 className="h-4 w-4" />
+                    </button>
                     <Link
                       to={`/admin/product/edits/${product.id}`}
                       title="Edit"
@@ -838,6 +908,23 @@ function ProductsListPage() {
         onSuccess={(msg) => {
           setDisputeSuccessToast(msg)
           setTimeout(() => setDisputeSuccessToast(''), 4500)
+        }}
+      />
+
+      {/* Product Research & Evaluation Modal */}
+      <ProductResearchModal
+        isOpen={isResearchOpen}
+        onClose={() => {
+          setIsResearchOpen(false)
+          setResearchProduct(null)
+        }}
+        product={researchProduct}
+        onSuccess={(updated) => {
+          setProducts((prev) =>
+            prev.map((p) =>
+              p.id === updated.id || p._id === updated.id ? { ...p, ...updated } : p,
+            ),
+          )
         }}
       />
     </AdminLayout>

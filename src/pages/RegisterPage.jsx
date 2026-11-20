@@ -30,7 +30,7 @@ import Button from '../components/ui/Button.jsx'
 import Badge from '../components/ui/Badge.jsx'
 import GoogleSignInButton from '../components/auth/GoogleSignInButton.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
-import { getErrorMessage, categoryApi } from '../lib/api.js'
+import { getErrorMessage, categoryApi, businessApi } from '../lib/api.js'
 import { validateImageQuality, extractIdCardNumber } from '../utils/idCardScanner.js'
 
 function RegisterPage() {
@@ -149,6 +149,7 @@ function RegisterPage() {
     setScanSuccess('')
     setError('')
     clearFieldError('idCardFile')
+    clearFieldError('idCardNumber')
 
     // 10MB file limit
     if (file.size > 10 * 1024 * 1024) {
@@ -157,16 +158,10 @@ function RegisterPage() {
       return
     }
 
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf']
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
     if (!validTypes.includes(file.type)) {
-      setIdCardError('Invalid file format. Please upload JPG, PNG, WEBP or PDF.')
+      setIdCardError('Invalid file format. Please upload JPG, PNG, or WEBP image of your National ID Card.')
       if (fileInputRef.current) fileInputRef.current.value = ''
-      return
-    }
-
-    // PDF documents skip image pixel analysis
-    if (file.type === 'application/pdf') {
-      setIdCardFile(file)
       return
     }
 
@@ -178,6 +173,7 @@ function RegisterPage() {
       const quality = await validateImageQuality(file)
       if (!quality.isValid) {
         setIdCardFile(null)
+        setIdCardNumber('')
         if (fileInputRef.current) fileInputRef.current.value = ''
         setIdCardError(quality.error)
         setFieldErrors((prev) => ({ ...prev, idCardFile: quality.error }))
@@ -186,23 +182,79 @@ function RegisterPage() {
         return
       }
 
-      // Quality passed! Set the file
-      setIdCardFile(file)
       setScanProgress(35)
 
       // Step 2: OCR ID Card Number Extraction
       const ocrResult = await extractIdCardNumber(file, (p) => {
-        setScanProgress(35 + Math.round(p * 0.6))
+        setScanProgress(35 + Math.round(p * 0.45))
       })
 
-      if (ocrResult.found && ocrResult.idNumber) {
-        setIdCardNumber(ocrResult.idNumber)
-        clearFieldError('idCardNumber')
-        setScanSuccess(`ID Card Number detected: ${ocrResult.idNumber}`)
+      // Strict validation: Must detect a genuine Pakistani CNIC
+      if (!ocrResult.found || !ocrResult.isValidCnic || !ocrResult.idNumber) {
+        setIdCardFile(null)
+        setIdCardNumber('')
+        if (fileInputRef.current) fileInputRef.current.value = ''
+        const rejectMsg =
+          ocrResult.error ||
+          'Ghalat tasveer! Ye valid Pakistani CNIC / National ID card ki image nahi hai ya details parhi nahi ja saktin. Baraye meherbani sirf apna asal aur saaf CNIC upload karein.'
+        setIdCardError(rejectMsg)
+        setFieldErrors((prev) => ({ ...prev, idCardFile: rejectMsg }))
+        setError(rejectMsg)
+        setScanningId(false)
+        return
       }
+
+      setScanProgress(80)
+
+      // Step 3: Check Duplicate CNIC across system
+      try {
+        const verifyRes = await businessApi.verifyCnic(ocrResult.idNumber)
+        if (verifyRes && verifyRes.available === false) {
+          setIdCardFile(null)
+          setIdCardNumber('')
+          if (fileInputRef.current) fileInputRef.current.value = ''
+          const dupMsg =
+            verifyRes.message ||
+            `Ye ID Card / CNIC number (${ocrResult.idNumber}) pehle se kisi doosre account k sath registered hai. Ek CNIC se sirf ek hi account register ho sakta hai.`
+          setIdCardError(dupMsg)
+          setFieldErrors((prev) => ({ ...prev, idCardFile: dupMsg }))
+          setError(dupMsg)
+          setScanningId(false)
+          return
+        }
+      } catch (dupErr) {
+        const dupMsg = dupErr?.data?.message || dupErr?.message
+        if (dupErr?.status === 400 || dupErr?.status === 409 || (dupMsg && dupMsg.includes('registered'))) {
+          setIdCardFile(null)
+          setIdCardNumber('')
+          if (fileInputRef.current) fileInputRef.current.value = ''
+          const conflictMsg =
+            dupMsg ||
+            `Ye ID Card / CNIC number (${ocrResult.idNumber}) pehle se kisi doosre account k sath registered hai. Ek CNIC se sirf ek hi account register ho sakta hai.`
+          setIdCardError(conflictMsg)
+          setFieldErrors((prev) => ({ ...prev, idCardFile: conflictMsg }))
+          setError(conflictMsg)
+          setScanningId(false)
+          return
+        }
+      }
+
+      // Step 4: Quality & Uniqueness Passed -> Auto-fill extracted CNIC
+      setIdCardFile(file)
+      setIdCardNumber(ocrResult.idNumber)
+      clearFieldError('idCardNumber')
+      clearFieldError('idCardFile')
+      setScanSuccess(`Asal Pakistani CNIC tasdeeq shuda: ${ocrResult.idNumber}`)
+      setScanProgress(100)
     } catch (err) {
       console.warn('ID Card scan notice:', err)
-      setIdCardFile(file)
+      setIdCardFile(null)
+      setIdCardNumber('')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      const failMsg =
+        'CNIC tasveer verify karne mein masla aaya. Baraye meherbani saaf aur clear CNIC tasveer upload karein.'
+      setIdCardError(failMsg)
+      setError(failMsg)
     } finally {
       setScanningId(false)
     }
@@ -210,6 +262,7 @@ function RegisterPage() {
 
   const removeFile = () => {
     setIdCardFile(null)
+    setIdCardNumber('')
     setIdCardError('')
     setScanSuccess('')
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -897,22 +950,34 @@ function RegisterPage() {
                   </p>
                 )}
 
-                {/* ID Card / CNIC Number Field */}
+                {/* ID Card / CNIC Number Field (Strict Auto-Extracted & Locked) */}
                 <div className="pt-1">
                   <Input
                     id="idCardNumber"
                     name="idCardNumber"
-                    label="ID Card / CNIC Number *"
+                    label="Auto-Extracted ID Card / CNIC Number *"
                     icon={CreditCard}
-                    placeholder="e.g. 42101-1234567-1 or Passport Number"
+                    placeholder="Auto-extracted from your ID Card photo above"
                     value={idCardNumber}
-                    onChange={(e) => {
-                      setIdCardNumber(e.target.value)
-                      clearFieldError('idCardNumber')
-                    }}
+                    readOnly={true}
+                    className={
+                      scanSuccess && idCardNumber
+                        ? 'bg-emerald-50/70 border-emerald-300 font-mono font-bold text-emerald-950 cursor-not-allowed'
+                        : 'bg-slate-100 font-mono text-slate-500 cursor-not-allowed select-none'
+                    }
                     error={fieldErrors.idCardNumber}
                     required
-                    helperText="Auto-filled from ID photo, or verify / adjust manually if needed."
+                    helperText={
+                      scanSuccess && idCardNumber ? (
+                        <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-semibold">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Automatically extracted and verified from your National ID Card!
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-500">
+                          Upload your National ID Card photo above to automatically scan, extract and verify your ID card number.
+                        </span>
+                      )
+                    }
                   />
                 </div>
               </div>

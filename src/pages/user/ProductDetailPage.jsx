@@ -21,6 +21,8 @@ import {
   Lock,
   Minus,
   Package,
+  Palette,
+  Link2,
   Plus,
   RotateCcw,
   Scale,
@@ -37,6 +39,10 @@ import {
   TrendingUp,
   X,
   Zap,
+  Globe,
+  BarChart3,
+  Search,
+  Flame,
 } from 'lucide-react'
 import MarketplaceTopBar from '../../components/marketplace/MarketplaceTopBar.jsx'
 import MarketplaceSearchHeader from '../../components/marketplace/MarketplaceSearchHeader.jsx'
@@ -304,6 +310,14 @@ function ProductDetailPage() {
       })
       return
     }
+    if (user?.role !== 'admin' && user?.status !== 'approved') {
+      navigate('/user/business/detail', {
+        state: {
+          message: 'Your buyer account is pending admin approval. You cannot place orders until approved by the Admin.',
+        },
+      })
+      return
+    }
     navigate(`/checkout/${prodId}`, {
       state: {
         product: { ...product, id: prodId },
@@ -322,6 +336,14 @@ function ProductDetailPage() {
         state: {
           from: window.location.pathname,
           message: 'Please sign in to add products to your cart and place orders.',
+        },
+      })
+      return
+    }
+    if (user?.role !== 'admin' && user?.status !== 'approved') {
+      navigate('/user/business/detail', {
+        state: {
+          message: 'Your buyer account is pending admin approval. You cannot purchase items until approved by the Admin.',
         },
       })
       return
@@ -827,6 +849,185 @@ function ProductDetailPage() {
             </div>
           )}
 
+          {/* Sister SKUs: Swatch & Quick Selector */}
+          {Array.isArray(product.sisterProducts) && product.sisterProducts.length > 0 && (
+            <div className="rounded-xl border-2 border-sky-300 bg-gradient-to-r from-sky-50/90 to-blue-50/70 p-3.5 shadow-2xs">
+              <div className="flex items-center justify-between gap-2 mb-2.5">
+                <div className="flex items-center gap-1.5">
+                  <Palette className="h-4 w-4 text-sky-700 shrink-0" />
+                  <span className="font-extrabold text-xs text-sky-950 uppercase tracking-wide">
+                    Same Product Available in Different {product.sisterVariationType || 'Colors'}
+                  </span>
+                </div>
+                <span className="rounded-full bg-sky-200 px-2 py-0.5 text-[10px] font-bold text-sky-900 shrink-0">
+                  {product.sisterProducts.length + 1} Variations
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Current Active Product Pill */}
+                <div className="flex items-center gap-1.5 rounded-lg border-2 border-sky-600 bg-white px-2.5 py-1 shadow-xs">
+                  <span className="h-2 w-2 rounded-full bg-sky-600"></span>
+                  <span className="font-bold text-xs text-sky-950">
+                    {product.color || product.name}
+                  </span>
+                  <span className="rounded bg-sky-100 px-1 py-0.2 text-[9px] font-extrabold text-sky-800 uppercase">
+                    Active
+                  </span>
+                </div>
+
+                {/* Linked Sister Products */}
+                {product.sisterProducts.map((sp) => {
+                  const spImg = sp.image
+                    ? mediaUrl(sp.image)
+                    : sp.images?.[0]
+                    ? mediaUrl(sp.images[0])
+                    : null
+                  return (
+                    <Link
+                      key={sp.id || sp._id || sp.sku}
+                      to={`/user/products/${sp.id || sp._id}`}
+                      className="group flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 shadow-2xs hover:border-sky-400 hover:bg-sky-50 transition"
+                      title={`Switch to ${sp.name} (${sp.sku})`}
+                    >
+                      {spImg && (
+                        <img
+                          src={spImg}
+                          alt={sp.color || sp.name}
+                          className="h-5 w-5 rounded object-cover border border-slate-200 shrink-0"
+                        />
+                      )}
+                      <span className="font-semibold text-slate-800 group-hover:text-sky-900">
+                        {sp.color || sp.name}
+                      </span>
+                      <span className="font-bold text-slate-900">
+                        ${Number(sp.price || 0).toFixed(2)}
+                      </span>
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* DEDICATED GLOBAL MARKET INTELLIGENCE SECTION */}
+          <div className="rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/80 via-white to-sky-50/60 p-4 shadow-xs space-y-3.5">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-indigo-100 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs">
+                  <Globe className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                    Global Market Intelligence
+                  </h3>
+                  <p className="text-[10px] text-slate-500">
+                    Admin verified market data &amp; demand signals
+                  </p>
+                </div>
+              </div>
+              {product.isHotSelling ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-600 to-amber-500 px-2.5 py-0.5 text-[10px] font-black text-white shadow-xs">
+                  <Flame className="h-3 w-3 fill-white" />
+                  <span>Top 20 Hot-Selling #{product.hotSellingRank || 1}</span>
+                </span>
+              ) : product.rankingScore > 0 ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-800">
+                  Score: {Number(product.rankingScore).toLocaleString()}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                  Standard Queue
+                </span>
+              )}
+            </div>
+
+            {/* 3 Numerical Market Metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {/* Global Monthly Sales */}
+              <div className="rounded-xl border border-indigo-100 bg-white/90 p-2.5 shadow-2xs">
+                <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <TrendingUp className="h-3 w-3 text-indigo-600" />
+                  <span>Monthly Sales</span>
+                </div>
+                <div className="mt-1 font-mono text-xs font-black text-slate-900">
+                  {Number(product.globalMonthlySales || 0) > 0
+                    ? `${Number(product.globalMonthlySales).toLocaleString()} units/mo`
+                    : <span className="text-[11px] font-normal italic text-slate-400">Awaiting admin data</span>}
+                </div>
+                <div className="text-[9.5px] text-slate-400 mt-0.5">Global units sold</div>
+              </div>
+
+              {/* Global Search Volume */}
+              <div className="rounded-xl border border-indigo-100 bg-white/90 p-2.5 shadow-2xs">
+                <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <Search className="h-3 w-3 text-sky-600" />
+                  <span>Search Volume</span>
+                </div>
+                <div className="mt-1 font-mono text-xs font-black text-slate-900">
+                  {Number(product.globalSearchVolume || 0) > 0
+                    ? `${Number(product.globalSearchVolume).toLocaleString()} /mo`
+                    : <span className="text-[11px] font-normal italic text-slate-400">Awaiting admin data</span>}
+                </div>
+                <div className="text-[9.5px] text-slate-400 mt-0.5">Global queries</div>
+              </div>
+
+              {/* US Market Average Sales */}
+              <div className="rounded-xl border border-indigo-100 bg-white/90 p-2.5 shadow-2xs">
+                <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <BarChart3 className="h-3 w-3 text-emerald-600" />
+                  <span>US Avg Sales</span>
+                </div>
+                <div className="mt-1 font-mono text-xs font-black text-slate-900">
+                  {Number(product.usMarketAverageSales || 0) > 0
+                    ? `${Number(product.usMarketAverageSales).toLocaleString()} units/mo`
+                    : <span className="text-[11px] font-normal italic text-slate-400">Awaiting admin data</span>}
+                </div>
+                <div className="text-[9.5px] text-slate-400 mt-0.5">US market average</div>
+              </div>
+            </div>
+
+            {/* 5 Product Keywords */}
+            <div className="rounded-xl border border-indigo-100/80 bg-white/80 p-2.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <Tag className="h-3 w-3 text-indigo-600" />
+                  <span>Five Product Keywords</span>
+                </span>
+                <span className="text-[9.5px] text-slate-400">Search discovery tags</span>
+              </div>
+              {Array.isArray(product.productKeywords) && product.productKeywords.filter(Boolean).length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {product.productKeywords.filter(Boolean).map((kw, i) => (
+                    <Link
+                      key={i}
+                      to={`/?q=${encodeURIComponent(kw)}`}
+                      className="rounded-md bg-indigo-50 border border-indigo-200/70 px-2 py-0.5 font-mono text-[11px] font-bold text-indigo-700 hover:bg-indigo-100 hover:text-indigo-900 transition"
+                    >
+                      #{kw}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] italic text-slate-400">
+                  Awaiting admin evaluation
+                </p>
+              )}
+            </div>
+
+            {/* Disclaimer */}
+            <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5 border-t border-indigo-100/60">
+              <span className="flex items-center gap-1 text-indigo-700 font-semibold">
+                <ShieldCheck className="h-3 w-3 text-indigo-600" />
+                <span>Manually verified by Sellvro Admin</span>
+              </span>
+              {product.rankingScore > 0 && (
+                <span className="font-mono text-slate-500">Score: {Number(product.rankingScore).toLocaleString()} pts</span>
+              )}
+            </div>
+          </div>
+
           {/* 4. Condition & Availability Section */}
           <div className="space-y-3 text-xs text-slate-700">
             {/* Condition Row */}
@@ -1071,6 +1272,90 @@ function ProductDetailPage() {
       </div>
 
       {/* ===================================================================== */}
+      {/* SISTER SKUS: RELATED VARIATIONS SHOWCASE                                */}
+      {/* ===================================================================== */}
+      {Array.isArray(product.sisterProducts) && product.sisterProducts.length > 0 && (
+        <div className="mt-10 rounded-2xl border-2 border-sky-200 bg-sky-50/40 p-6 shadow-xs">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-sky-100 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Palette className="h-5 w-5 text-sky-700" />
+                <h2 className="text-lg font-bold text-slate-900">
+                  Same Product Available in Different {product.sisterVariationType || 'Colors'}
+                </h2>
+              </div>
+              <p className="text-xs text-sky-800 mt-0.5">
+                These separately listed products are variations of this item with independent SKUs and stock.
+              </p>
+            </div>
+            <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-bold text-sky-800 border border-sky-200">
+              {product.sisterProducts.length} Sister {product.sisterProducts.length === 1 ? 'Product' : 'Products'} Available
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            {product.sisterProducts.map((sp) => {
+              const spImg = sp.image
+                ? mediaUrl(sp.image)
+                : sp.images?.[0]
+                ? mediaUrl(sp.images[0])
+                : PLACEHOLDER_IMAGE
+
+              return (
+                <div
+                  key={sp.id || sp._id || sp.sku}
+                  className="group relative flex flex-col rounded-xl border border-sky-200 bg-white p-3 shadow-2xs hover:shadow-md hover:border-sky-400 transition-all"
+                >
+                  {/* Thumbnail & Variation Badge */}
+                  <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-slate-50 mb-2">
+                    <img
+                      src={spImg}
+                      alt={sp.name}
+                      className="h-full w-full object-contain transition-transform duration-200 group-hover:scale-105"
+                      onError={(e) => {
+                        e.currentTarget.src = PLACEHOLDER_IMAGE
+                      }}
+                    />
+                    {sp.color && (
+                      <span className="absolute left-1.5 top-1.5 rounded-md bg-slate-900/80 backdrop-blur-xs px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
+                        {sp.color}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* SKU & Name */}
+                  <p className="font-mono text-[10px] font-bold text-sky-700 uppercase">
+                    SKU: {sp.sku}
+                  </p>
+                  <h4 className="line-clamp-2 text-xs font-semibold text-slate-800 group-hover:text-sky-700 leading-snug mt-0.5">
+                    {sp.name}
+                  </h4>
+
+                  {/* Price & Stock */}
+                  <div className="mt-auto pt-2.5">
+                    <p className="text-sm font-black text-slate-950">
+                      ${Number(sp.price || 0).toFixed(2)}
+                    </p>
+                    <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">
+                      {sp.quantity > 0 ? `${sp.quantity} in stock` : 'Check availability'}
+                    </p>
+                  </div>
+
+                  {/* Action Button */}
+                  <Link
+                    to={`/user/products/${sp.id || sp._id}`}
+                    className="mt-2.5 block text-center rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-[11px] py-1.5 transition shadow-2xs"
+                  >
+                    View Variation &rarr;
+                  </Link>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
       {/* SIMILAR ITEMS CAROUSEL (eBay signature sponsored / recommended items) */}
       {/* ===================================================================== */}
       <div className="mt-12 border-t border-slate-200 pt-8">
@@ -1181,6 +1466,23 @@ function ProductDetailPage() {
             }`}
           >
             Item Specifics
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('market-intelligence')}
+            className={`border-b-2 py-4 px-4 text-xs font-bold transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'market-intelligence'
+                ? 'border-indigo-600 text-indigo-600 bg-white'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Globe className="h-3.5 w-3.5 text-indigo-600" />
+            <span>Market Intelligence</span>
+            {product.isHotSelling && (
+              <span className="rounded-full bg-red-100 px-1.5 py-0.2 text-[9px] font-black text-red-700">
+                🔥 Top 20
+              </span>
+            )}
           </button>
           <button
             type="button"
@@ -1300,6 +1602,168 @@ function ProductDetailPage() {
                   </dd>
                 </div>
               </dl>
+            </div>
+          )}
+
+          {activeTab === 'market-intelligence' && (
+            <div className="space-y-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Globe className="h-5 w-5 text-indigo-600" />
+                    <h3 className="text-base font-bold text-slate-900">
+                      Global Market Intelligence &amp; Performance
+                    </h3>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Product market metrics and keywords evaluated manually by Sellvro Admin
+                  </p>
+                </div>
+                {product.isHotSelling ? (
+                  <div className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-amber-500 px-3.5 py-1.5 text-white shadow-xs">
+                    <Flame className="h-4 w-4" />
+                    <span className="text-xs font-black uppercase tracking-wide">
+                      Top 20 Hot-Selling Product &bull; Rank #{product.hotSellingRank || 1}
+                    </span>
+                  </div>
+                ) : product.rankingScore > 0 ? (
+                  <div className="flex items-center gap-2 rounded-xl bg-indigo-50 border border-indigo-200 px-3 py-1 text-indigo-800">
+                    <TrendingUp className="h-4 w-4 text-indigo-600" />
+                    <span className="text-xs font-bold font-mono">
+                      Market Ranking Score: {Number(product.rankingScore).toLocaleString()} pts
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* 4 Cards Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. Global Monthly Sales */}
+                <div className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-4 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      Global Monthly Sales
+                    </span>
+                    <TrendingUp className="h-4 w-4 text-indigo-600" />
+                  </div>
+                  <div className="mt-2 text-xl font-black font-mono text-slate-900">
+                    {Number(product.globalMonthlySales || 0) > 0
+                      ? `${Number(product.globalMonthlySales).toLocaleString()} units/mo`
+                      : <span className="text-xs font-normal italic text-slate-400">Awaiting admin data</span>}
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500 leading-snug">
+                    Total estimated sales volume across global retail &amp; wholesale channels.
+                  </p>
+                </div>
+
+                {/* 2. Global Search Volume */}
+                <div className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-4 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      Global Search Volume
+                    </span>
+                    <Search className="h-4 w-4 text-sky-600" />
+                  </div>
+                  <div className="mt-2 text-xl font-black font-mono text-slate-900">
+                    {Number(product.globalSearchVolume || 0) > 0
+                      ? `${Number(product.globalSearchVolume).toLocaleString()} /mo`
+                      : <span className="text-xs font-normal italic text-slate-400">Awaiting admin data</span>}
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500 leading-snug">
+                    Estimated monthly keyword query volume across major search engines.
+                  </p>
+                </div>
+
+                {/* 3. US Market Average Sales */}
+                <div className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-4 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      US Market Avg Sales
+                    </span>
+                    <BarChart3 className="h-4 w-4 text-emerald-600" />
+                  </div>
+                  <div className="mt-2 text-xl font-black font-mono text-slate-900">
+                    {Number(product.usMarketAverageSales || 0) > 0
+                      ? `${Number(product.usMarketAverageSales).toLocaleString()} units/mo`
+                      : <span className="text-xs font-normal italic text-slate-400">Awaiting admin data</span>}
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500 leading-snug">
+                    Target benchmark for product demand within the United States market.
+                  </p>
+                </div>
+
+                {/* 4. Landing Page Rank / Priority */}
+                <div className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-4 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      Marketplace Priority
+                    </span>
+                    <Award className="h-4 w-4 text-amber-500" />
+                  </div>
+                  <div className="mt-2 text-xl font-black capitalize text-slate-900">
+                    {product.rankingPriority || 'Standard'} Tier
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500 leading-snug">
+                    {product.isHotSelling
+                      ? `Positioned in Top 20 Hot-Selling items (Rank #${product.hotSellingRank}).`
+                      : product.rankingScore > 0
+                      ? `Score of ${Number(product.rankingScore).toLocaleString()} calculated from admin data.`
+                      : 'Pending research evaluation by administration.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Keywords Section */}
+              <div className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-4 w-4 text-indigo-600" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                      Five Relevant Product Keywords
+                    </h4>
+                  </div>
+                  <span className="text-xs text-slate-500">SEO &amp; Marketplace indexing tags</span>
+                </div>
+
+                {Array.isArray(product.productKeywords) && product.productKeywords.filter(Boolean).length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {product.productKeywords.filter(Boolean).map((kw, i) => (
+                      <Link
+                        key={i}
+                        to={`/?q=${encodeURIComponent(kw)}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-indigo-200 px-3 py-1.5 text-xs font-bold text-indigo-800 shadow-2xs hover:border-indigo-400 hover:bg-indigo-50 transition"
+                      >
+                        <span className="text-indigo-400 font-normal">#</span>
+                        <span>{kw}</span>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-white p-4 text-center text-xs italic text-slate-400">
+                    Awaiting admin evaluation for keywords.
+                  </div>
+                )}
+              </div>
+
+              {/* Admin Evaluation Notes (if any) */}
+              {product.adminEvaluationNotes && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
+                    Admin Market Evaluation Notes
+                  </h4>
+                  <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">
+                    {product.adminEvaluationNotes}
+                  </p>
+                </div>
+              )}
+
+              {/* Admin Verification Disclaimer */}
+              <div className="flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-xs text-slate-500">
+                <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>
+                  <strong>Admin-Verified Data:</strong> All market intelligence metrics are manually verified and maintained by the Sellvro administration. Automated or synthetic scraping is strictly prohibited.
+                </span>
+              </div>
             </div>
           )}
 

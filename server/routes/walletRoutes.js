@@ -42,12 +42,13 @@ router.patch(
   requirePermission('admin.wallets.approve'),
   updateWalletSettings,
 )
-router.get('/balance', protect, authorize('user', 'admin'), getBalance)
-router.get('/requests/mine', protect, authorize('user'), listMyWalletRequests)
+router.get('/balance', protect, authorize('user', 'admin'), requireApproved, getBalance)
+router.get('/requests/mine', protect, authorize('user'), requireApproved, listMyWalletRequests)
 router.post(
   '/requests',
   protect,
   authorize('user'),
+  requireApproved,
   handleReceipt,
   createWalletRequest,
 )

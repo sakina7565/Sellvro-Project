@@ -8572,3 +8572,733 @@ SyntaxError: The requested module '../controllers/walletController.js' does not 
 [2026-11-18T11:26:11.004Z] PORT env: 5001
 [2026-11-18T11:26:11.018Z] HTTP server listening on port/socket: 5001
 [2026-11-18T11:26:15.041Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T11:34:23.775Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T11:34:23.780Z] === Starting Sellvro on Node.js v22.14.0 (PID: 5216) ===
+[2026-11-18T11:34:23.781Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T11:34:23.782Z] NODE_ENV: development
+[2026-11-18T11:34:23.782Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T11:34:23.782Z] PORT env: 5001
+[2026-11-18T11:34:23.789Z] HTTP server listening on port/socket: 5001
+[2026-11-18T11:34:25.795Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T11:39:39.891Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T11:39:39.898Z] === Starting Sellvro on Node.js v22.14.0 (PID: 25640) ===
+[2026-11-18T11:39:39.899Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T11:39:39.900Z] NODE_ENV: development
+[2026-11-18T11:39:39.900Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T11:39:39.901Z] PORT env: 5001
+[2026-11-18T11:39:39.912Z] HTTP server listening on port/socket: 5001
+[2026-11-18T11:39:41.923Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T11:41:54.658Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T11:41:54.668Z] === Starting Sellvro on Node.js v22.14.0 (PID: 26532) ===
+[2026-11-18T11:41:54.670Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T11:41:54.671Z] NODE_ENV: development
+[2026-11-18T11:41:54.672Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T11:41:54.672Z] PORT env: 5001
+[2026-11-18T11:41:54.679Z] HTTP server listening on port/socket: 5001
+[2026-11-18T11:41:57.017Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:04:39.136Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:04:39.143Z] === Starting Sellvro on Node.js v22.14.0 (PID: 26436) ===
+[2026-11-18T12:04:39.143Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:04:39.144Z] NODE_ENV: development
+[2026-11-18T12:04:39.144Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:04:39.145Z] PORT env: 5001
+[2026-11-18T12:04:39.153Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:04:41.735Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:04:42.025Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:04:42.029Z] === Starting Sellvro on Node.js v22.14.0 (PID: 10504) ===
+[2026-11-18T12:04:42.029Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:04:42.030Z] NODE_ENV: development
+[2026-11-18T12:04:42.030Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:04:42.030Z] PORT env: 5001
+[2026-11-18T12:04:42.037Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:04:44.096Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:05:00.713Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:05:00.720Z] === Starting Sellvro on Node.js v22.14.0 (PID: 19504) ===
+[2026-11-18T12:05:00.721Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:05:00.722Z] NODE_ENV: development
+[2026-11-18T12:05:00.723Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:05:00.724Z] PORT env: 5001
+[2026-11-18T12:05:00.733Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:05:03.576Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:05:09.941Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:05:09.948Z] === Starting Sellvro on Node.js v22.14.0 (PID: 19620) ===
+[2026-11-18T12:05:09.949Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:05:09.949Z] NODE_ENV: development
+[2026-11-18T12:05:09.950Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:05:09.950Z] PORT env: 5001
+[2026-11-18T12:05:09.959Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:05:12.157Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:06:54.807Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:06:54.817Z] === Starting Sellvro on Node.js v22.14.0 (PID: 24548) ===
+[2026-11-18T12:06:54.818Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:06:54.818Z] NODE_ENV: development
+[2026-11-18T12:06:54.819Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:06:54.820Z] PORT env: 5001
+[2026-11-18T12:06:54.830Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:06:57.337Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:07:15.578Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:07:15.584Z] === Starting Sellvro on Node.js v22.14.0 (PID: 19668) ===
+[2026-11-18T12:07:15.585Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:07:15.585Z] NODE_ENV: development
+[2026-11-18T12:07:15.586Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:07:15.586Z] PORT env: 5001
+[2026-11-18T12:07:15.597Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:07:18.011Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:07:43.954Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:07:43.962Z] === Starting Sellvro on Node.js v22.14.0 (PID: 16912) ===
+[2026-11-18T12:07:43.962Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:07:43.963Z] NODE_ENV: development
+[2026-11-18T12:07:43.964Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:07:43.964Z] PORT env: 5001
+[2026-11-18T12:07:43.972Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:07:46.451Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:08:05.279Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:08:05.284Z] === Starting Sellvro on Node.js v22.14.0 (PID: 25228) ===
+[2026-11-18T12:08:05.285Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:08:05.285Z] NODE_ENV: development
+[2026-11-18T12:08:05.287Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:08:05.287Z] PORT env: 5001
+[2026-11-18T12:08:05.294Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:08:07.882Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:08:23.825Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:08:23.843Z] === Starting Sellvro on Node.js v22.14.0 (PID: 24148) ===
+[2026-11-18T12:08:23.850Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:08:23.851Z] NODE_ENV: development
+[2026-11-18T12:08:23.853Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:08:23.856Z] PORT env: 5001
+[2026-11-18T12:08:23.870Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:08:26.342Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:08:42.548Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:08:42.554Z] === Starting Sellvro on Node.js v22.14.0 (PID: 5596) ===
+[2026-11-18T12:08:42.555Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:08:42.555Z] NODE_ENV: development
+[2026-11-18T12:08:42.556Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:08:42.556Z] PORT env: 5001
+[2026-11-18T12:08:42.567Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:08:46.275Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:09:14.413Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:09:14.424Z] === Starting Sellvro on Node.js v22.14.0 (PID: 9424) ===
+[2026-11-18T12:09:14.426Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:09:14.426Z] NODE_ENV: development
+[2026-11-18T12:09:14.427Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:09:14.429Z] PORT env: 5001
+[2026-11-18T12:09:14.444Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:09:17.152Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:16:17.748Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:16:17.756Z] === Starting Sellvro on Node.js v22.14.0 (PID: 26300) ===
+[2026-11-18T12:16:17.757Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:16:17.758Z] NODE_ENV: development
+[2026-11-18T12:16:17.759Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:16:17.759Z] PORT env: 5001
+[2026-11-18T12:16:17.769Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:16:20.919Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:31:26.155Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:31:26.161Z] === Starting Sellvro on Node.js v22.14.0 (PID: 3624) ===
+[2026-11-18T12:31:26.162Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:31:26.163Z] NODE_ENV: development
+[2026-11-18T12:31:26.165Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:31:26.167Z] PORT env: 5001
+[2026-11-18T12:31:26.177Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:31:26.615Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:31:26.622Z] === Starting Sellvro on Node.js v22.14.0 (PID: 9536) ===
+[2026-11-18T12:31:26.622Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:31:26.623Z] NODE_ENV: development
+[2026-11-18T12:31:26.624Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:31:26.624Z] PORT env: 5001
+[2026-11-18T12:31:26.636Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:31:32.682Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:52:55.470Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:52:55.477Z] === Starting Sellvro on Node.js v22.14.0 (PID: 24208) ===
+[2026-11-18T12:52:55.477Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:52:55.478Z] NODE_ENV: development
+[2026-11-18T12:52:55.478Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:52:55.479Z] PORT env: 5001
+[2026-11-18T12:52:55.489Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:52:58.837Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:53:13.176Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:53:13.183Z] === Starting Sellvro on Node.js v22.14.0 (PID: 12660) ===
+[2026-11-18T12:53:13.184Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:53:13.185Z] NODE_ENV: development
+[2026-11-18T12:53:13.185Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:53:13.186Z] PORT env: 5001
+[2026-11-18T12:53:13.198Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:53:15.883Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:54:12.147Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:54:12.153Z] === Starting Sellvro on Node.js v22.14.0 (PID: 25184) ===
+[2026-11-18T12:54:12.153Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:54:12.154Z] NODE_ENV: development
+[2026-11-18T12:54:12.155Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:54:12.155Z] PORT env: 5001
+[2026-11-18T12:54:12.165Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:54:14.803Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:54:27.697Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:54:27.705Z] === Starting Sellvro on Node.js v22.14.0 (PID: 23800) ===
+[2026-11-18T12:54:27.706Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:54:27.706Z] NODE_ENV: development
+[2026-11-18T12:54:27.707Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:54:27.707Z] PORT env: 5001
+[2026-11-18T12:54:27.718Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:54:30.353Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:54:53.873Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:54:53.879Z] === Starting Sellvro on Node.js v22.14.0 (PID: 25636) ===
+[2026-11-18T12:54:53.880Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:54:53.880Z] NODE_ENV: development
+[2026-11-18T12:54:53.881Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:54:53.881Z] PORT env: 5001
+[2026-11-18T12:54:53.892Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:54:56.585Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:55:21.194Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:55:21.204Z] === Starting Sellvro on Node.js v22.14.0 (PID: 5924) ===
+[2026-11-18T12:55:21.204Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:55:21.205Z] NODE_ENV: development
+[2026-11-18T12:55:21.206Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:55:21.208Z] PORT env: 5001
+[2026-11-18T12:55:21.221Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:55:24.480Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:55:44.383Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:55:44.392Z] === Starting Sellvro on Node.js v22.14.0 (PID: 12096) ===
+[2026-11-18T12:55:44.393Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:55:44.394Z] NODE_ENV: development
+[2026-11-18T12:55:44.395Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:55:44.399Z] PORT env: 5001
+[2026-11-18T12:55:44.415Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:55:47.400Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T12:55:57.215Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T12:55:57.226Z] === Starting Sellvro on Node.js v22.14.0 (PID: 19912) ===
+[2026-11-18T12:55:57.227Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T12:55:57.229Z] NODE_ENV: development
+[2026-11-18T12:55:57.233Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T12:55:57.234Z] PORT env: 5001
+[2026-11-18T12:55:57.250Z] HTTP server listening on port/socket: 5001
+[2026-11-18T12:56:01.436Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T13:41:01.168Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T13:41:01.174Z] === Starting Sellvro on Node.js v22.14.0 (PID: 18164) ===
+[2026-11-18T13:41:01.175Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T13:41:01.175Z] NODE_ENV: development
+[2026-11-18T13:41:01.176Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T13:41:01.176Z] PORT env: 5001
+[2026-11-18T13:41:01.185Z] HTTP server listening on port/socket: 5001
+[2026-11-18T13:41:04.360Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T13:41:04.605Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T13:41:04.611Z] === Starting Sellvro on Node.js v22.14.0 (PID: 6468) ===
+[2026-11-18T13:41:04.612Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T13:41:04.613Z] NODE_ENV: development
+[2026-11-18T13:41:04.613Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T13:41:04.614Z] PORT env: 5001
+[2026-11-18T13:41:04.622Z] HTTP server listening on port/socket: 5001
+[2026-11-18T13:41:07.084Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-18T13:56:35.792Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T13:56:35.799Z] === Starting Sellvro on Node.js v22.14.0 (PID: 14432) ===
+[2026-11-18T13:56:35.800Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T13:56:35.801Z] NODE_ENV: development
+[2026-11-18T13:56:35.801Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T13:56:35.802Z] PORT env: 5001
+[2026-11-18T13:56:35.813Z] HTTP server listening on port/socket: 5001
+[2026-11-18T13:56:36.242Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-18T13:56:36.248Z] === Starting Sellvro on Node.js v22.14.0 (PID: 6244) ===
+[2026-11-18T13:56:36.249Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-18T13:56:36.249Z] NODE_ENV: development
+[2026-11-18T13:56:36.250Z] PASSENGER_APP_ROOT: not set
+[2026-11-18T13:56:36.251Z] PORT env: 5001
+[2026-11-18T13:56:36.261Z] HTTP server listening on port/socket: 5001
+[2026-11-18T13:56:38.708Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T06:55:47.506Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T06:55:47.532Z] === Starting Sellvro on Node.js v22.14.0 (PID: 24568) ===
+[2026-11-19T06:55:47.533Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T06:55:47.533Z] NODE_ENV: development
+[2026-11-19T06:55:47.534Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T06:55:47.534Z] PORT env: 5001
+[2026-11-19T06:55:47.543Z] HTTP server listening on port/socket: 5001
+[2026-11-19T06:55:48.260Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T06:55:48.266Z] === Starting Sellvro on Node.js v22.14.0 (PID: 4856) ===
+[2026-11-19T06:55:48.268Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T06:55:48.268Z] NODE_ENV: development
+[2026-11-19T06:55:48.269Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T06:55:48.269Z] PORT env: 5001
+[2026-11-19T06:55:48.277Z] HTTP server listening on port/socket: 5001
+[2026-11-19T06:55:49.064Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T06:55:49.152Z] === Starting Sellvro on Node.js v22.14.0 (PID: 2496) ===
+[2026-11-19T06:55:49.190Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T06:55:49.201Z] NODE_ENV: development
+[2026-11-19T06:55:49.220Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T06:55:49.232Z] PORT env: 5001
+[2026-11-19T06:55:49.275Z] HTTP server listening on port/socket: 5001
+[2026-11-19T06:55:56.302Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T06:55:56.327Z] === Starting Sellvro on Node.js v22.14.0 (PID: 30188) ===
+[2026-11-19T06:55:56.331Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T06:55:56.332Z] NODE_ENV: development
+[2026-11-19T06:55:56.340Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T06:55:56.350Z] PORT env: 5001
+[2026-11-19T06:55:56.387Z] HTTP server listening on port/socket: 5001
+[2026-11-19T06:56:00.805Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T06:56:00.810Z] === Starting Sellvro on Node.js v22.14.0 (PID: 30536) ===
+[2026-11-19T06:56:00.811Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T06:56:00.811Z] NODE_ENV: development
+[2026-11-19T06:56:00.812Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T06:56:00.812Z] PORT env: 5001
+[2026-11-19T06:56:00.820Z] HTTP server listening on port/socket: 5001
+[2026-11-19T06:56:03.028Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T07:02:02.590Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T07:02:02.604Z] === Starting Sellvro on Node.js v22.14.0 (PID: 31484) ===
+[2026-11-19T07:02:02.606Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T07:02:02.607Z] NODE_ENV: development
+[2026-11-19T07:02:02.617Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T07:02:02.618Z] PORT env: 5001
+[2026-11-19T07:02:02.633Z] HTTP server listening on port/socket: 5001
+[2026-11-19T07:02:07.627Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T07:19:35.406Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T07:19:35.412Z] === Starting Sellvro on Node.js v22.14.0 (PID: 29708) ===
+[2026-11-19T07:19:35.413Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T07:19:35.413Z] NODE_ENV: development
+[2026-11-19T07:19:35.414Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T07:19:35.415Z] PORT env: 5001
+[2026-11-19T07:19:35.423Z] HTTP server listening on port/socket: 5001
+[2026-11-19T07:19:38.485Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T07:20:05.915Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T07:20:05.925Z] === Starting Sellvro on Node.js v22.14.0 (PID: 31648) ===
+[2026-11-19T07:20:05.925Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T07:20:05.926Z] NODE_ENV: development
+[2026-11-19T07:20:05.927Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T07:20:05.928Z] PORT env: 5001
+[2026-11-19T07:20:05.941Z] HTTP server listening on port/socket: 5001
+[2026-11-19T07:20:09.584Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T07:20:58.718Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T07:20:58.728Z] === Starting Sellvro on Node.js v22.14.0 (PID: 31380) ===
+[2026-11-19T07:20:58.729Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T07:20:58.730Z] NODE_ENV: development
+[2026-11-19T07:20:58.732Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T07:20:58.736Z] PORT env: 5001
+[2026-11-19T07:20:58.760Z] HTTP server listening on port/socket: 5001
+[2026-11-19T07:21:01.875Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T07:21:22.738Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T07:21:22.747Z] === Starting Sellvro on Node.js v22.14.0 (PID: 16044) ===
+[2026-11-19T07:21:22.748Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T07:21:22.749Z] NODE_ENV: development
+[2026-11-19T07:21:22.761Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T07:21:22.764Z] PORT env: 5001
+[2026-11-19T07:21:22.779Z] HTTP server listening on port/socket: 5001
+[2026-11-19T07:21:27.025Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T07:21:46.898Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T07:21:46.907Z] === Starting Sellvro on Node.js v22.14.0 (PID: 30364) ===
+[2026-11-19T07:21:46.907Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T07:21:46.908Z] NODE_ENV: development
+[2026-11-19T07:21:46.908Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T07:21:46.909Z] PORT env: 5001
+[2026-11-19T07:21:46.920Z] HTTP server listening on port/socket: 5001
+[2026-11-19T07:21:49.920Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T07:21:55.390Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T07:21:55.397Z] === Starting Sellvro on Node.js v22.14.0 (PID: 21800) ===
+[2026-11-19T07:21:55.398Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T07:21:55.399Z] NODE_ENV: development
+[2026-11-19T07:21:55.400Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T07:21:55.401Z] PORT env: 5001
+[2026-11-19T07:21:55.413Z] HTTP server listening on port/socket: 5001
+[2026-11-19T07:21:59.074Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T07:35:58.089Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T07:35:58.102Z] === Starting Sellvro on Node.js v22.14.0 (PID: 22204) ===
+[2026-11-19T07:35:58.124Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T07:35:58.127Z] NODE_ENV: development
+[2026-11-19T07:35:58.129Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T07:35:58.129Z] PORT env: 5001
+[2026-11-19T07:35:58.144Z] HTTP server listening on port/socket: 5001
+[2026-11-19T07:36:02.537Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T09:00:18.636Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T09:00:18.645Z] === Starting Sellvro on Node.js v22.14.0 (PID: 16420) ===
+[2026-11-19T09:00:18.645Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T09:00:18.646Z] NODE_ENV: development
+[2026-11-19T09:00:18.646Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T09:00:18.647Z] PORT env: 5001
+[2026-11-19T09:00:18.655Z] HTTP server listening on port/socket: 5001
+[2026-11-19T09:00:22.509Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T09:00:22.812Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T09:00:22.818Z] === Starting Sellvro on Node.js v22.14.0 (PID: 16428) ===
+[2026-11-19T09:00:22.819Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T09:00:22.819Z] NODE_ENV: development
+[2026-11-19T09:00:22.822Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T09:00:22.823Z] PORT env: 5001
+[2026-11-19T09:00:22.833Z] HTTP server listening on port/socket: 5001
+[2026-11-19T09:00:26.388Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T09:11:22.588Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T09:11:22.594Z] === Starting Sellvro on Node.js v22.14.0 (PID: 28508) ===
+[2026-11-19T09:11:22.595Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T09:11:22.595Z] NODE_ENV: development
+[2026-11-19T09:11:22.596Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T09:11:22.596Z] PORT env: 5001
+[2026-11-19T09:11:22.602Z] HTTP server listening on port/socket: 5001
+[2026-11-19T09:11:25.218Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T10:15:37.341Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T10:15:37.347Z] === Starting Sellvro on Node.js v22.14.0 (PID: 30492) ===
+[2026-11-19T10:15:37.348Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T10:15:37.348Z] NODE_ENV: development
+[2026-11-19T10:15:37.348Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T10:15:37.349Z] PORT env: 5001
+[2026-11-19T10:15:37.378Z] HTTP server listening on port/socket: 5001
+[2026-11-19T10:15:37.978Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T10:15:37.989Z] === Starting Sellvro on Node.js v22.14.0 (PID: 5592) ===
+[2026-11-19T10:15:37.992Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T10:15:37.993Z] NODE_ENV: development
+[2026-11-19T10:15:37.994Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T10:15:37.995Z] PORT env: 5001
+[2026-11-19T10:15:38.011Z] HTTP server listening on port/socket: 5001
+[2026-11-19T10:15:40.481Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T10:15:40.489Z] === Starting Sellvro on Node.js v22.14.0 (PID: 26968) ===
+[2026-11-19T10:15:40.490Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T10:15:40.491Z] NODE_ENV: development
+[2026-11-19T10:15:40.493Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T10:15:40.494Z] PORT env: 5001
+[2026-11-19T10:15:40.506Z] HTTP server listening on port/socket: 5001
+[2026-11-19T10:15:47.293Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T10:15:47.637Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T10:15:47.645Z] === Starting Sellvro on Node.js v22.14.0 (PID: 25012) ===
+[2026-11-19T10:15:47.649Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T10:15:47.650Z] NODE_ENV: development
+[2026-11-19T10:15:47.651Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T10:15:47.652Z] PORT env: 5001
+[2026-11-19T10:15:47.668Z] HTTP server listening on port/socket: 5001
+[2026-11-19T10:15:49.500Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T10:16:39.507Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T10:16:39.512Z] === Starting Sellvro on Node.js v22.14.0 (PID: 28768) ===
+[2026-11-19T10:16:39.512Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T10:16:39.513Z] NODE_ENV: development
+[2026-11-19T10:16:39.514Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T10:16:39.514Z] PORT env: 5001
+[2026-11-19T10:16:39.527Z] HTTP server listening on port/socket: 5001
+[2026-11-19T10:16:41.645Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T10:16:45.944Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T10:16:45.963Z] === Starting Sellvro on Node.js v22.14.0 (PID: 2112) ===
+[2026-11-19T10:16:45.971Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T10:16:45.976Z] NODE_ENV: development
+[2026-11-19T10:16:45.980Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T10:16:45.982Z] PORT env: 5001
+[2026-11-19T10:16:46.007Z] HTTP server listening on port/socket: 5001
+[2026-11-19T10:16:48.367Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T10:17:02.105Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T10:17:02.110Z] === Starting Sellvro on Node.js v22.14.0 (PID: 30716) ===
+[2026-11-19T10:17:02.111Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T10:17:02.111Z] NODE_ENV: development
+[2026-11-19T10:17:02.112Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T10:17:02.112Z] PORT env: 5001
+[2026-11-19T10:17:02.121Z] HTTP server listening on port/socket: 5001
+[2026-11-19T10:17:04.235Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T10:17:20.862Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T10:17:20.866Z] === Starting Sellvro on Node.js v22.14.0 (PID: 27008) ===
+[2026-11-19T10:17:20.867Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T10:17:20.867Z] NODE_ENV: development
+[2026-11-19T10:17:20.868Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T10:17:20.869Z] PORT env: 5001
+[2026-11-19T10:17:20.877Z] HTTP server listening on port/socket: 5001
+[2026-11-19T10:17:22.485Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T10:17:36.304Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T10:17:36.309Z] === Starting Sellvro on Node.js v22.14.0 (PID: 27868) ===
+[2026-11-19T10:17:36.310Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T10:17:36.310Z] NODE_ENV: development
+[2026-11-19T10:17:36.311Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T10:17:36.311Z] PORT env: 5001
+[2026-11-19T10:17:36.323Z] HTTP server listening on port/socket: 5001
+[2026-11-19T10:17:37.966Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T11:07:19.135Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T11:07:19.141Z] === Starting Sellvro on Node.js v22.14.0 (PID: 15404) ===
+[2026-11-19T11:07:19.141Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T11:07:19.142Z] NODE_ENV: development
+[2026-11-19T11:07:19.142Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T11:07:19.143Z] PORT env: 5001
+[2026-11-19T11:07:19.155Z] HTTP server listening on port/socket: 5001
+[2026-11-19T11:07:26.606Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T11:30:00.470Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T11:30:00.488Z] === Starting Sellvro on Node.js v22.14.0 (PID: 12664) ===
+[2026-11-19T11:30:00.490Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T11:30:00.526Z] NODE_ENV: development
+[2026-11-19T11:30:00.541Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T11:30:00.543Z] PORT env: 5001
+[2026-11-19T11:30:00.563Z] HTTP server listening on port/socket: 5001
+[2026-11-19T11:30:05.007Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T11:30:05.348Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T11:30:05.356Z] === Starting Sellvro on Node.js v22.14.0 (PID: 15156) ===
+[2026-11-19T11:30:05.356Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T11:30:05.357Z] NODE_ENV: development
+[2026-11-19T11:30:05.358Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T11:30:05.359Z] PORT env: 5001
+[2026-11-19T11:30:05.374Z] HTTP server listening on port/socket: 5001
+[2026-11-19T11:30:08.557Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T11:46:32.868Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T11:46:32.875Z] === Starting Sellvro on Node.js v22.14.0 (PID: 17072) ===
+[2026-11-19T11:46:32.876Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T11:46:32.876Z] NODE_ENV: development
+[2026-11-19T11:46:32.878Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T11:46:32.879Z] PORT env: 5001
+[2026-11-19T11:46:32.887Z] HTTP server listening on port/socket: 5001
+[2026-11-19T11:46:35.352Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T12:06:01.832Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T12:06:01.837Z] === Starting Sellvro on Node.js v22.14.0 (PID: 15744) ===
+[2026-11-19T12:06:01.838Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T12:06:01.838Z] NODE_ENV: development
+[2026-11-19T12:06:01.839Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T12:06:01.839Z] PORT env: 5001
+[2026-11-19T12:06:01.847Z] HTTP server listening on port/socket: 5001
+[2026-11-19T12:06:04.469Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T12:06:20.041Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T12:06:20.047Z] === Starting Sellvro on Node.js v22.14.0 (PID: 8268) ===
+[2026-11-19T12:06:20.048Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T12:06:20.049Z] NODE_ENV: development
+[2026-11-19T12:06:20.050Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T12:06:20.051Z] PORT env: 5001
+[2026-11-19T12:06:20.059Z] HTTP server listening on port/socket: 5001
+[2026-11-19T12:06:22.363Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T12:12:21.262Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T12:12:21.271Z] === Starting Sellvro on Node.js v22.14.0 (PID: 7360) ===
+[2026-11-19T12:12:21.272Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T12:12:21.273Z] NODE_ENV: development
+[2026-11-19T12:12:21.274Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T12:12:21.275Z] PORT env: 5001
+[2026-11-19T12:12:21.289Z] HTTP server listening on port/socket: 5001
+[2026-11-19T12:12:24.363Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T12:32:57.263Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T12:32:57.274Z] === Starting Sellvro on Node.js v22.14.0 (PID: 19436) ===
+[2026-11-19T12:32:57.275Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T12:32:57.279Z] NODE_ENV: development
+[2026-11-19T12:32:57.280Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T12:32:57.284Z] PORT env: 5001
+[2026-11-19T12:32:57.296Z] HTTP server listening on port/socket: 5001
+[2026-11-19T12:32:58.798Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T12:32:58.811Z] === Starting Sellvro on Node.js v22.14.0 (PID: 13524) ===
+[2026-11-19T12:32:58.814Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T12:32:58.815Z] NODE_ENV: development
+[2026-11-19T12:32:58.818Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T12:32:58.820Z] PORT env: 5001
+[2026-11-19T12:32:58.839Z] HTTP server listening on port/socket: 5001
+[2026-11-19T12:33:02.071Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T12:33:02.370Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T12:33:02.375Z] === Starting Sellvro on Node.js v22.14.0 (PID: 2352) ===
+[2026-11-19T12:33:02.376Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T12:33:02.376Z] NODE_ENV: development
+[2026-11-19T12:33:02.377Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T12:33:02.378Z] PORT env: 5001
+[2026-11-19T12:33:02.387Z] HTTP server listening on port/socket: 5001
+[2026-11-19T12:33:04.810Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T14:11:54.166Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T14:11:54.184Z] === Starting Sellvro on Node.js v22.14.0 (PID: 1112) ===
+[2026-11-19T14:11:54.185Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T14:11:54.185Z] NODE_ENV: development
+[2026-11-19T14:11:54.186Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T14:11:54.188Z] PORT env: 5001
+[2026-11-19T14:11:54.209Z] HTTP server listening on port/socket: 5001
+[2026-11-19T14:11:57.729Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T14:11:57.986Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T14:11:57.993Z] === Starting Sellvro on Node.js v22.14.0 (PID: 12620) ===
+[2026-11-19T14:11:57.994Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T14:11:57.994Z] NODE_ENV: development
+[2026-11-19T14:11:57.995Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T14:11:57.995Z] PORT env: 5001
+[2026-11-19T14:11:58.003Z] HTTP server listening on port/socket: 5001
+[2026-11-19T14:12:00.630Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T14:14:13.224Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T14:14:13.231Z] === Starting Sellvro on Node.js v22.14.0 (PID: 3040) ===
+[2026-11-19T14:14:13.231Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T14:14:13.232Z] NODE_ENV: development
+[2026-11-19T14:14:13.232Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T14:14:13.233Z] PORT env: 5001
+[2026-11-19T14:14:13.242Z] HTTP server listening on port/socket: 5001
+[2026-11-19T14:14:15.631Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T14:14:26.525Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T14:14:26.532Z] === Starting Sellvro on Node.js v22.14.0 (PID: 25676) ===
+[2026-11-19T14:14:26.532Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T14:14:26.533Z] NODE_ENV: development
+[2026-11-19T14:14:26.533Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T14:14:26.534Z] PORT env: 5001
+[2026-11-19T14:14:26.540Z] HTTP server listening on port/socket: 5001
+[2026-11-19T14:14:29.055Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T14:14:59.377Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T14:14:59.384Z] === Starting Sellvro on Node.js v22.14.0 (PID: 25472) ===
+[2026-11-19T14:14:59.384Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T14:14:59.385Z] NODE_ENV: development
+[2026-11-19T14:14:59.385Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T14:14:59.387Z] PORT env: 5001
+[2026-11-19T14:14:59.398Z] HTTP server listening on port/socket: 5001
+[2026-11-19T14:15:01.940Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T14:15:14.495Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T14:15:14.500Z] === Starting Sellvro on Node.js v22.14.0 (PID: 24600) ===
+[2026-11-19T14:15:14.501Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T14:15:14.501Z] NODE_ENV: development
+[2026-11-19T14:15:14.502Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T14:15:14.503Z] PORT env: 5001
+[2026-11-19T14:15:14.513Z] HTTP server listening on port/socket: 5001
+[2026-11-19T14:15:16.796Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T16:18:41.591Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T16:18:41.600Z] === Starting Sellvro on Node.js v22.14.0 (PID: 29860) ===
+[2026-11-19T16:18:41.601Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T16:18:41.602Z] NODE_ENV: development
+[2026-11-19T16:18:41.603Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T16:18:41.604Z] PORT env: 5001
+[2026-11-19T16:18:41.617Z] HTTP server listening on port/socket: 5001
+[2026-11-19T16:18:45.188Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T16:18:45.506Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T16:18:45.524Z] === Starting Sellvro on Node.js v22.14.0 (PID: 28820) ===
+[2026-11-19T16:18:45.528Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T16:18:45.533Z] NODE_ENV: development
+[2026-11-19T16:18:45.535Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T16:18:45.537Z] PORT env: 5001
+[2026-11-19T16:18:45.555Z] HTTP server listening on port/socket: 5001
+[2026-11-19T16:18:48.308Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T16:18:54.725Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T16:18:54.732Z] === Starting Sellvro on Node.js v22.14.0 (PID: 23924) ===
+[2026-11-19T16:18:54.734Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T16:18:54.734Z] NODE_ENV: development
+[2026-11-19T16:18:54.735Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T16:18:54.735Z] PORT env: 5001
+[2026-11-19T16:18:54.747Z] HTTP server listening on port/socket: 5001
+[2026-11-19T16:19:02.474Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T16:19:15.365Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T16:19:15.373Z] === Starting Sellvro on Node.js v22.14.0 (PID: 30572) ===
+[2026-11-19T16:19:15.374Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T16:19:15.374Z] NODE_ENV: development
+[2026-11-19T16:19:15.376Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T16:19:15.377Z] PORT env: 5001
+[2026-11-19T16:19:15.389Z] HTTP server listening on port/socket: 5001
+[2026-11-19T16:19:19.046Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T16:19:30.810Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T16:19:30.822Z] === Starting Sellvro on Node.js v22.14.0 (PID: 30096) ===
+[2026-11-19T16:19:30.823Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T16:19:30.824Z] NODE_ENV: development
+[2026-11-19T16:19:30.828Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T16:19:30.832Z] PORT env: 5001
+[2026-11-19T16:19:30.848Z] HTTP server listening on port/socket: 5001
+[2026-11-19T16:19:34.235Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T16:19:55.441Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T16:19:55.450Z] === Starting Sellvro on Node.js v22.14.0 (PID: 30436) ===
+[2026-11-19T16:19:55.451Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T16:19:55.451Z] NODE_ENV: development
+[2026-11-19T16:19:55.452Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T16:19:55.453Z] PORT env: 5001
+[2026-11-19T16:19:55.465Z] HTTP server listening on port/socket: 5001
+[2026-11-19T16:19:59.148Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T16:20:29.589Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T16:20:29.598Z] === Starting Sellvro on Node.js v22.14.0 (PID: 8388) ===
+[2026-11-19T16:20:29.601Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T16:20:29.604Z] NODE_ENV: development
+[2026-11-19T16:20:29.608Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T16:20:29.610Z] PORT env: 5001
+[2026-11-19T16:20:29.623Z] HTTP server listening on port/socket: 5001
+[2026-11-19T16:20:32.889Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T16:21:00.977Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T16:21:00.987Z] === Starting Sellvro on Node.js v22.14.0 (PID: 22812) ===
+[2026-11-19T16:21:00.987Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T16:21:00.988Z] NODE_ENV: development
+[2026-11-19T16:21:00.990Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T16:21:00.992Z] PORT env: 5001
+[2026-11-19T16:21:01.005Z] HTTP server listening on port/socket: 5001
+[2026-11-19T16:21:04.287Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T16:21:09.641Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T16:21:09.648Z] === Starting Sellvro on Node.js v22.14.0 (PID: 22588) ===
+[2026-11-19T16:21:09.648Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T16:21:09.649Z] NODE_ENV: development
+[2026-11-19T16:21:09.649Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T16:21:09.650Z] PORT env: 5001
+[2026-11-19T16:21:09.662Z] HTTP server listening on port/socket: 5001
+[2026-11-19T16:21:12.788Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T20:45:42.680Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T20:45:42.700Z] === Starting Sellvro on Node.js v22.14.0 (PID: 24720) ===
+[2026-11-19T20:45:42.717Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T20:45:42.719Z] NODE_ENV: development
+[2026-11-19T20:45:42.720Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T20:45:42.725Z] PORT env: 5001
+[2026-11-19T20:45:42.785Z] HTTP server listening on port/socket: 5001
+[2026-11-19T20:45:43.486Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T20:45:43.572Z] === Starting Sellvro on Node.js v22.14.0 (PID: 24484) ===
+[2026-11-19T20:45:43.572Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T20:45:43.574Z] NODE_ENV: development
+[2026-11-19T20:45:43.575Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T20:45:43.578Z] PORT env: 5001
+[2026-11-19T20:45:43.597Z] HTTP server listening on port/socket: 5001
+[2026-11-19T20:45:44.878Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T20:45:44.887Z] === Starting Sellvro on Node.js v22.14.0 (PID: 24800) ===
+[2026-11-19T20:45:44.890Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T20:45:44.893Z] NODE_ENV: development
+[2026-11-19T20:45:44.899Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T20:45:44.906Z] PORT env: 5001
+[2026-11-19T20:45:44.965Z] HTTP server listening on port/socket: 5001
+[2026-11-19T20:45:46.678Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T20:45:46.698Z] === Starting Sellvro on Node.js v22.14.0 (PID: 22992) ===
+[2026-11-19T20:45:46.708Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T20:45:46.715Z] NODE_ENV: development
+[2026-11-19T20:45:46.721Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T20:45:46.730Z] PORT env: 5001
+[2026-11-19T20:45:46.756Z] HTTP server listening on port/socket: 5001
+[2026-11-19T20:45:48.159Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T20:45:48.176Z] === Starting Sellvro on Node.js v22.14.0 (PID: 17936) ===
+[2026-11-19T20:45:48.178Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T20:45:48.183Z] NODE_ENV: development
+[2026-11-19T20:45:48.195Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T20:45:48.202Z] PORT env: 5001
+[2026-11-19T20:45:48.233Z] HTTP server listening on port/socket: 5001
+[2026-11-19T20:45:59.063Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-19T20:45:59.387Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-19T20:45:59.397Z] === Starting Sellvro on Node.js v22.14.0 (PID: 24792) ===
+[2026-11-19T20:45:59.398Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-19T20:45:59.398Z] NODE_ENV: development
+[2026-11-19T20:45:59.400Z] PASSENGER_APP_ROOT: not set
+[2026-11-19T20:45:59.401Z] PORT env: 5001
+[2026-11-19T20:45:59.415Z] HTTP server listening on port/socket: 5001
+[2026-11-19T20:46:02.237Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-20T09:22:41.516Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-20T09:22:41.523Z] === Starting Sellvro on Node.js v22.14.0 (PID: 24704) ===
+[2026-11-20T09:22:41.524Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-20T09:22:41.524Z] NODE_ENV: development
+[2026-11-20T09:22:41.526Z] PASSENGER_APP_ROOT: not set
+[2026-11-20T09:22:41.526Z] PORT env: 5001
+[2026-11-20T09:22:41.537Z] HTTP server listening on port/socket: 5001
+[2026-11-20T09:22:44.472Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-20T09:22:44.802Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-20T09:22:44.808Z] === Starting Sellvro on Node.js v22.14.0 (PID: 28204) ===
+[2026-11-20T09:22:44.809Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-20T09:22:44.809Z] NODE_ENV: development
+[2026-11-20T09:22:44.810Z] PASSENGER_APP_ROOT: not set
+[2026-11-20T09:22:44.811Z] PORT env: 5001
+[2026-11-20T09:22:44.820Z] HTTP server listening on port/socket: 5001
+[2026-11-20T09:22:47.672Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-20T09:30:37.884Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-20T09:30:37.894Z] === Starting Sellvro on Node.js v22.14.0 (PID: 15788) ===
+[2026-11-20T09:30:37.895Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-20T09:30:37.895Z] NODE_ENV: development
+[2026-11-20T09:30:37.896Z] PASSENGER_APP_ROOT: not set
+[2026-11-20T09:30:37.896Z] PORT env: 5001
+[2026-11-20T09:30:37.909Z] HTTP server listening on port/socket: 5001
+[2026-11-20T09:30:41.947Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-20T09:30:56.667Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-20T09:30:56.676Z] === Starting Sellvro on Node.js v22.14.0 (PID: 25528) ===
+[2026-11-20T09:30:56.677Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-20T09:30:56.678Z] NODE_ENV: development
+[2026-11-20T09:30:56.679Z] PASSENGER_APP_ROOT: not set
+[2026-11-20T09:30:56.680Z] PORT env: 5001
+[2026-11-20T09:30:56.699Z] HTTP server listening on port/socket: 5001
+[2026-11-20T09:31:00.430Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-20T09:32:12.330Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-20T09:32:12.343Z] === Starting Sellvro on Node.js v22.14.0 (PID: 25988) ===
+[2026-11-20T09:32:12.344Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-20T09:32:12.345Z] NODE_ENV: development
+[2026-11-20T09:32:12.345Z] PASSENGER_APP_ROOT: not set
+[2026-11-20T09:32:12.346Z] PORT env: 5001
+[2026-11-20T09:32:12.366Z] HTTP server listening on port/socket: 5001
+[2026-11-20T09:32:16.167Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-20T10:26:25.632Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-20T10:26:25.678Z] === Starting Sellvro on Node.js v22.14.0 (PID: 28232) ===
+[2026-11-20T10:26:25.693Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-20T10:26:25.699Z] NODE_ENV: development
+[2026-11-20T10:26:25.704Z] PASSENGER_APP_ROOT: not set
+[2026-11-20T10:26:25.723Z] PORT env: 5001
+[2026-11-20T10:26:25.733Z] HTTP server listening on port/socket: 5001
+[2026-11-20T10:26:28.905Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-20T10:26:29.142Z] === Starting Sellvro on Node.js v22.14.0 (PID: 23916) ===
+[2026-11-20T10:26:29.167Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-20T10:26:29.186Z] NODE_ENV: development
+[2026-11-20T10:26:29.199Z] PASSENGER_APP_ROOT: not set
+[2026-11-20T10:26:29.212Z] PORT env: 5001
+[2026-11-20T10:26:29.241Z] HTTP server listening on port/socket: 5001
+[2026-11-20T10:26:35.228Z] Express app attached to HTTP server successfully. Sellvro is READY.
+[2026-11-20T10:26:35.522Z] .env loaded from: D:\HayViral internship\Sellvro project 2\.env
+[2026-11-20T10:26:35.542Z] === Starting Sellvro on Node.js v22.14.0 (PID: 6152) ===
+[2026-11-20T10:26:35.548Z] Working directory: D:\HayViral internship\Sellvro project 2
+[2026-11-20T10:26:35.553Z] NODE_ENV: development
+[2026-11-20T10:26:35.563Z] PASSENGER_APP_ROOT: not set
+[2026-11-20T10:26:35.568Z] PORT env: 5001
+[2026-11-20T10:26:35.585Z] HTTP server listening on port/socket: 5001
+[2026-11-20T10:26:40.059Z] Express app attached to HTTP server successfully. Sellvro is READY.

@@ -251,6 +251,8 @@ export const orderApi = {
     apiRequest(`/orders/${id}/approve-cancel`, { method: 'POST', body: { adminNote } }),
   rejectCancel: (id, rejectionReason = '') =>
     apiRequest(`/orders/${id}/reject-cancel`, { method: 'POST', body: { rejectionReason } }),
+  supplierReview: (id, payload) =>
+    apiRequest(`/orders/${id}/supplier-review`, { method: 'POST', body: payload }),
   pushWms: (id) => apiRequest(`/orders/${id}/push-wms`, { method: 'POST' }),
   trackWms: (id) => apiRequest(`/orders/${id}/track-wms`),
   liveWmsOrders: (params = {}) => {
@@ -328,6 +330,8 @@ export const adminApi = {
   },
   updateProductCommission: (id, commission) =>
     apiRequest(`/admin/products/${id}/commission`, { method: 'PATCH', body: { commission } }),
+  updateProductResearch: (id, payload) =>
+    apiRequest(`/admin/products/${id}/research`, { method: 'PATCH', body: payload }),
   createProduct: (payload, files = []) => {
     const formData = new FormData()
     Object.entries(payload).forEach(([key, value]) => {

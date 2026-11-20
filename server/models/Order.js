@@ -83,6 +83,28 @@ const orderSchema = new mongoose.Schema(
       type: cancellationRequestSchema,
       default: () => ({ isRequested: false, status: 'none', requestedBy: 'none' }),
     },
+    supplierReviewStatus: {
+      type: String,
+      enum: ['pending_review', 'accepted', 'rejected'],
+      default: 'pending_review',
+    },
+    supplierReviewedAt: {
+      type: Date,
+      default: null,
+    },
+    supplierRejectionReason: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    supplierTermsAccepted: {
+      type: Boolean,
+      default: false,
+    },
+    supplierTermsAcceptedAt: {
+      type: Date,
+      default: null,
+    },
     brandLabel: { type: String, trim: true, default: '' },
     orderLabelRef: { type: String, trim: true, default: '' },
     shippingLabelUrl: { type: String, trim: true, default: '' },
@@ -476,6 +498,11 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
     ) ? (this.wmsPushedAt || null) : null,
     isReviewed: Boolean(this.isReviewed),
     reviewId: this.review?.toString?.() || '',
+    supplierReviewStatus: this.supplierReviewStatus || 'pending_review',
+    supplierReviewedAt: this.supplierReviewedAt || null,
+    supplierRejectionReason: this.supplierRejectionReason || '',
+    supplierTermsAccepted: Boolean(this.supplierTermsAccepted),
+    supplierTermsAcceptedAt: this.supplierTermsAcceptedAt || null,
     customizationDetails: this.customizationDetails || '',
     isCustomized: Boolean(this.isCustomized),
     cancellationRequest: this.cancellationRequest ? {

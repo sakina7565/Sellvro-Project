@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, SquarePen, Tag, DollarSign, Layers, Package, Barcode, Percent, MapPin, FileText } from 'lucide-react'
+import { X, SquarePen, Tag, DollarSign, Layers, Package, Barcode, Percent, MapPin, FileText, Link2, Plus } from 'lucide-react'
 import Button from '../ui/Button.jsx'
 import Input from '../ui/Input.jsx'
 import Select from '../ui/Select.jsx'
@@ -7,6 +7,7 @@ import { adminApi, getErrorMessage } from '../../lib/api.js'
 
 function EditProductModal({ isOpen, onClose, onSuccess, product }) {
   const [categories, setCategories] = useState([])
+  const [newSisterSku, setNewSisterSku] = useState('')
   const [form, setForm] = useState({
     name: '',
     sku: '',
@@ -21,6 +22,14 @@ function EditProductModal({ isOpen, onClose, onSuccess, product }) {
     description: '',
     customizationAvailable: false,
     customizationInstructions: '',
+    sisterSkus: [],
+    sisterVariationType: 'Color',
+    globalSearchVolume: '0',
+    globalMonthlySales: '0',
+    usMarketAverageSales: '0',
+    productKeywords: ['', '', '', '', ''],
+    rankingPriority: 'standard',
+    adminEvaluationNotes: '',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -54,7 +63,27 @@ function EditProductModal({ isOpen, onClose, onSuccess, product }) {
         description: product.description || '',
         customizationAvailable: Boolean(product.customizationAvailable),
         customizationInstructions: product.customizationInstructions || '',
+        sisterSkus: Array.isArray(product.sisterSkus) ? product.sisterSkus : [],
+        sisterVariationType: product.sisterVariationType || 'Color',
+        globalSearchVolume:
+          product.globalSearchVolume !== undefined && product.globalSearchVolume !== null
+            ? String(product.globalSearchVolume)
+            : '0',
+        globalMonthlySales:
+          product.globalMonthlySales !== undefined && product.globalMonthlySales !== null
+            ? String(product.globalMonthlySales)
+            : '0',
+        usMarketAverageSales:
+          product.usMarketAverageSales !== undefined && product.usMarketAverageSales !== null
+            ? String(product.usMarketAverageSales)
+            : '0',
+        productKeywords: Array.isArray(product.productKeywords)
+          ? [...product.productKeywords, '', '', '', ''].slice(0, 5)
+          : ['', '', '', '', ''],
+        rankingPriority: product.rankingPriority || 'standard',
+        adminEvaluationNotes: product.adminEvaluationNotes || '',
       })
+      setNewSisterSku('')
       setError('')
     }
   }, [product])
@@ -110,6 +139,16 @@ function EditProductModal({ isOpen, onClose, onSuccess, product }) {
         description: form.description.trim(),
         customizationAvailable: form.customizationAvailable ? 'true' : 'false',
         customizationInstructions: form.customizationInstructions || '',
+        sisterSkus: JSON.stringify(form.sisterSkus || []),
+        sisterVariationType: form.sisterVariationType || 'Color',
+        globalSearchVolume: Math.max(0, parseInt(form.globalSearchVolume, 10) || 0),
+        globalMonthlySales: Math.max(0, parseInt(form.globalMonthlySales, 10) || 0),
+        usMarketAverageSales: Math.max(0, parseInt(form.usMarketAverageSales, 10) || 0),
+        productKeywords: JSON.stringify(
+          (form.productKeywords || []).map((k) => k.trim()).filter(Boolean).slice(0, 5),
+        ),
+        rankingPriority: form.rankingPriority || 'standard',
+        adminEvaluationNotes: form.adminEvaluationNotes || '',
       }
 
       const res = await adminApi.updateProduct(product.id, payload)
@@ -380,6 +419,188 @@ function EditProductModal({ isOpen, onClose, onSuccess, product }) {
                 />
               </div>
             )}
+          </div>
+
+          {/* Sister SKUs Option */}
+          <div className="rounded-xl border border-sky-100 bg-sky-50/50 p-3.5">
+            <div className="flex items-center gap-2 mb-2">
+              <Link2 className="h-4 w-4 text-sky-600" />
+              <span className="font-bold text-xs text-sky-950">
+                Sister SKUs (Link Related Products)
+              </span>
+            </div>
+            <p className="text-[11px] text-sky-800 mb-3">
+              Connect this product with other colors, sizes, or variations. Displays &quot;Same Product Available in Different Colors&quot; on the product page.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">Variation Attribute</label>
+                <Select
+                  value={form.sisterVariationType || 'Color'}
+                  onChange={handleChange('sisterVariationType')}
+                  className="w-full bg-white text-xs"
+                >
+                  <option value="Color">Color (Different Colors)</option>
+                  <option value="Size">Size (Different Sizes)</option>
+                  <option value="Style">Style (Different Styles)</option>
+                  <option value="Material">Material (Different Materials)</option>
+                  <option value="Edition">Edition (Different Editions)</option>
+                </Select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700">Add Sister SKU</label>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={newSisterSku}
+                    onChange={(e) => setNewSisterSku(e.target.value)}
+                    placeholder="e.g. SVRO-00042"
+                    className="bg-white uppercase text-xs font-mono"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        const val = newSisterSku.trim().toUpperCase()
+                        if (val && !form.sisterSkus.includes(val) && val !== form.sku.trim().toUpperCase()) {
+                          setForm((p) => ({ ...p, sisterSkus: [...p.sisterSkus, val] }))
+                          setNewSisterSku('')
+                        }
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const val = newSisterSku.trim().toUpperCase()
+                      if (val && !form.sisterSkus.includes(val) && val !== form.sku.trim().toUpperCase()) {
+                        setForm((p) => ({ ...p, sisterSkus: [...p.sisterSkus, val] }))
+                        setNewSisterSku('')
+                      }
+                    }}
+                    className="bg-white shrink-0 text-xs px-2.5"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-0.5 text-sky-600" />
+                    Add
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Chips of linked SKUs */}
+            <div className="flex flex-wrap gap-1.5">
+              {form.sisterSkus?.length > 0 ? (
+                form.sisterSkus.map((sku) => (
+                  <span
+                    key={sku}
+                    className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-white px-2 py-0.5 font-mono text-[11px] font-bold text-sky-900 shadow-2xs"
+                  >
+                    {sku}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((p) => ({
+                          ...p,
+                          sisterSkus: p.sisterSkus.filter((s) => s !== sku),
+                        }))
+                      }
+                      className="text-slate-400 hover:text-rose-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))
+              ) : (
+                <span className="text-[11px] text-slate-400 italic">No Sister SKUs linked yet.</span>
+              )}
+            </div>
+          </div>
+
+          {/* Product Research & Evaluation */}
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs text-indigo-950">
+                Product Research &amp; Landing Page Ranking
+              </span>
+              <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-800">
+                Market Evaluation
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-slate-700">Global Search Volume</label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={form.globalSearchVolume}
+                  onChange={handleChange('globalSearchVolume')}
+                  placeholder="e.g. 50000"
+                  className="bg-white text-xs font-mono"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-slate-700">Global Monthly Sales</label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={form.globalMonthlySales}
+                  onChange={handleChange('globalMonthlySales')}
+                  placeholder="e.g. 2500"
+                  className="bg-white text-xs font-mono"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-slate-700">US Market Avg Sales</label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={form.usMarketAverageSales}
+                  onChange={handleChange('usMarketAverageSales')}
+                  placeholder="e.g. 1200"
+                  className="bg-white text-xs font-mono"
+                />
+              </div>
+            </div>
+
+            {/* 5 Keywords */}
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold text-slate-700">5 Product Keywords</label>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                {[0, 1, 2, 3, 4].map((idx) => (
+                  <Input
+                    key={idx}
+                    value={(form.productKeywords && form.productKeywords[idx]) || ''}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setForm((p) => {
+                        const copy = [...(p.productKeywords || ['', '', '', '', ''])]
+                        copy[idx] = val
+                        return { ...p, productKeywords: copy }
+                      })
+                    }}
+                    placeholder={`Keyword ${idx + 1}`}
+                    className="bg-white text-[11px]"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Priority Selection */}
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold text-slate-700">Landing Page Priority</label>
+              <Select
+                value={form.rankingPriority || 'standard'}
+                onChange={handleChange('rankingPriority')}
+                className="w-full bg-white text-xs"
+              >
+                <option value="high">High Priority (Top of Landing Page)</option>
+                <option value="medium">Medium Priority (Middle Section)</option>
+                <option value="low">Low Priority (Further Down)</option>
+                <option value="standard">Standard (Default Chronological)</option>
+              </Select>
+            </div>
           </div>
 
           {/* Description */}
