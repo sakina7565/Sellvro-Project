@@ -161,6 +161,14 @@ const orderSchema = new mongoose.Schema(
       ref: 'Payout',
       default: null,
     },
+    isRefunded: {
+      type: Boolean,
+      default: false,
+    },
+    refundedAt: {
+      type: Date,
+      default: null,
+    },
     shippingAddress: {
       type: shippingAddressSchema,
       default: () => ({}),

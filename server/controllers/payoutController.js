@@ -4,6 +4,7 @@ import Payout from '../models/Payout.js'
 import User from '../models/User.js'
 import Category from '../models/Category.js'
 import BusinessProfile from '../models/BusinessProfile.js'
+import Dispute from '../models/Dispute.js'
 import { createNotification } from '../utils/notifications.js'
 import { getNextPayoutNo } from '../services/sequenceService.js'
 import { logAdminAction } from '../utils/auditLogger.js'
@@ -130,14 +131,29 @@ export const processSupplierPayout = async (req, res) => {
       return res.status(404).json({ message: 'Supplier not found.' })
     }
 
-    const orders = await Order.find({
+    let orders = await Order.find({
       supplier: supplierId,
       payoutStatus: 'pending',
-      status: { $ne: 'cancelled' },
+      status: { $nin: ['cancelled', 'returned'] },
     })
 
+    // Exclude orders with open disputes (financial hold)
+    const openDisputes = await Dispute.find({
+      order: { $in: orders.map((o) => o._id) },
+      status: 'open',
+    }).select('order')
+    const disputedOrderIds = new Set(openDisputes.map((d) => d.order?.toString()).filter(Boolean))
+
+    if (disputedOrderIds.size > 0) {
+      orders = orders.filter((o) => !disputedOrderIds.has(o._id.toString()))
+    }
+
     if (orders.length === 0) {
-      return res.status(400).json({ message: 'No pending payout amount for this supplier.' })
+      return res.status(400).json({
+        message: disputedOrderIds.size > 0
+          ? 'Pending orders are currently on hold due to active disputes.'
+          : 'No eligible pending payout amount for this supplier.',
+      })
     }
 
     const amount = Number(
@@ -1051,7 +1067,7 @@ export const executeSupplierPayout = async (req, res) => {
       const allSupOrders = await Order.find({
         supplier: supplierId,
         payoutStatus: { $ne: 'processed' },
-        status: { $ne: 'cancelled' },
+        status: { $nin: ['cancelled', 'returned'] },
       })
       targetOrders = allSupOrders.filter((o) => {
         const matchesMonth = formatMonthKey(o.createdAt) === monthKey
@@ -1067,7 +1083,31 @@ export const executeSupplierPayout = async (req, res) => {
       const allSupOrders = await Order.find({
         supplier: supplierId,
         payoutStatus: { $ne: 'processed' },
-        status: { $ne: 'cancelled' },
+        status: { $nin: ['cancelled', 'returned'] },
+      })
+    }
+
+    // Filter out cancelled and returned orders
+    targetOrders = targetOrders.filter(
+      (o) => o.status !== 'cancelled' && o.status !== 'returned',
+    )
+
+    // Check for open disputes on target orders (financial hold)
+    const openDisputes = await Dispute.find({
+      order: { $in: targetOrders.map((o) => o._id) },
+      status: 'open',
+    }).select('order')
+    const disputedOrderIds = new Set(openDisputes.map((d) => d.order?.toString()).filter(Boolean))
+
+    if (disputedOrderIds.size > 0) {
+      targetOrders = targetOrders.filter((o) => !disputedOrderIds.has(o._id.toString()))
+    }
+
+    if (targetOrders.length === 0) {
+      return res.status(400).json({
+        message: disputedOrderIds.size > 0
+          ? 'Selected orders are held due to open disputes. Resolve disputes before releasing payout.'
+          : 'No eligible orders available for payout.',
       })
       targetOrders = allSupOrders.filter((o) => isOrderMature(o))
     }
@@ -1079,7 +1119,10 @@ export const executeSupplierPayout = async (req, res) => {
         return sum + (Number(o.total || 0) - comm)
       }, 0).toFixed(2),
     )
-    const payoutAmount = amount !== undefined && Number(amount) > 0 ? Number(amount) : calculatedAmount
+
+    // Payout amount capped at calculated total (prevents arbitrary overpayment / manipulation)
+    const requestedAmount = amount !== undefined && Number(amount) > 0 ? Number(amount) : calculatedAmount
+    const payoutAmount = Number(Math.min(requestedAmount, calculatedAmount).toFixed(2))
 
     if (payoutAmount <= 0) {
       return res.status(400).json({ message: 'Payout amount must be greater than zero.' })
