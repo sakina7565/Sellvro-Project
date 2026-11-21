@@ -1,64 +1,33 @@
 import {
   AlertCircle,
-  ArrowDownRight,
   ArrowRight,
-  ArrowUpRight,
   BarChart3,
-  Box,
-  Calendar,
   CheckCircle2,
   ChevronRight,
-  Clock,
   Copy,
-  DollarSign,
-  Download,
-  ExternalLink,
-  Eye,
-  Filter,
-  Layers,
   MapPin,
   Package,
   PackageCheck,
   PackageSearch,
-  Phone,
   RefreshCw,
   Search,
-  Send,
-  ShieldCheck,
-  ShoppingBag,
   ShoppingCart,
-  TrendingDown,
   TrendingUp,
   Truck,
   User,
   Users,
-  Wallet,
   X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import Card from '../ui/Card.jsx'
 import Badge from '../ui/Badge.jsx'
 import Button from '../ui/Button.jsx'
-import { adminApi, getErrorMessage, mediaUrl } from '../../lib/api.js'
+import { adminApi, getErrorMessage } from '../../lib/api.js'
+import { formatUserId } from '../../lib/idFormatters.js'
 
 function getUserDisplayId(user) {
-  if (user?.clientId) return user.clientId
-  if (user?.id || user?._id) {
-    const hex = String(user.id || user._id)
-    return `USR-${hex.slice(-6).toUpperCase()}`
-  }
-  return 'USR-1001'
+  return formatUserId(user)
 }
 
 const TRACKING_STAGES = [
@@ -178,11 +147,29 @@ export default function UserReportingContent() {
         )
       })
 
-      const totalPurchasedAmount = userPurchases.reduce((acc, o) => acc + (Number(o.total) || 0), 0)
-      const totalPurchasedItems = userPurchases.reduce((acc, o) => acc + (Number(o.quantity) || 1), 0)
+      const totalPurchasedAmount = userPurchases.reduce((acc, o) => {
+        const qty = Math.max(1, Number(o.quantity ?? o.items ?? o.qty ?? 1))
+        const total = Number(
+          o.total != null && o.total !== '' && !Number.isNaN(Number(o.total))
+            ? o.total
+            : Number(o.unitPrice || 0) * qty
+        )
+        return acc + total
+      }, 0)
+      const totalPurchasedItems = userPurchases.reduce((acc, o) => {
+        return acc + Math.max(1, Number(o.quantity ?? o.items ?? o.qty ?? 1))
+      }, 0)
       const totalPurchasedOrders = userPurchases.length
 
-      const totalSalesAmount = userSales.reduce((acc, o) => acc + (Number(o.total) || 0), 0)
+      const totalSalesAmount = userSales.reduce((acc, o) => {
+        const qty = Math.max(1, Number(o.quantity ?? o.items ?? o.qty ?? 1))
+        const total = Number(
+          o.total != null && o.total !== '' && !Number.isNaN(Number(o.total))
+            ? o.total
+            : Number(o.unitPrice || 0) * qty
+        )
+        return acc + total
+      }, 0)
       const totalSalesOrders = userSales.length
 
       const activeParcels = userPurchases.filter((o) => {
@@ -228,7 +215,15 @@ export default function UserReportingContent() {
   // Summary Metrics
   const summary = useMemo(() => {
     const totalUsersCount = users.length
-    const totalPurchasedOverall = orders.reduce((acc, o) => acc + (Number(o.total) || 0), 0)
+    const totalPurchasedOverall = orders.reduce((acc, o) => {
+      const qty = Math.max(1, Number(o.quantity ?? o.items ?? o.qty ?? 1))
+      const total = Number(
+        o.total != null && o.total !== '' && !Number.isNaN(Number(o.total))
+          ? o.total
+          : Number(o.unitPrice || 0) * qty
+      )
+      return acc + total
+    }, 0)
     const totalOrdersCount = orders.length
     const inTransitCount = orders.filter((o) => {
       const s = String(o.trackingStatus || o.status || '').toLowerCase()
@@ -336,44 +331,6 @@ export default function UserReportingContent() {
       setUpdatingTracking(false)
     }
   }
-
-  // Monthly Chart Data for Selected User Deep Dive
-  const selectedUserChartData = useMemo(() => {
-    if (!selectedUser) return []
-    const months = []
-    const now = new Date()
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const label = d.toLocaleString('en-US', { month: 'short' })
-      months.push({
-        name: label,
-        month: d.getMonth(),
-        year: d.getFullYear(),
-        purchases: 0,
-        sales: 0,
-      })
-    }
-
-    selectedUser.purchases.forEach((p) => {
-      const d = new Date(p.createdAt || p.date)
-      if (Number.isNaN(d.getTime())) return
-      const bucket = months.find((m) => m.month === d.getMonth() && m.year === d.getFullYear())
-      if (bucket) {
-        bucket.purchases += Number(p.total) || 0
-      }
-    })
-
-    selectedUser.sales.forEach((s) => {
-      const d = new Date(s.createdAt || s.date)
-      if (Number.isNaN(d.getTime())) return
-      const bucket = months.find((m) => m.month === d.getMonth() && m.year === d.getFullYear())
-      if (bucket) {
-        bucket.sales += Number(s.total) || 0
-      }
-    })
-
-    return months
-  }, [selectedUser])
 
   return (
     <div className="space-y-6">
@@ -986,86 +943,105 @@ export default function UserReportingContent() {
             </Card>
           </div>
 
-          {/* Purchases vs Sales Monthly Trend Chart */}
-          <Card className="p-5 border border-slate-200 bg-white shadow-soft">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Monthly Purchases vs Sales Volume</h3>
-                <p className="text-xs text-slate-500">6-Month historical comparative analysis in USD</p>
-              </div>
-            </div>
-
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={selectedUserChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    formatter={(val, name) => [`$${Number(val).toFixed(2)} USD`, name === 'purchases' ? 'Purchases' : 'Sales']}
-                  />
-                  <Legend />
-                  <Bar dataKey="purchases" fill="#10b981" name="Purchases ($)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="sales" fill="#6366f1" name="Sales ($)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-
           {/* User's Purchases & Parcels Table */}
           <Card className="overflow-hidden border border-slate-200 bg-white shadow-soft">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900">Customer Orders & Parcel Deliveries</h3>
-              <span className="text-xs text-slate-500">{selectedUser.purchases.length} total orders</span>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Customer Orders & Parcel Deliveries</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Live order fulfillment, items quantity, pricing, and courier tracking details</p>
+              </div>
+              <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg">
+                {selectedUser.purchases.length} total orders
+              </span>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[850px] text-left text-sm">
+              <table className="w-full min-w-[950px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    <th className="px-5 py-3">Order #</th>
-                    <th className="px-5 py-3">Product</th>
-                    <th className="px-5 py-3">Qty & Price</th>
-                    <th className="px-5 py-3">Tracking #</th>
-                    <th className="px-5 py-3">Parcel Status</th>
-                    <th className="px-5 py-3">Date</th>
-                    <th className="px-5 py-3 text-right">Actions</th>
+                    <th className="px-4 py-3">Order #</th>
+                    <th className="px-4 py-3">Product</th>
+                    <th className="px-4 py-3 text-center">Qty</th>
+                    <th className="px-4 py-3">Price</th>
+                    <th className="px-4 py-3">Courier Company</th>
+                    <th className="px-4 py-3">Tracking #</th>
+                    <th className="px-4 py-3">Parcel Status</th>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {selectedUser.purchases.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-5 py-10 text-center text-sm text-slate-500">
+                      <td colSpan={9} className="px-5 py-10 text-center text-sm text-slate-500">
                         No purchase orders recorded for this user yet.
                       </td>
                     </tr>
                   ) : (
-                    selectedUser.purchases.map((o) => (
-                      <tr key={o.id} className="hover:bg-slate-50/50 transition">
-                        <td className="px-5 py-3.5 font-bold text-slate-900">{o.orderNo}</td>
-                        <td className="px-5 py-3.5 text-slate-700">{o.product}</td>
-                        <td className="px-5 py-3.5 text-slate-600">
-                          {o.quantity}x @ ${Number(o.unitPrice || 0).toFixed(2)} ={' '}
-                          <strong className="text-slate-900">${Number(o.total || 0).toFixed(2)}</strong>
-                        </td>
-                        <td className="px-5 py-3.5 font-mono text-xs text-indigo-600">
-                          {o.trackingNumber || `SLV-${o.orderNo?.replace('ORD-', '')}`}
-                        </td>
-                        <td className="px-5 py-3.5">{getTrackingBadge(o.trackingStatus)}</td>
-                        <td className="px-5 py-3.5 text-slate-500 text-xs">{o.date}</td>
-                        <td className="px-5 py-3.5 text-right">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleOpenTrackingModal(o)}
-                            className="text-xs"
-                          >
-                            Track Parcel
-                          </Button>
-                        </td>
-                      </tr>
-                    ))
+                    selectedUser.purchases.map((o) => {
+                      const qty = Math.max(1, Number(o.quantity ?? o.items ?? o.qty ?? 1))
+                      const totalVal = Number(
+                        o.total != null && o.total !== '' && !Number.isNaN(Number(o.total))
+                          ? o.total
+                          : Number(o.unitPrice || 0) * qty
+                      )
+                      const unitVal = Number(
+                        o.unitPrice != null && o.unitPrice !== '' && Number(o.unitPrice) > 0
+                          ? o.unitPrice
+                          : qty > 0
+                            ? totalVal / qty
+                            : totalVal
+                      )
+                      const courierName = o.carrier || o.courier || o.courierName || 'Sellvro Express'
+
+                      return (
+                        <tr key={o.id} className="hover:bg-slate-50/50 transition">
+                          <td className="px-4 py-3.5 font-bold text-slate-900 whitespace-nowrap">{o.orderNo}</td>
+                          <td className="px-4 py-3.5 text-slate-700 max-w-[220px] truncate font-medium" title={o.product}>
+                            {o.product}
+                          </td>
+                          <td className="px-4 py-3.5 text-center">
+                            <span className="inline-flex items-center justify-center font-bold text-slate-900 bg-slate-100 rounded-md px-2.5 py-1 text-xs">
+                              {qty}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap">
+                            <div>
+                              <strong className="text-slate-900 font-bold block text-sm">
+                                ${totalVal.toFixed(2)}
+                              </strong>
+                              {qty > 1 && (
+                                <span className="text-[11px] text-slate-400 block font-normal">
+                                  ${unitVal.toFixed(2)} / unit
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/70 px-2.5 py-1 text-xs font-semibold text-indigo-800">
+                              <Truck className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                              <span>{courierName}</span>
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 font-mono text-xs text-indigo-600 whitespace-nowrap">
+                            {o.trackingNumber || `SLV-${o.orderNo?.replace('ORD-', '')}`}
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap">{getTrackingBadge(o.trackingStatus)}</td>
+                          <td className="px-4 py-3.5 text-slate-500 text-xs whitespace-nowrap">{o.date}</td>
+                          <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenTrackingModal(o)}
+                              className="text-xs"
+                            >
+                              Track Parcel
+                            </Button>
+                          </td>
+                        </tr>
+                      )
+                    })
                   )}
                 </tbody>
               </table>

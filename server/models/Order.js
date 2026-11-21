@@ -13,6 +13,25 @@ const shippingAddressSchema = new mongoose.Schema(
   { _id: false },
 )
 
+const cancellationRequestSchema = new mongoose.Schema(
+  {
+    isRequested: { type: Boolean, default: false },
+    requestedBy: { type: String, enum: ['user', 'supplier', 'none'], default: 'none' },
+    requesterUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    reason: { type: String, trim: true, default: '' },
+    requestedAt: { type: Date, default: null },
+    status: {
+      type: String,
+      enum: ['none', 'pending', 'approved', 'rejected'],
+      default: 'none',
+    },
+    reviewedAt: { type: Date, default: null },
+    reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    rejectionReason: { type: String, trim: true, default: '' },
+  },
+  { _id: false },
+)
+
 const orderSchema = new mongoose.Schema(
   {
     orderNo: {
@@ -46,8 +65,45 @@ const orderSchema = new mongoose.Schema(
     commissionPercent: { type: Number, default: 0, min: 0 },
     status: {
       type: String,
-      enum: ['placed', 'pending', 'cancelled', 'in_process', 'delivered', 'returned'],
-      default: 'placed',
+      enum: [
+        'placed',
+        'pending',
+        'awaiting_dispatch',
+        'order_due',
+        'in_process',
+        'processing',
+        'delivered',
+        'cancelled',
+        'returned',
+        'cancellation_pending',
+      ],
+      default: 'awaiting_dispatch',
+    },
+    cancellationRequest: {
+      type: cancellationRequestSchema,
+      default: () => ({ isRequested: false, status: 'none', requestedBy: 'none' }),
+    },
+    supplierReviewStatus: {
+      type: String,
+      enum: ['pending_review', 'accepted', 'rejected'],
+      default: 'pending_review',
+    },
+    supplierReviewedAt: {
+      type: Date,
+      default: null,
+    },
+    supplierRejectionReason: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    supplierTermsAccepted: {
+      type: Boolean,
+      default: false,
+    },
+    supplierTermsAcceptedAt: {
+      type: Date,
+      default: null,
     },
     brandLabel: { type: String, trim: true, default: '' },
     orderLabelRef: { type: String, trim: true, default: '' },
@@ -63,10 +119,37 @@ const orderSchema = new mongoose.Schema(
       trim: true,
       default: 'At Supplier Warehouse',
     },
+    paymentMethod: {
+      type: String,
+      enum: ['wallet', 'cod'],
+      default: 'wallet',
+    },
     payoutStatus: {
       type: String,
       enum: ['pending', 'processed', 'cancelled'],
       default: 'pending',
+    },
+    isRefunded: {
+      type: Boolean,
+      default: false,
+    },
+    refundAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    refundedAt: {
+      type: Date,
+      default: null,
+    },
+    refundTxId: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    deliveredAt: {
+      type: Date,
+      default: null,
     },
     payoutTid: {
       type: String,
@@ -90,6 +173,15 @@ const orderSchema = new mongoose.Schema(
       type: shippingAddressSchema,
       default: () => ({}),
     },
+    customizationDetails: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    isCustomized: {
+      type: Boolean,
+      default: false,
+    },
     // Live Parcel Tracking Fields
     trackingNumber: {
       type: String,
@@ -99,12 +191,23 @@ const orderSchema = new mongoose.Schema(
     carrier: {
       type: String,
       trim: true,
-      default: 'Sellvro Express',
+      default: 'FedEx',
     },
     trackingStatus: {
       type: String,
-      enum: ['placed', 'processing', 'in_transit', 'out_for_delivery', 'delivered', 'cancelled'],
-      default: 'placed',
+      enum: [
+        'placed',
+        'awaiting_dispatch',
+        'order_due',
+        'processing',
+        'in_process',
+        'in_transit',
+        'out_for_delivery',
+        'delivered',
+        'cancelled',
+        'returned',
+      ],
+      default: 'awaiting_dispatch',
     },
     estimatedDelivery: {
       type: String,
@@ -120,6 +223,87 @@ const orderSchema = new mongoose.Schema(
         note: { type: String, trim: true, default: '' },
       },
     ],
+    // WMS Warehouse Fulfillment Integration Fields
+    isWmsOrder: {
+      type: Boolean,
+      default: false,
+    },
+    wmsBatchNumber: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    wmsRequestNumber: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    wmsStatus: {
+      type: String,
+      default: 'not_applicable',
+    },
+    wmsFulfillmentId: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    wmsTrackingStatus: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    wmsTrackingStatusDetail: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    wmsDispatchProofUrl: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    isDispatched: {
+      type: Boolean,
+      default: false,
+    },
+    dispatchedAt: {
+      type: Date,
+      default: null,
+    },
+    wmsPushedAt: {
+      type: Date,
+      default: null,
+    },
+    wmsResponse: {
+      type: Object,
+      default: {},
+    },
+    isReviewed: {
+      type: Boolean,
+      default: false,
+    },
+    review: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Review',
+      default: null,
+    },
+    promisedHandlingTime: {
+      type: String,
+      trim: true,
+      default: '24 Hours (1 business day)',
+    },
+    handlingHoursPromised: {
+      type: Number,
+      default: 24,
+    },
+    actualHandlingHours: {
+      type: Number,
+      default: null,
+    },
+    isOnTimeDispatch: {
+      type: Boolean,
+      default: null,
+    },
   },
   { timestamps: true },
 )
@@ -142,9 +326,29 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
   const shipping = this.shippingAddress || {}
 
   const rawUserId = userDoc?._id?.toString?.() || userDoc?.toString?.() || ''
-  const userDisplayId = userDoc?.clientId || (rawUserId ? `USR-${rawUserId.slice(-6).toUpperCase()}` : '')
+  const userDisplayId =
+    userDoc?.displayId ||
+    (userDoc?.clientId && /^US-\d+$/i.test(userDoc.clientId) ? userDoc.clientId : '') ||
+    (rawUserId ? `US-${1001 + (parseInt(rawUserId.slice(-4), 16) % 8999)}` : 'US-1001')
+
   const rawSupplierId = supplierDoc?._id?.toString?.() || supplierDoc?.toString?.() || ''
-  const supplierDisplayId = supplierDoc?.clientId || (rawSupplierId ? `SUP-${rawSupplierId.slice(-6).toUpperCase()}` : '')
+  const supplierDisplayId =
+    supplierDoc?.displayId ||
+    (supplierDoc?.clientId && /^SPAK-\d+$/i.test(supplierDoc.clientId) ? supplierDoc.clientId : '') ||
+    (rawSupplierId ? `SPAK-${1001 + (parseInt(rawSupplierId.slice(-4), 16) % 8999)}` : 'SPAK-1001')
+
+  const isDeliveredState =
+    this.status === 'delivered' ||
+    this.trackingStatus === 'delivered' ||
+    this.warehouseLocation === 'delivered'
+
+  const effectiveStatus = isDeliveredState ? 'delivered' : this.status
+  const effectiveTrackingStatus = isDeliveredState
+    ? 'delivered'
+    : (this.trackingStatus || (this.status === 'in_process' ? 'processing' : this.status === 'cancelled' ? 'cancelled' : 'placed'))
+  const effectiveWarehouseLocation = isDeliveredState
+    ? 'delivered'
+    : (this.warehouseLocation || 'supplier_warehouse')
 
   return {
     id: this._id.toString(),
@@ -169,27 +373,31 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
     total: this.total,
     commission: this.commission,
     commissionPercent: this.commissionPercent,
-    status: this.status,
-    statusLabel: formatStatus(this.status),
+    status: effectiveStatus,
+    statusLabel: formatStatus(effectiveStatus),
     brandLabel: this.brandLabel,
     orderLabelRef: this.orderLabelRef || this.orderNo || '',
     shippingLabelUrl: this.shippingLabelUrl || '',
     labelNotes: this.labelNotes || '',
-    warehouseLocation: this.warehouseLocation || 'supplier_warehouse',
+    warehouseLocation: effectiveWarehouseLocation,
     warehouseLocationLabel:
-      this.warehouseLocationLabel ||
-      (this.warehouseLocation === 'wms_hub'
-        ? 'At WMS Central Hub'
-        : this.warehouseLocation === 'in_transit'
-          ? 'In Courier Transit'
-          : this.warehouseLocation === 'delivered'
-            ? 'Delivered to Customer'
-            : 'At Supplier Warehouse'),
+      effectiveWarehouseLocation === 'delivered'
+        ? 'Delivered to Customer'
+        : (this.warehouseLocationLabel ||
+          (effectiveWarehouseLocation === 'wms_hub'
+            ? 'At WMS Central Hub'
+            : effectiveWarehouseLocation === 'in_transit'
+              ? 'In Courier Transit'
+              : 'At Supplier Warehouse')),
+    paymentMethod: this.paymentMethod || 'wallet',
     payoutStatus: this.payoutStatus,
     payoutTid: this.payoutTid || '',
     payoutId: this.payoutId?.toString?.() || '',
     isRefunded: Boolean(this.isRefunded),
+    refundAmount: this.refundAmount || 0,
     refundedAt: this.refundedAt || null,
+    refundTxId: this.refundTxId || '',
+    deliveredAt: this.deliveredAt || (isDeliveredState ? (this.updatedAt || new Date()) : null),
     shippingAddress: {
       fullName: shipping.fullName || '',
       phone: shipping.phone || '',
@@ -200,27 +408,136 @@ orderSchema.methods.toSafeObject = function toSafeObject() {
       country: shipping.country || '',
     },
     // Tracking details
-    trackingNumber: this.trackingNumber || `SLV-${this.orderNo?.replace('ORD-', '') || this._id.toString().slice(-8).toUpperCase()}`,
-    carrier: this.carrier || 'Sellvro Express',
-    trackingStatus: this.trackingStatus || (this.status === 'in_process' ? 'processing' : this.status === 'cancelled' ? 'cancelled' : 'placed'),
+    trackingNumber: this.trackingNumber || '',
+    carrier: this.carrier || '',
+    trackingStatus: effectiveTrackingStatus,
     estimatedDelivery: this.estimatedDelivery || '',
     trackingTimeline: Array.isArray(this.trackingTimeline) && this.trackingTimeline.length > 0
       ? this.trackingTimeline
       : [
-          {
-            status: 'placed',
-            title: 'Order Placed',
-            location: 'System Online',
-            timestamp: this.createdAt || new Date(),
-            note: 'Order successfully created & verified.',
-          },
-        ],
+        {
+          status: 'placed',
+          title: 'Order Placed',
+          location: 'System Online',
+          timestamp: this.createdAt || new Date(),
+          note: 'Order successfully created & verified.',
+        },
+      ],
+    // Fulfillment classification (Warehouse vs Self-Fulfillment)
+    fulfillmentType: Boolean(
+      productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))
+    ) && this.isWmsOrder !== false && this.warehouseLocation !== 'supplier_warehouse'
+      ? 'warehouse'
+      : 'self',
+    fulfillmentLabel: Boolean(
+      productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))
+    ) && this.isWmsOrder !== false && this.warehouseLocation !== 'supplier_warehouse'
+      ? 'Sellvro WMS Warehouse'
+      : 'Self-Fulfillment',
+    // WMS fulfillment details (only present for WMS-managed orders)
+    isWmsOrder: Boolean(
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ),
+    wmsBatchNumber: (
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ) ? (this.wmsBatchNumber || '') : '',
+    wmsRequestNumber: (
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ) ? (this.wmsRequestNumber || '') : '',
+    wmsStatus: (
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ) ? (this.wmsStatus || (this.warehouseLocation === 'wms_hub' ? 'pushed' : 'not_applicable')) : 'not_applicable',
+    wmsFulfillmentId: (
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ) ? (this.wmsFulfillmentId || this.wmsRequestNumber || '') : '',
+    wmsTrackingStatus: (
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ) ? (this.wmsTrackingStatus || '') : '',
+    wmsTrackingStatusDetail: (
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ) ? (this.wmsTrackingStatusDetail || '') : '',
+    wmsDispatchProofUrl: (
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ) ? (this.wmsDispatchProofUrl || '') : '',
+    isDispatched: Boolean(this.isDispatched),
+    dispatchedAt: this.dispatchedAt || null,
+    wmsPushedAt: (
+      (productDoc && typeof productDoc === 'object'
+        ? (productDoc.fulfillBy === 'warehouse' || productDoc.inWarehouse || productDoc.isWmsVerified)
+        : (this.warehouseLocation === 'wms_hub' || (this.isWmsOrder && this.warehouseLocation !== 'supplier_warehouse'))) &&
+      this.isWmsOrder !== false &&
+      this.warehouseLocation !== 'supplier_warehouse'
+    ) ? (this.wmsPushedAt || null) : null,
+    isReviewed: Boolean(this.isReviewed),
+    reviewId: this.review?.toString?.() || '',
+    supplierReviewStatus: this.supplierReviewStatus || 'pending_review',
+    supplierReviewedAt: this.supplierReviewedAt || null,
+    supplierRejectionReason: this.supplierRejectionReason || '',
+    supplierTermsAccepted: Boolean(this.supplierTermsAccepted),
+    supplierTermsAcceptedAt: this.supplierTermsAcceptedAt || null,
+    customizationDetails: this.customizationDetails || '',
+    isCustomized: Boolean(this.isCustomized),
+    cancellationRequest: this.cancellationRequest ? {
+      isRequested: Boolean(this.cancellationRequest.isRequested),
+      requestedBy: this.cancellationRequest.requestedBy || 'none',
+      reason: this.cancellationRequest.reason || '',
+      requestedAt: this.cancellationRequest.requestedAt || null,
+      status: this.cancellationRequest.status || 'none',
+      reviewedAt: this.cancellationRequest.reviewedAt || null,
+      rejectionReason: this.cancellationRequest.rejectionReason || '',
+    } : { isRequested: false, status: 'none', requestedBy: 'none' },
+    isWithin12Hours: this.createdAt
+      ? (Date.now() - new Date(this.createdAt).getTime()) <= 12 * 60 * 60 * 1000
+      : false,
+    hoursSincePlacement: this.createdAt
+      ? Number(((Date.now() - new Date(this.createdAt).getTime()) / (1000 * 60 * 60)).toFixed(1))
+      : 0,
+    promisedHandlingTime: this.promisedHandlingTime || '24 Hours (1 business day)',
+    handlingHoursPromised: this.handlingHoursPromised || 24,
+    actualHandlingHours: this.actualHandlingHours,
+    isOnTimeDispatch: this.isOnTimeDispatch,
     date: this.createdAt
       ? new Date(this.createdAt).toLocaleDateString('en-US', {
-          month: 'short',
-          day: '2-digit',
-          year: 'numeric',
-        })
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+      })
       : '—',
     createdAt: this.createdAt,
   }

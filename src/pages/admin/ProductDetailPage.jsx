@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Check, SquarePen, ArrowLeft } from 'lucide-react'
+import { Check, SquarePen, ArrowLeft, Percent } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import Card from '../../components/ui/Card.jsx'
-import { adminApi, getErrorMessage } from '../../lib/api.js'
+import { adminApi, mediaUrl, getErrorMessage } from '../../lib/api.js'
 
 function ProductDetailPage() {
   const { id } = useParams()
@@ -13,6 +13,10 @@ function ProductDetailPage() {
   const [actionLoading, setActionLoading] = useState(false)
   const [activeImageIndex, setActiveImageIndex] = useState(0)
 
+  // Commission state and revenue split
+  const [, setCommission] = useState('10')
+  const [commissionSuccess, setCommissionSuccess] = useState('')
+
   const loadProduct = async () => {
     setLoading(true)
     setError('')
@@ -20,6 +24,11 @@ function ProductDetailPage() {
       const res = await adminApi.product(id)
       const data = res?.product || res?.data || res
       setProduct(data)
+      if (data?.commission !== undefined && data?.commission !== null && Number(data.commission) > 0) {
+        setCommission(String(data.commission))
+      } else {
+        setCommission('10')
+      }
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to load product details.'))
     } finally {
@@ -35,8 +44,10 @@ function ProductDetailPage() {
 
   const handleApprove = async () => {
     setActionLoading(true)
+    setError('')
     try {
-      await adminApi.approveProduct(id, { activate: false })
+      await adminApi.approveProduct(id, { activate: true })
+      setCommissionSuccess('Product approved successfully and is now live on the marketplace!')
       await loadProduct()
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to approve product.'))
@@ -58,11 +69,11 @@ function ProductDetailPage() {
     }
   }
 
-  const images = Array.isArray(product?.images) && product.images.length > 0
+  const images = (Array.isArray(product?.images) && product.images.length > 0
     ? product.images
     : product?.image
       ? [product.image]
-      : []
+      : []).map((img) => (img ? mediaUrl(img) : ''))
 
   const activePhoto = images[activeImageIndex] || images[0] || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80'
   const isApproved = product?.status === 'approved' || product?.status === 'active'
@@ -85,7 +96,14 @@ function ProductDetailPage() {
         {/* Top Header matching Picture 1 */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div>
-            <p className="text-xs font-semibold text-slate-400">Product Listing</p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-semibold text-slate-400">Product Listing</p>
+              {product && (
+                <span className="font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded px-2 py-0.5 text-xs">
+                  PID: {product.productId || product.sku}
+                </span>
+              )}
+            </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mt-0.5">
               Product Details
             </h1>
@@ -210,7 +228,14 @@ function ProductDetailPage() {
                 </div>
 
                 <div className="flex items-center justify-between py-1 border-b border-slate-50">
-                  <span className="font-semibold text-slate-800">Sku :</span>
+                  <span className="font-semibold text-slate-800">Product ID :</span>
+                  <span className="font-mono text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                    {product.productId || product.sku}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between py-1 border-b border-slate-50">
+                  <span className="font-semibold text-slate-800">SKU :</span>
                   <span className="font-mono text-slate-700 font-bold">{product.sku}</span>
                 </div>
 
@@ -238,17 +263,88 @@ function ProductDetailPage() {
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-3 mt-8 pt-5 border-t border-slate-100">
-                {isApproved ? (
-                  <button
-                    type="button"
-                    disabled
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400 bg-white px-5 py-2 text-xs font-semibold text-emerald-600 shadow-xs cursor-default"
+              {/* Marketplace Commission & Revenue Split (Category-Based) */}
+              <div className="mt-6 rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50/50 via-white to-slate-50 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Percent className="h-4 w-4 text-indigo-600" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-indigo-950">
+                      Marketplace Commission (Category-Based)
+                    </span>
+                  </div>
+                  <span className="rounded-full bg-indigo-100 border border-indigo-200/80 px-2.5 py-0.5 text-xs font-bold text-indigo-800">
+                    Category Rate: {product.commission || 8}%
+                  </span>
+                </div>
+
+                <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">
+                  Commission is automatically assigned from the <strong>&quot;{product.category || 'General'}&quot;</strong> category. When an order is placed, this rate ({product.commission || 8}%) is deducted and retained by Sellvro, and the remainder is credited to the supplier.
+                </p>
+
+                <p className="mt-1 text-[11px] text-slate-400">
+                  To adjust commission for this category, change it in{' '}
+                  <Link
+                    to="/admin/categories"
+                    className="font-semibold text-indigo-600 underline underline-offset-2 hover:text-indigo-800"
                   >
-                    <Check className="h-4 w-4 text-emerald-600" />
-                    <span>Already Approved</span>
-                  </button>
+                    Categories Management
+                  </Link>.
+                </p>
+
+                {/* Live Financial Breakdown Card */}
+                {(() => {
+                  const price = Number(product.price || 0)
+                  const commPct = Number(product.commission || 8)
+                  const platformFee = (price * commPct) / 100
+                  const supplierNet = price - platformFee
+
+                  return (
+                    <div className="mt-3.5 grid grid-cols-3 gap-2 rounded-lg border border-indigo-100/80 bg-white p-3 text-center shadow-2xs">
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          Listing Price
+                        </span>
+                        <span className="text-sm font-bold text-slate-900">
+                          ${price.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="border-x border-slate-100">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-rose-500">
+                          Platform Fee ({commPct}%)
+                        </span>
+                        <span className="text-sm font-bold text-rose-600">
+                          +${platformFee.toFixed(2)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-600">
+                          Supplier Net
+                        </span>
+                        <span className="text-sm font-bold text-emerald-600">
+                          ${supplierNet.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+
+              {commissionSuccess && (
+                <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-800 flex items-center gap-2">
+                  <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>{commissionSuccess}</span>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-3 mt-6 pt-5 border-t border-slate-100">
+                {isApproved ? (
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-400 bg-white px-4 py-2 text-xs font-semibold text-emerald-600 shadow-xs cursor-default">
+                      <Check className="h-4 w-4 text-emerald-600" />
+                      <span>Approved ({product.commission || 8}% Fee)</span>
+                    </span>
+                  </div>
                 ) : (
                   <button
                     type="button"
@@ -257,7 +353,7 @@ function ProductDetailPage() {
                     className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 text-xs font-semibold shadow-xs transition-colors"
                   >
                     <Check className="h-4 w-4" />
-                    <span>{actionLoading ? 'Approving…' : 'Approve Product'}</span>
+                    <span>{actionLoading ? 'Approving…' : `Approve Product (${product.commission || 8}% Fee)`}</span>
                   </button>
                 )}
 

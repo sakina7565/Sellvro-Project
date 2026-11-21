@@ -14,7 +14,6 @@ import {
 import {
   protect,
   authorize,
-  requireApproved,
   attachAdminPermissions,
   requirePermission,
 } from '../middleware/auth.js'
@@ -42,7 +41,7 @@ router.patch(
   requirePermission('admin.wallets.approve'),
   updateWalletSettings,
 )
-router.get('/balance', protect, authorize('user', 'admin'), getBalance)
+router.get('/balance', protect, authorize('user', 'admin'), requireApproved, getBalance)
 router.get('/requests/mine', protect, authorize('user'), requireApproved, listMyWalletRequests)
 router.post(
   '/requests',

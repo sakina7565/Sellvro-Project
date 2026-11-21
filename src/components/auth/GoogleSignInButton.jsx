@@ -1,9 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X, UserCog, Mail, User, Sparkles } from 'lucide-react'
-import Button from '../ui/Button.jsx'
-import Input from '../ui/Input.jsx'
-import Select from '../ui/Select.jsx'
+import { AlertCircle, Loader2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { getErrorMessage } from '../../lib/api.js'
 
@@ -30,194 +27,145 @@ function GoogleIcon({ className = 'h-5 w-5' }) {
   )
 }
 
-export default function GoogleSignInButton({ defaultRole = 'user', label = 'Continue with Google', className = '' }) {
+export default function GoogleSignInButton({
+  defaultRole = 'user',
+  label = 'Continue with Google',
+  className = '',
+  onGoogleSuccess = null,
+}) {
   const navigate = useNavigate()
   const { googleLogin } = useAuth()
-  const [modalOpen, setModalOpen] = useState(false)
-  const [email, setEmail] = useState('')
-  const [name, setName] = useState('')
-  const [role, setRole] = useState(defaultRole)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // Check if real Google Client ID is configured
-  const googleClientId = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_GOOGLE_CLIENT_ID : null
+  // Google OAuth Client ID provided by user
+  const googleClientId =
+    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_ID) ||
+    '366677857468-va47f432ro1haif68t6glvdpp895tq36.apps.googleusercontent.com'
 
-  useEffect(() => {
-    if (!googleClientId || !window.google?.accounts?.id) return
-
-    try {
-      window.google.accounts.id.initialize({
-        client_id: googleClientId,
-        callback: async (response) => {
-          if (response?.credential) {
-            setLoading(true)
-            try {
-              const data = await googleLogin({
-                credential: response.credential,
-                role,
-              })
-              navigate(data.redirectTo || '/user/dashboard', { replace: true })
-            } catch (err) {
-              setError(getErrorMessage(err, 'Google authentication failed.'))
-            } finally {
-              setLoading(false)
-            }
-          }
-        },
-      })
-    } catch {
-      //
-    }
-  }, [googleClientId, googleLogin, navigate, role])
-
-  const handleClick = () => {
-    if (googleClientId && window.google?.accounts?.id) {
-      try {
-        window.google.accounts.id.prompt()
-        return
-      } catch {
-        // Fallback to interactive modal
-      }
-    }
-    setModalOpen(true)
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const handleGoogleClick = () => {
     setError('')
 
-    if (!email.trim()) {
-      setError('Please provide your Google email address.')
+    // Check if Google Identity Services SDK is loaded
+    if (!window.google?.accounts?.oauth2) {
+      setError(
+        'Google authentication library is loading. Please check your internet connection and try again in a moment.',
+      )
       return
     }
 
     setLoading(true)
+
     try {
-      const data = await googleLogin({
-        email: email.trim().toLowerCase(),
-        name: name.trim() || email.split('@')[0],
-        role,
+      // Launch Google's native OAuth 2.0 Account Chooser Popup
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: googleClientId,
+        scope: 'email profile openid',
+        callback: async (tokenResponse) => {
+          if (tokenResponse.error) {
+            setLoading(false)
+            if (tokenResponse.error !== 'popup_closed_by_user') {
+              setError(`Google Sign-In error: ${tokenResponse.error_description || tokenResponse.error}`)
+            }
+            return
+          }
+
+          try {
+            // Fetch verified user profile directly from Google APIs (No manual email entry needed!)
+            const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+            })
+
+            if (!userInfoRes.ok) {
+              throw new Error('Failed to retrieve user profile from Google.')
+            }
+
+            const profile = await userInfoRes.json()
+
+            if (!profile.email) {
+              throw new Error('Google did not provide an email address.')
+            }
+
+            const googleUserData = {
+              email: profile.email.toLowerCase().trim(),
+              name: profile.name || profile.given_name || profile.email.split('@')[0],
+              googleId: profile.sub,
+              picture: profile.picture || '',
+              role: defaultRole || 'user',
+              // The server verifies this token with Google; it ignores the email above.
+              accessToken: tokenResponse.access_token,
+            }
+
+            // If a custom handler is provided (e.g. on Registration page to auto-fill details)
+            if (onGoogleSuccess) {
+              onGoogleSuccess(googleUserData)
+              setLoading(false)
+              return
+            }
+
+            // Default flow for Login page
+            const data = await googleLogin(googleUserData)
+
+            if (data.isNewUser) {
+              // Redirect to register with Google verified details pre-loaded
+              navigate('/register', {
+                state: { googleUser: data.googleUser || googleUserData },
+                replace: true,
+              })
+              return
+            }
+
+            navigate(
+              data.redirectTo ||
+                (defaultRole === 'supplier' ? '/supplier/dashboard' : '/user/dashboard'),
+              { replace: true },
+            )
+          } catch (err) {
+            setError(getErrorMessage(err, 'Google Sign-In failed. Please try again.'))
+          } finally {
+            setLoading(false)
+          }
+        },
       })
-      setModalOpen(false)
-      navigate(data.redirectTo || (role === 'supplier' ? '/supplier/dashboard' : '/user/dashboard'), {
-        replace: true,
-      })
+
+      // Prompt Google Account Chooser
+      client.requestAccessToken({ prompt: 'select_account' })
     } catch (err) {
-      setError(getErrorMessage(err, 'Google Sign In failed.'))
-    } finally {
       setLoading(false)
+      setError(getErrorMessage(err, 'Could not open Google authentication popup.'))
     }
   }
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={loading}
-        className={`relative flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:border-slate-300 active:scale-[0.99] disabled:opacity-50 ${className}`}
-      >
-        <GoogleIcon className="h-4 w-4 shrink-0" />
-        <span>{loading ? 'Authenticating with Google...' : label}</span>
-      </button>
-
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl transition-all">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 border border-slate-100 shadow-sm">
-                  <GoogleIcon className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Sign in with Google</h3>
-                  <p className="text-xs text-slate-500">Fast &amp; secure one-click authorization</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setModalOpen(false)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="mt-4 space-y-3.5">
-              {error && (
-                <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600">
-                  {error}
-                </p>
-              )}
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-700">Select your account role</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setRole('user')}
-                    className={`flex flex-col items-center justify-center gap-1 rounded-xl border p-2.5 text-center transition-all ${
-                      role === 'user'
-                        ? 'border-primary bg-primary-50/50 text-primary ring-2 ring-primary-100'
-                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <User className="h-4 w-4" />
-                    <span className="text-xs font-bold">Buyer / Reseller</span>
-                    <span className="text-[10px] text-slate-400">Shop products</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setRole('supplier')}
-                    className={`flex flex-col items-center justify-center gap-1 rounded-xl border p-2.5 text-center transition-all ${
-                      role === 'supplier'
-                        ? 'border-primary bg-primary-50/50 text-primary ring-2 ring-primary-100'
-                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <UserCog className="h-4 w-4" />
-                    <span className="text-xs font-bold">Supplier</span>
-                    <span className="text-[10px] text-slate-400">Sell &amp; manage stock</span>
-                  </button>
-                </div>
-              </div>
-
-              <Input
-                id="googleEmail"
-                label="Google Email Address"
-                type="email"
-                icon={Mail}
-                placeholder="you@gmail.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-
-              <Input
-                id="googleName"
-                label="Your Name (Optional)"
-                type="text"
-                icon={User}
-                placeholder="e.g. Alex Morgan"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-
-              <div className="pt-2">
-                <Button type="submit" fullWidth disabled={loading}>
-                  {loading ? 'Signing in…' : `Continue as ${role === 'supplier' ? 'Supplier' : 'Customer'}`}
-                </Button>
-              </div>
-
-              <p className="text-center text-[11px] text-slate-400">
-                By continuing, you agree to Sellvro Ezone Terms and Privacy Policy.
-              </p>
-            </form>
+    <div className="space-y-2">
+      {error && (
+        <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 animate-fadeIn">
+          <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
+          <div className="flex-1">
+            <span className="font-semibold block text-rose-900">Google Authentication Notice:</span>
+            <p className="mt-0.5">{error}</p>
           </div>
         </div>
       )}
-    </>
+
+      <button
+        type="button"
+        onClick={handleGoogleClick}
+        disabled={loading}
+        className={`relative flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-xs transition-all hover:bg-slate-50 hover:border-slate-300 active:scale-[0.99] disabled:opacity-60 cursor-pointer ${className}`}
+      >
+        {loading ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
+            <span>Connecting to Google…</span>
+          </>
+        ) : (
+          <>
+            <GoogleIcon className="h-4 w-4 shrink-0" />
+            <span>{label}</span>
+          </>
+        )}
+      </button>
+    </div>
   )
 }

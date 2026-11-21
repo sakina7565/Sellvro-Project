@@ -4,6 +4,10 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
+  listBusinessCategories,
+  createBusinessCategory,
+  updateBusinessCategory,
+  deleteBusinessCategory,
 } from '../controllers/categoryController.js'
 import {
   protect,
@@ -14,7 +18,35 @@ import {
 
 const router = Router()
 
-router.get('/', protect, authorize('admin', 'supplier', 'user'), listCategories)
+// Business Categories (Must be defined before /:id routes)
+router.get('/business', listBusinessCategories)
+router.post(
+  '/business',
+  protect,
+  authorize('admin'),
+  attachAdminPermissions,
+  requirePermission('admin.categories.manage'),
+  createBusinessCategory,
+)
+router.patch(
+  '/business/:id',
+  protect,
+  authorize('admin'),
+  attachAdminPermissions,
+  requirePermission('admin.categories.manage'),
+  updateBusinessCategory,
+)
+router.delete(
+  '/business/:id',
+  protect,
+  authorize('admin'),
+  attachAdminPermissions,
+  requirePermission('admin.categories.manage'),
+  deleteBusinessCategory,
+)
+
+// Product Categories
+router.get('/', listCategories)
 router.post(
   '/',
   protect,

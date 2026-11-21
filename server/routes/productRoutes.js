@@ -5,11 +5,17 @@ import {
   listApprovedProducts,
   updateMyProduct,
   getProductById,
+  toggleWatchProduct,
+  getStoreDetails,
   getMyWmsSkus,
   getWmsProductBySku,
   attachWmsProductMedia,
+  verifyProductWithWms,
+  syncWmsStock,
+  activateProduct,
+  deactivateProduct,
 } from '../controllers/productController.js'
-import { protect, authorize, requireApproved } from '../middleware/auth.js'
+import { protect, optionalProtect, authorize, requireApproved } from '../middleware/auth.js'
 import { productUpload } from '../middleware/upload.js'
 
 const router = Router()
@@ -27,10 +33,22 @@ function handlePhotos(req, res, next) {
 router.get('/wms/my-skus', protect, authorize('supplier'), requireApproved, getMyWmsSkus)
 router.get('/wms/lookup/:sku', protect, authorize('supplier', 'admin'), requireApproved, getWmsProductBySku)
 router.post('/wms/attach-media/:id', protect, authorize('supplier'), requireApproved, handlePhotos, attachWmsProductMedia)
+router.post('/:id/verify-wms', protect, authorize('supplier', 'admin'), requireApproved, verifyProductWithWms)
+router.post('/:id/sync-wms-stock', protect, authorize('supplier', 'admin'), requireApproved, syncWmsStock)
 
-router.get('/', protect, authorize('user', 'admin'), listApprovedProducts)
+// Deactivate / Activate routes for suppliers and admin
+router.patch('/:id/deactivate', protect, authorize('supplier', 'admin'), requireApproved, deactivateProduct)
+router.patch('/:id/activate', protect, authorize('supplier', 'admin'), requireApproved, activateProduct)
+
+import { getProductReviews } from '../controllers/reviewController.js'
+
+// Public marketplace catalog (active / approved products)
+router.get('/', listApprovedProducts)
 router.get('/mine', protect, authorize('supplier'), requireApproved, listMyProducts)
-router.get('/:id', protect, getProductById)
+router.get('/store/:supplierId', protect, getStoreDetails)
+router.get('/:id/reviews', getProductReviews)
+router.get('/:id', optionalProtect, getProductById)
+router.post('/:id/watch', protect, toggleWatchProduct)
 router.post('/', protect, authorize('supplier'), requireApproved, handlePhotos, createProduct)
 router.patch('/:id', protect, authorize('supplier'), requireApproved, handlePhotos, updateMyProduct)
 

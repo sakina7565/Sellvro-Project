@@ -13,7 +13,7 @@ function UserOrderConfirmationPage() {
   const { orderId } = useParams()
   const location = useLocation()
   const [order, setOrder] = useState(location.state?.order || null)
-  const [message, setMessage] = useState(location.state?.message || 'Order placed successfully.')
+  const [message] = useState(location.state?.message || 'Order placed successfully.')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(!location.state?.order)
 
@@ -68,10 +68,38 @@ function UserOrderConfirmationPage() {
             <h2 className="mt-3 text-xl font-bold text-slate-900">Thank you!</h2>
             <p className="mt-1 text-sm text-slate-500">{message}</p>
             <p className="mt-3 text-sm font-semibold text-slate-800">Order {order.orderNo}</p>
-            <Badge className="mt-2" tone="success">
-              {order.statusLabel || order.status}
-            </Badge>
+            <div className="mt-2 flex items-center justify-center gap-2 flex-wrap">
+              <Badge tone="success">
+                {order.statusLabel || order.status}
+              </Badge>
+              {order.isWmsOrder && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
+                  ⚡ Pushed to WMS Warehouse
+                </span>
+              )}
+            </div>
           </Card>
+
+          {order.isWmsOrder && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-left shadow-xs">
+              <div className="flex items-start gap-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white font-bold text-xs shadow-2xs">
+                  ⚡
+                </span>
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-950">
+                    Sellvro WMS Warehouse Fulfillment
+                  </h4>
+                  <p className="mt-1 text-xs text-emerald-800 leading-snug">
+                    This order is verified and has been registered in the Sellvro Warehouse (WMS) API (Batch:{' '}
+                    <strong className="font-mono">{order.wmsBatchNumber || 'CBF-ACTIVE'}</strong>, Req:{' '}
+                    <strong className="font-mono">{order.wmsRequestNumber || order.wmsFulfillmentId || 'ACTIVE'}</strong>).
+                    Warehouse inventory was live deducted and dispatch fulfillment is queued!
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <Card className="space-y-4 p-5 shadow-soft">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -104,13 +132,21 @@ function UserOrderConfirmationPage() {
                 {hasShippingAddress(shipping) ? formatShippingAddress(shipping) : '—'}
               </p>
             </div>
+            {order.customizationDetails && (
+              <div className="border-t border-slate-100 pt-3 mt-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-indigo-700">Customization Details</p>
+                <p className="mt-1 text-sm text-slate-800 bg-indigo-50/80 p-2.5 rounded-lg border border-indigo-100 font-medium">
+                  {order.customizationDetails}
+                </p>
+              </div>
+            )}
           </Card>
 
           <div className="flex flex-wrap gap-3">
             <Button as={Link} to="/user/orders" size="sm">
               View my orders
             </Button>
-            <Button as={Link} to="/user/products" variant="outline" size="sm">
+            <Button as={Link} to="/" variant="outline" size="sm">
               Continue shopping
             </Button>
           </div>

@@ -1,0 +1,18 @@
+const fs = require('fs');
+const dumpPath = 'C:/Users/DELL/.gemini/antigravity/brain/944f8554-cd76-4199-91b5-cde4212b64a8/.user_uploaded/media_1794388051328_0dc90151.sql';
+const sql = fs.readFileSync(dumpPath, 'utf8');
+
+const regex = /INSERT INTO [`"']?role_has_permissions[`"']?\s*\(([^)]+)\)\s*VALUES\s*([\s\S]*?);/gi;
+const matches = [...sql.matchAll(regex)];
+
+for (const m of matches) {
+  const rows = m[2].split(/\),\s*\(/);
+  rows.forEach(r => {
+    const clean = r.replace(/^\(/, '').replace(/\)$/, '');
+    const [permId, roleId] = clean.split(/,\s*/);
+    if (roleId === '2') {
+      console.log('Supplier Permission ID:', permId);
+    }
+  });
+}
+

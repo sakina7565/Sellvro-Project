@@ -22,14 +22,30 @@ export function getRedirectForUser(user) {
   }
 
   if (user.role === 'user') {
-    return user.status === 'approved' ? '/user/dashboard' : '/user/business/detail'
+    return user.status === 'approved' ? '/' : '/user/business/detail'
   }
 
   return '/'
 }
 
+export function getDashboardPathForUser(user) {
+  if (!user) return '/login'
+  if (user.role === 'admin') return '/admin/dashboard'
+  if (user.role === 'supplier') {
+    return user.status === 'approved' ? '/supplier/dashboard' : '/supplier/business/details'
+  }
+  return user.status === 'approved' ? '/user/dashboard' : '/user/business/detail'
+}
+
 export function canAccessPath(user, path) {
   if (!user) return false
+
+  // Suppliers can never access the landing page, products catalog, or buyer panel
+  if (user.role === 'supplier') {
+    if (path === '/' || path.startsWith('/products') || path.startsWith('/user')) {
+      return false
+    }
+  }
 
   if (path.startsWith('/admin')) {
     if (user.role !== 'admin') return false
@@ -45,10 +61,15 @@ export function canAccessPath(user, path) {
   }
 
   if (path.startsWith('/user')) {
-    if (user.role !== 'user') return false
+    if (user.role !== 'user' && user.role !== 'admin') return false
     if (path.startsWith('/user/business')) {
       return ['pending_details', 'pending_approval', 'approved'].includes(user.status)
     }
+    return user.status === 'approved'
+  }
+
+  if (path.startsWith('/checkout')) {
+    if (user.role !== 'user' && user.role !== 'admin') return false
     return user.status === 'approved'
   }
 

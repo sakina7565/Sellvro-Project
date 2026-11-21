@@ -5,7 +5,9 @@ import dotenv from 'dotenv'
 import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
+import mongoose from 'mongoose'
 import connectDB from './config/db.js'
+import { checkMySQLConnection } from './config/mysql.js'
 import authRoutes from './routes/authRoutes.js'
 import businessRoutes from './routes/businessRoutes.js'
 import adminRoutes from './routes/adminRoutes.js'
@@ -31,7 +33,21 @@ const PORT = process.env.PORT || 5000
 app.set('trust proxy', 1)
 
 let dbStatus = 'connecting'
-let dbMessage = 'Connecting to MongoDB Atlas...'
+
+app.disable('x-powered-by')
+
+// Security headers (M6)
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  // Only directives that cannot block the app's scripts, styles, images or Google sign-in.
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'self'; base-uri 'self'; object-src 'none'")
+  if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains')
+  }
+  next()
+})
 
 const defaultOrigins = [
   'http://localhost:5173',
@@ -39,6 +55,7 @@ const defaultOrigins = [
   'http://127.0.0.1:5173',
   'http://127.0.0.1:5174',
   'https://sellvro.com',
+  'https://www.sellvro.com',
 ]
 
 const envOrigins = (process.env.CLIENT_URL || '')
@@ -59,7 +76,7 @@ const apiCors = cors({
   credentials: true,
 })
 
-// Static uploads allow cross-origin resource sharing for product/receipt media
+// Static uploads allow cross-origin resource sharing for product/receipt media (404 for missing files per M4)
 app.use('/uploads', cors(), express.static(UPLOADS_DIR))
 
 // Apply strict CORS and body parsers to /api routes
@@ -67,18 +84,45 @@ app.use('/api', apiCors)
 app.use(cookieParser())
 app.use(express.json())
 
+// M2: Handle invalid JSON error & default empty body
+app.use((err, _req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ message: 'Invalid JSON payload received in request body.' })
+  }
+  next(err)
+})
+app.use((req, _res, next) => {
+  if (!req.body || typeof req.body !== 'object') {
+    req.body = {}
+  }
+  next()
+})
+
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
     message: 'Sellvro API is running',
     database: {
       status: dbStatus,
-      message: dbMessage,
     },
-    node: process.version,
     port: PORT,
-    cwd: process.cwd(),
   })
+})
+
+// M3: Fast 503 database readiness guard for all API endpoints (blocks buffer hang)
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health' || req.path === '/healthcheck') {
+    return next()
+  }
+
+  if (mongoose.connection.readyState !== 1) {
+    if (mongoose.connection.readyState === 0) connectDB().catch(() => { })
+    return res.status(503).json({
+      message: 'Database is currently connecting or temporarily unavailable. Please retry shortly.',
+    })
+  }
+
+  next()
 })
 
 app.use('/api/auth', authRoutes)
@@ -92,6 +136,11 @@ app.use('/api/disputes', disputeRoutes)
 app.use('/api/finance', financeRoutes)
 app.use('/api/notifications', notificationRoutes)
 app.use('/api/search', searchRoutes)
+
+// M5: Unknown API routes return JSON 404 (not HTML)
+app.use('/api', (req, res) => {
+  res.status(404).json({ message: `API route not found: ${req.method} ${req.originalUrl || req.url}` })
+})
 
 // Serve production static frontend if dist directory exists (e.g. cPanel single-app deployment)
 const candidateDistPaths = [
@@ -120,17 +169,18 @@ app.use((err, _req, res, _next) => {
   res.status(err.message?.startsWith('CORS') ? 403 : 500).json({ message: err.message || 'Server error' })
 })
 
+// Connect to WMS MySQL
+checkMySQLConnection().catch(() => { })
+
 // Connect to MongoDB
 connectDB()
   .then((conn) => {
     dbStatus = 'connected'
-    dbMessage = `Connected to ${conn.connection.host}`
     console.log(`MongoDB connected successfully: ${conn.connection.host}`)
   })
   .catch((error) => {
     dbStatus = 'error'
     const msg = error.message || String(error)
-    dbMessage = msg
     console.error('MongoDB connection error:', msg)
 
     if (msg.toLowerCase().includes('bad auth') || msg.toLowerCase().includes('authentication failed')) {

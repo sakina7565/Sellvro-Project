@@ -9,7 +9,11 @@ import { productApi, getErrorMessage } from '../../lib/api.js'
 
 function UserProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const urlQ = searchParams.get('q') || ''
+  const urlQ =
+    searchParams.get('q') ||
+    searchParams.get('search') ||
+    searchParams.get('supplier') ||
+    ''
 
   const [query, setQuery] = useState(urlQ)
   const [category, setCategory] = useState('All Categories')
@@ -20,7 +24,11 @@ function UserProductsPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const q = searchParams.get('q') || ''
+    const q =
+      searchParams.get('q') ||
+      searchParams.get('search') ||
+      searchParams.get('supplier') ||
+      ''
     setQuery(q)
     setAppliedQuery(q)
   }, [searchParams])
@@ -50,13 +58,20 @@ function UserProductsPage() {
 
   const products = useMemo(() => {
     return catalog.filter((product) => {
-      const matchesCategory = appliedCategory === 'All Categories' || product.category === appliedCategory
+      const matchesCategory =
+        appliedCategory === 'All Categories' || product.category === appliedCategory
+      const q = appliedQuery.trim().toLowerCase()
       const matchesQuery =
-        !appliedQuery.trim() ||
-        product.name.toLowerCase().includes(appliedQuery.trim().toLowerCase()) ||
-        (product.sku && product.sku.toLowerCase().includes(appliedQuery.trim().toLowerCase()))
+        !q ||
+        product.name.toLowerCase().includes(q) ||
+        (product.sku && product.sku.toLowerCase().includes(q)) ||
+        (product.brand && product.brand.toLowerCase().includes(q)) ||
+        (product.vendorName && product.vendorName.toLowerCase().includes(q)) ||
+        (product.supplier && String(product.supplier).toLowerCase().includes(q)) ||
+        (product.supplierBusinessName &&
+          product.supplierBusinessName.toLowerCase().includes(q))
       return matchesCategory && matchesQuery
-    })
+    }).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
   }, [appliedCategory, appliedQuery, catalog])
 
   const handleSearch = (e) => {
@@ -124,7 +139,7 @@ function UserProductsPage() {
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 text-primary shrink-0" />
             <span>
-              Searching for <strong className="font-semibold text-primary-950">"{appliedQuery}"</strong> ({products.length} results found)
+              Searching for <strong className="font-semibold text-primary-950">&quot;{appliedQuery}&quot;</strong> ({products.length} results found)
             </span>
           </div>
           <button

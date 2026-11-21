@@ -230,7 +230,7 @@ export const ADMIN_ROUTE_PERMISSIONS = {
   '/admin/users/roles': 'admin.settings.create_user',
   '/admin/location': 'admin.settings.location',
   '/admin/country': 'admin.settings.country',
-  '/admin/accounts': 'admin.users.view',
+  '/admin/accounts': 'admin.settings.create_user',
 }
 
 export function getPermissionLabel(key) {
@@ -266,11 +266,8 @@ export function getEffectivePermissions(user) {
 
 export function canAccessAdminPath(user, path) {
   if (!user || user.role !== 'admin') return false
-  if (path === '/admin/roles' || path === '/admin/users/roles') {
+  if (path === '/admin/roles' || path === '/admin/users/roles' || path === '/admin/accounts') {
     return isSuperAdmin(user)
-  }
-  if (path === '/admin/accounts') {
-    return hasAnyPermission(getEffectivePermissions(user), ['admin.users.view', 'admin.suppliers.view'])
   }
   if (path.startsWith('/admin/products/')) {
     return hasPermission(getEffectivePermissions(user), 'admin.products.view')
@@ -288,11 +285,8 @@ export function filterAdminNavItems(navItems, user) {
     .map((item) => {
       if (item.children) {
         const children = item.children.filter((child) => {
-          if (child.to === '/admin/roles' || child.to === '/admin/users/roles') {
+          if (child.to === '/admin/roles' || child.to === '/admin/users/roles' || child.to === '/admin/accounts') {
             return isSuper
-          }
-          if (child.to === '/admin/accounts') {
-            return hasAnyPermission(permissions, ['admin.users.view', 'admin.suppliers.view'])
           }
           const required = ADMIN_ROUTE_PERMISSIONS[child.to]
           return hasPermission(permissions, required)
@@ -301,12 +295,8 @@ export function filterAdminNavItems(navItems, user) {
         return { ...item, children }
       }
 
-      if (item.to === '/admin/roles' || item.to === '/admin/users/roles') {
+      if (item.to === '/admin/roles' || item.to === '/admin/users/roles' || item.to === '/admin/accounts') {
         return isSuper ? item : null
-      }
-
-      if (item.to === '/admin/accounts') {
-        return hasAnyPermission(permissions, ['admin.users.view', 'admin.suppliers.view']) ? item : null
       }
 
       const required = ADMIN_ROUTE_PERMISSIONS[item.to]

@@ -1,7 +1,15 @@
+import crypto from 'crypto'
+import {
+  findWmsUserByEmail,
+  registerWmsSupplier,
+  verifyWmsSupplierCredentials,
+} from '../services/wmsSqlService.js'
+import mongoose from 'mongoose'
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 import Role from '../models/Role.js'
 import BusinessProfile from '../models/BusinessProfile.js'
+import Review from '../models/Review.js'
 import { signToken } from '../middleware/auth.js'
 import {
   clearAuthCookie,
@@ -31,9 +39,16 @@ const getHomePath = (user) => {
     return user.status === 'approved' ? '/supplier/dashboard' : '/supplier/business/details'
   }
   if (user.role === 'user') {
-    return user.status === 'approved' ? '/user/dashboard' : '/user/business/detail'
+    return user.status === 'approved' ? '/' : '/user/business/detail'
   }
   return '/'
+}
+
+const formatDbError = (error, fallback = 'Operation failed.') => {
+  if (error?.message?.includes('buffering timed out') || error?.name === 'MongooseError') {
+    return 'Database connection timed out. Please check your internet connection and verify MongoDB Atlas IP Whitelist (0.0.0.0/0).'
+  }
+  return error?.message || fallback
 }
 
 async function buildSafeUser(user) {
@@ -56,11 +71,31 @@ async function buildSafeUser(user) {
 
 export const register = async (req, res) => {
   try {
-    const { fullName, email, password, confirmPassword, role } = req.body
+    const {
+      fullName,
+      email,
+      password,
+      confirmPassword,
+      role,
+      companyName,
+      companyEmail,
+      companyPhone,
+      companyAddress,
+      registrationEntity,
+      registrationNo,
+      businessCategory,
+      ownerName,
+      ownerEmail,
+      ownerPhone,
+      ownerAddress,
+      idCardNumber,
+      bankName,
+      accountHolderName,
+      accountNumberOrIban,
+      googleId,
+    } = req.body
 
-    if (!fullName || !email || !password || !role) {
-      return res.status(400).json({ message: 'All fields are required.' })
-    }
+    const idCardUrl = req.file ? `/uploads/${req.file.filename}` : (req.body.idCardUrl || req.body.idCard || '')
 
     if (role === 'admin') {
       return res.status(400).json({
@@ -72,6 +107,10 @@ export const register = async (req, res) => {
       return res.status(400).json({ message: 'Invalid role selected. Only Supplier and User are permitted.' })
     }
 
+    if (!password || !confirmPassword) {
+      return res.status(400).json({ message: 'Password and confirm password are required.' })
+    }
+
     if (password !== confirmPassword) {
       return res.status(400).json({ message: 'Passwords do not match.' })
     }
@@ -80,20 +119,179 @@ export const register = async (req, res) => {
       return res.status(400).json({ message: 'Password must be at least 6 characters.' })
     }
 
-    const existing = await User.findOne({ email: email.toLowerCase().trim() })
+    // Resolve effective name & login email
+    const effectiveName = (ownerName || fullName || companyName)?.trim()
+    const effectiveEmail = (ownerEmail || email || companyEmail)?.toLowerCase()?.trim()
+
+    if (!effectiveName) {
+      return res.status(400).json({ message: 'Owner Name is required.' })
+    }
+
+    if (!effectiveEmail) {
+      return res.status(400).json({ message: 'Email address is required.' })
+    }
+
+    // Company & Owner validations for both Supplier and User
+    if (!companyName?.trim()) {
+      return res.status(400).json({ message: 'Name of Company is required.' })
+    }
+    if (!companyEmail?.trim()) {
+      return res.status(400).json({ message: 'Email of Company is required.' })
+    }
+    if (!companyPhone?.trim()) {
+      return res.status(400).json({ message: 'Official Phone Number is required.' })
+    }
+    if (!companyAddress?.trim()) {
+      return res.status(400).json({ message: 'Address of Company is required.' })
+    }
+    if (!ownerPhone?.trim()) {
+      return res.status(400).json({ message: 'Owner Phone is required.' })
+    }
+    if (!ownerAddress?.trim()) {
+      return res.status(400).json({ message: 'Owner Address is required.' })
+    }
+    if (!bankName?.trim()) {
+      return res.status(400).json({ message: 'Bank Name is required.' })
+    }
+    if (!accountHolderName?.trim()) {
+      return res.status(400).json({ message: 'Account Holder Name is required.' })
+    }
+    if (!accountNumberOrIban?.trim()) {
+      return res.status(400).json({ message: 'Account Number or IBAN is required.' })
+    }
+    if (!idCardUrl) {
+      return res.status(400).json({ message: 'Please upload an ID Card for verification.' })
+    }
+
+    // ── CNIC Format & Duplicate Check ──
+    if (!idCardNumber) {
+      return res.status(400).json({
+        message: 'Valid 13-digit Pakistani CNIC number (format: XXXXX-XXXXXXX-X) is required.',
+      })
+    }
+    const digits = String(idCardNumber).replace(/\D+/g, '')
+    if (digits.length !== 13) {
+      return res.status(400).json({
+        message: 'Valid 13-digit Pakistani CNIC number (format: XXXXX-XXXXXXX-X) is required.',
+      })
+    }
+    const province = parseInt(digits[0], 10)
+    if (province < 1 || province > 7) {
+      return res.status(400).json({
+        message: 'Invalid CNIC province code. Pakistani CNIC must begin with 1 through 7.',
+      })
+    }
+    const formattedCnic = `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12)}`
+    const existingCnicUser = await User.findOne({ idCardNumber: { $in: [formattedCnic, digits] } })
+    const existingCnicProfile = await BusinessProfile.findOne({ idCardNumber: { $in: [formattedCnic, digits] } })
+    if (existingCnicUser || existingCnicProfile) {
+      return res.status(400).json({
+        message: `Ye CNIC number (${formattedCnic}) pehle se ek doosre account k sath registered hai. Ek CNIC se sirf ek hi account register ho sakta hai.`,
+        isDuplicateCnic: true,
+      })
+    }
+
+    const existing = await User.findOne({ email: effectiveEmail })
     if (existing) {
       return res.status(400).json({ message: 'An account with this email already exists.' })
     }
 
-    const status = role === 'admin' ? 'approved' : 'pending_details'
+    // ── Unified Supplier Registration in Master WMS MySQL ──
+    let wmsSupplier = null
+    if (role === 'supplier') {
+      try {
+        const existingWmsUser = await findWmsUserByEmail(effectiveEmail)
+        if (existingWmsUser) {
+          wmsSupplier = existingWmsUser
+        } else {
+          wmsSupplier = await registerWmsSupplier({
+            name: effectiveName,
+            email: effectiveEmail,
+            password,
+            companyName: companyName?.trim() || effectiveName,
+            companyEmail: (companyEmail || effectiveEmail)?.toLowerCase()?.trim(),
+            companyPhone: companyPhone?.trim() || '',
+            companyAddress: companyAddress?.trim() || '',
+            registrationEntity: registrationEntity?.trim() || '',
+            registrationNo: registrationNo?.trim() || '',
+            ownerName: (ownerName || effectiveName)?.trim(),
+            ownerEmail: (ownerEmail || effectiveEmail)?.toLowerCase()?.trim(),
+            ownerPhone: ownerPhone?.trim() || '',
+            ownerAddress: ownerAddress?.trim() || '',
+            idCardUrl: idCardUrl || '',
+          })
+        }
+      } catch (wmsErr) {
+        console.warn('[Register] WMS MySQL registration notice:', wmsErr.message)
+      }
+    }
+
+    // Both Suppliers and Users submit complete verification details upfront, so status is pending_approval
+    const status = role === 'admin' ? 'approved' : 'pending_approval'
 
     const user = await User.create({
-      fullName: fullName.trim(),
-      email: email.toLowerCase().trim(),
+      fullName: effectiveName,
+      email: effectiveEmail,
       password,
       role,
       status,
+      companyName: companyName?.trim() || '',
+      companyEmail: (companyEmail || effectiveEmail)?.toLowerCase()?.trim() || '',
+      companyPhone: companyPhone?.trim() || '',
+      companyAddress: companyAddress?.trim() || '',
+      businessCategory: businessCategory?.trim() || '',
+      registrationEntity: registrationEntity?.trim() || '',
+      registrationNo: registrationNo?.trim() || '',
+      ownerName: (ownerName || effectiveName)?.trim() || '',
+      ownerEmail: (ownerEmail || effectiveEmail)?.toLowerCase()?.trim() || '',
+      ownerPhone: ownerPhone?.trim() || '',
+      ownerAddress: ownerAddress?.trim() || '',
+      idCardUrl: idCardUrl || '',
+      idCardNumber: idCardNumber?.trim() || '',
+      bankName: bankName?.trim() || '',
+      accountHolderName: accountHolderName?.trim() || '',
+      accountNumberOrIban: accountNumberOrIban?.trim() || '',
+      googleId: googleId?.trim() || undefined,
+      isWmsRegistered: Boolean(wmsSupplier),
+      wmsSupplierId: wmsSupplier?.id || null,
+      wmsClientId: wmsSupplier?.user_unique_name || '',
+      wmsStatus: wmsSupplier?.status || 'pending',
     })
+
+    // Upsert BusinessProfile with complete details for both suppliers and users
+    try {
+      await BusinessProfile.findOneAndUpdate(
+        { user: user._id },
+        {
+          user: user._id,
+          profileType: role,
+          businessName: companyName?.trim() || effectiveName,
+          businessEmail: (companyEmail || effectiveEmail)?.toLowerCase()?.trim(),
+          businessPhone: companyPhone?.trim() || '',
+          businessAddress: companyAddress?.trim() || '',
+          registrationEntity: registrationEntity?.trim() || '',
+          registrationNo: registrationNo?.trim() || '',
+          businessCategory: businessCategory?.trim() || 'General Wholesale & Retail',
+          ownerName: (ownerName || effectiveName)?.trim(),
+          ownerEmail: (ownerEmail || effectiveEmail)?.toLowerCase()?.trim(),
+          ownerPhone: ownerPhone?.trim() || '',
+          ownerAddress: ownerAddress?.trim() || '',
+          idCardUrl: idCardUrl || '',
+          idCardNumber: idCardNumber?.trim() || '',
+          bankName: bankName?.trim() || '',
+          accountHolderName: accountHolderName?.trim() || '',
+          accountNumberOrIban: accountNumberOrIban?.trim() || '',
+          accNumber: accountNumberOrIban?.trim() || '',
+          paymentProvider: bankName?.trim() || 'Bank Transfer',
+          country: 'Pakistan',
+          orderType: role === 'supplier' ? 'B2B Wholesale' : 'Wholesale / Retail',
+          status: 'pending',
+        },
+        { upsert: true, new: true }
+      )
+    } catch (bpErr) {
+      console.warn('[Register] BusinessProfile sync notice:', bpErr.message)
+    }
 
     const token = signToken(user._id)
     setAuthCookie(res, token)
@@ -135,9 +333,128 @@ export const login = async (req, res) => {
       return res.status(400).json({ message: 'Email and password are required.' })
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password')
-    if (!user || !(await user.matchPassword(password))) {
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        message:
+          'Database offline: MongoDB connection failed. Please ensure your IP address is whitelisted in MongoDB Atlas Network Access (0.0.0.0/0) and internet is connected.',
+      })
+    }
+
+    const cleanEmail = email.toLowerCase().trim()
+    let user = await User.findOne({ email: cleanEmail }).select('+password')
+
+    // ── Check Master WMS MySQL first (Single Master Database) ──
+    let wmsSqlUser = null
+    const shouldCheckWms = !user || user.role === 'supplier'
+    if (shouldCheckWms) {
+      try {
+        wmsSqlUser = await verifyWmsSupplierCredentials(cleanEmail, password)
+      } catch (wmsSqlErr) {
+        console.warn('[Login] WMS MySQL verification notice:', wmsSqlErr.message)
+      }
+    }
+
+    if (wmsSqlUser) {
+      if (!user) {
+        user = await User.create({
+          fullName: wmsSqlUser.name || 'WMS Supplier',
+          email: cleanEmail,
+          password,
+          role: 'supplier',
+          status: wmsSqlUser.status === 'approved' ? 'approved' : 'pending_approval',
+          isWmsRegistered: true,
+          wmsClientId: wmsSqlUser.user_unique_name || '',
+          wmsSupplierId: wmsSqlUser.id,
+          wmsStatus: wmsSqlUser.status || 'approved',
+        })
+
+        await BusinessProfile.findOneAndUpdate(
+          { user: user._id },
+          {
+            user: user._id,
+            profileType: 'supplier',
+            businessName: wmsSqlUser.name ? `${wmsSqlUser.name}'s Store` : 'Supplier Store',
+            status: 'approved',
+          },
+          { upsert: true, new: true },
+        )
+      } else {
+        user.isWmsRegistered = true
+        user.wmsSupplierId = wmsSqlUser.id
+        user.wmsClientId = wmsSqlUser.user_unique_name || user.wmsClientId
+        user.wmsStatus = wmsSqlUser.status || user.wmsStatus
+        await user.save()
+      }
+    }
+
+    // ── Check WMS Supplier Status via Live WMS API (fallback for external token) ──
+    let wmsAuthResult = null
+    if (shouldCheckWms && !wmsSqlUser) {
+      try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 3500)
+        const wmsRes = await fetch('https://wmsbysellvro.com/api/supplier/login', {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email: cleanEmail, password }),
+          signal: controller.signal,
+        })
+        clearTimeout(timeout)
+        const wmsData = await wmsRes.json().catch(() => null)
+        if (wmsRes.ok && wmsData?.status && wmsData?.token && wmsData?.supplier) {
+          wmsAuthResult = wmsData
+        }
+      } catch (wmsErr) {
+        console.warn('WMS login check skipped/timed out:', wmsErr.message)
+      }
+    }
+
+    // If user does not exist locally on marketplace, but authenticated on WMS as a supplier:
+    if (!user && wmsAuthResult) {
+      user = await User.create({
+        fullName: wmsAuthResult.supplier.name || 'WMS Supplier',
+        email: cleanEmail,
+        password,
+        role: 'supplier',
+        status: 'approved',
+        isWmsRegistered: true,
+        wmsToken: wmsAuthResult.token,
+        wmsClientId: wmsAuthResult.supplier.user_unique_name || '',
+        wmsSupplierId: wmsAuthResult.supplier.id,
+        wmsStatus: wmsAuthResult.supplier.status || 'approved',
+      })
+
+      await BusinessProfile.findOneAndUpdate(
+        { user: user._id },
+        {
+          user: user._id,
+          profileType: 'supplier',
+          businessName:
+            wmsAuthResult.supplier.company_name ||
+            wmsAuthResult.supplier.name ||
+            'Supplier Store',
+          status: 'approved',
+        },
+        { upsert: true, new: true },
+      )
+    }
+
+    if (!user) {
       return res.status(401).json({ message: 'Invalid email or password.' })
+    }
+
+    // Verify local password or WMS synced password
+    const isPasswordMatch = await user.matchPassword(password)
+    if (!isPasswordMatch) {
+      if (wmsSqlUser || wmsAuthResult) {
+        user.password = password
+        await user.save()
+      } else {
+        return res.status(401).json({ message: 'Invalid email or password.' })
+      }
     }
 
     // Admin accounts must use the dedicated admin portal — block them here
@@ -156,6 +473,32 @@ export const login = async (req, res) => {
       return res.status(403).json({ message: 'Your account application was rejected.' })
     }
 
+    // Sync WMS registration status and credentials
+    if (wmsAuthResult) {
+      user.isWmsRegistered = true
+      user.wmsToken = wmsAuthResult.token
+      user.wmsClientId = wmsAuthResult.supplier.user_unique_name || user.wmsClientId || ''
+      user.wmsSupplierId = wmsAuthResult.supplier.id || user.wmsSupplierId
+      user.wmsStatus = wmsAuthResult.supplier.status || 'approved'
+      await user.save()
+
+      if (wmsAuthResult.supplier.company_name) {
+        await BusinessProfile.findOneAndUpdate(
+          { user: user._id },
+          {
+            $set: {
+              businessName: wmsAuthResult.supplier.company_name,
+            },
+          },
+        )
+      }
+    } else if (user.role === 'supplier' && (user.isWmsRegistered || user.wmsToken)) {
+      // User is supplier on marketplace, but WMS login did not succeed (not registered on WMS)
+      user.isWmsRegistered = false
+      user.wmsToken = ''
+      await user.save()
+    }
+
     const token = signToken(user._id)
     setAuthCookie(res, token)
     const safeUser = await buildSafeUser(user)
@@ -168,7 +511,8 @@ export const login = async (req, res) => {
     })
   } catch (error) {
     console.error('Login error:', error)
-    return res.status(500).json({ message: error.message || 'Login failed.' })
+    const status = error?.message?.includes('buffering timed out') ? 503 : 500
+    return res.status(status).json({ message: formatDbError(error, 'Login failed.') })
   }
 }
 
@@ -193,9 +537,51 @@ export const getMe = async (req, res) => {
     }
   }
 
+  let ratings = null
+  if (req.user.role === 'supplier') {
+    try {
+      const reviewStats = await Review.aggregate([
+        { $match: { supplier: req.user._id } },
+        {
+          $group: {
+            _id: '$supplier',
+            reviewsCount: { $sum: 1 },
+            averageRating: { $avg: '$rating' },
+            deliveryRatingAverage: { $avg: '$deliveryRating' },
+            onTimeDeliveryPercent: {
+              $avg: { $cond: [{ $eq: ['$deliveryOnTime', true] }, 100, 0] },
+            },
+            badRatingsCount: {
+              $sum: { $cond: [{ $lte: ['$rating', 2] }, 1, 0] },
+            },
+          },
+        },
+      ])
+      const r = reviewStats[0] || {}
+      const avg = Number((r.averageRating || 0).toFixed(1))
+      const onTime =
+        r.onTimeDeliveryPercent !== undefined && r.onTimeDeliveryPercent !== null
+          ? Math.round(r.onTimeDeliveryPercent)
+          : null
+      const reviewsCount = r.reviewsCount || 0
+      const badRatingsCount = r.badRatingsCount || 0
+      ratings = {
+        reviewsCount,
+        averageRating: avg,
+        deliveryRatingAverage: Number((r.deliveryRatingAverage || 0).toFixed(1)),
+        onTimeDeliveryPercent: onTime,
+        badRatingsCount,
+        isLowPerformance: reviewsCount >= 2 && (avg < 3.0 || (onTime !== null && onTime < 60) || badRatingsCount >= 2),
+      }
+    } catch {
+      ratings = null
+    }
+  }
+
   return res.json({
     user: {
       ...safeUser,
+      ratings,
       impersonatedBy,
     },
     redirectTo: getHomePath(safeUser),
@@ -240,7 +626,14 @@ export const switchBack = async (req, res) => {
 
 export const adminRegister = async (req, res) => {
   try {
-    const { fullName, email, password, confirmPassword, adminType, adminRoleId } = req.body
+    // Only the very first admin may self-register (bootstrap); after that only a logged-in Super Admin can create admins.
+    const adminCount = await User.countDocuments({ role: 'admin' })
+    const isSuperAdmin = req.user?.role === 'admin' && !req.user.adminRoleId
+    if (adminCount > 0 && !isSuperAdmin) {
+      return res.status(403).json({ message: 'Admin registration is closed. Ask a Super Admin to create your account.' })
+    }
+
+    const { fullName, email, password, confirmPassword, adminType, adminRoleId } = req.body || {}
 
     if (!fullName || !email || !password) {
       return res.status(400).json({ message: 'Full name, email, and password are required.' })
@@ -277,9 +670,14 @@ export const adminRegister = async (req, res) => {
       adminRoleId: roleId,
     })
 
+    const safeUser = await buildSafeUser(user)
+    if (isSuperAdmin) {
+      // Super Admin created a colleague: keep the creator's own session.
+      return res.status(201).json({ message: 'Admin account registered successfully.', user: safeUser })
+    }
+
     const token = signToken(user._id)
     setAuthCookie(res, token)
-    const safeUser = await buildSafeUser(user)
 
     return res.status(201).json({
       message: 'Admin account registered successfully.',
@@ -331,7 +729,8 @@ export const adminLogin = async (req, res) => {
     })
   } catch (error) {
     console.error('Admin login error:', error)
-    return res.status(500).json({ message: error.message || 'Login failed.' })
+    const status = error?.message?.includes('buffering timed out') ? 503 : 500
+    return res.status(status).json({ message: formatDbError(error, 'Login failed.') })
   }
 }
 
@@ -357,23 +756,31 @@ export const forgotPassword = async (req, res) => {
       return res.status(400).json({ message: 'Please enter your email address.' })
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+resetPasswordCode +resetPasswordExpires')
-    if (!user) {
-      return res.status(404).json({ message: 'No account found with this email address.' })
+    const cleanEmail = email.toLowerCase().trim()
+    const user = await User.findOne({ email: cleanEmail }).select('+resetPasswordCode +resetPasswordExpires +resetPasswordAttempts')
+
+    // Generic response message to prevent account enumeration
+    const genericSuccess = {
+      message: 'If an account exists with this email, a 6-digit verification code has been sent.',
+      email: cleanEmail,
     }
 
-    // Generate 6-digit verification code
-    const code = Math.floor(100000 + Math.random() * 900000).toString()
+    if (!user) {
+      return res.json(genericSuccess)
+    }
+
+    // Cryptographically secure 6-digit verification code
+    const code = crypto.randomInt(100000, 1000000).toString()
     user.resetPasswordCode = code
     user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000) // 15 mins
+    user.resetPasswordAttempts = 0
     await user.save()
 
-    await sendPasswordResetEmail(user.email, code, user.fullName)
-
-    return res.json({
-      message: 'A 6-digit verification code has been sent to your email.',
-      email: user.email,
+    await sendPasswordResetEmail(user.email, code, user.fullName).catch((err) => {
+      console.warn('Password reset email dispatch failed:', err.message)
     })
+
+    return res.json(genericSuccess)
   } catch (error) {
     console.error('Forgot password error:', error)
     return res.status(500).json({ message: error.message || 'Failed to send recovery code.' })
@@ -387,13 +794,30 @@ export const verifyResetCode = async (req, res) => {
       return res.status(400).json({ message: 'Email and verification code are required.' })
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+resetPasswordCode +resetPasswordExpires')
+    const cleanEmail = email.toLowerCase().trim()
+    const user = await User.findOne({ email: cleanEmail }).select('+resetPasswordCode +resetPasswordExpires +resetPasswordAttempts')
     if (!user || !user.resetPasswordCode) {
       return res.status(400).json({ message: 'No reset request found. Please request a new code.' })
     }
 
+    // Enforce max 5 failed attempts cap
+    if ((user.resetPasswordAttempts || 0) >= 5) {
+      user.resetPasswordCode = undefined
+      user.resetPasswordExpires = undefined
+      user.resetPasswordAttempts = 0
+      await user.save()
+      return res.status(429).json({ message: 'Too many incorrect attempts. For security, this code has been cancelled. Please request a new code.' })
+    }
+
     if (user.resetPasswordCode !== code.trim()) {
-      return res.status(400).json({ message: 'Invalid verification code. Please check and try again.' })
+      user.resetPasswordAttempts = (user.resetPasswordAttempts || 0) + 1
+      await user.save()
+      const remaining = 5 - user.resetPasswordAttempts
+      return res.status(400).json({
+        message: remaining > 0
+          ? `Invalid verification code. ${remaining} attempt(s) remaining.`
+          : 'Invalid verification code. Code cancelled due to too many attempts.',
+      })
     }
 
     if (new Date() > new Date(user.resetPasswordExpires)) {
@@ -423,12 +847,23 @@ export const resetPassword = async (req, res) => {
       return res.status(400).json({ message: 'Passwords do not match.' })
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password +resetPasswordCode +resetPasswordExpires')
+    const cleanEmail = email.toLowerCase().trim()
+    const user = await User.findOne({ email: cleanEmail }).select('+password +resetPasswordCode +resetPasswordExpires +resetPasswordAttempts')
     if (!user || !user.resetPasswordCode) {
       return res.status(400).json({ message: 'No reset request found. Please request a new code.' })
     }
 
+    if ((user.resetPasswordAttempts || 0) >= 5) {
+      user.resetPasswordCode = undefined
+      user.resetPasswordExpires = undefined
+      user.resetPasswordAttempts = 0
+      await user.save()
+      return res.status(429).json({ message: 'Too many incorrect attempts. Please request a new code.' })
+    }
+
     if (user.resetPasswordCode !== code.trim()) {
+      user.resetPasswordAttempts = (user.resetPasswordAttempts || 0) + 1
+      await user.save()
       return res.status(400).json({ message: 'Invalid verification code.' })
     }
 
@@ -439,6 +874,7 @@ export const resetPassword = async (req, res) => {
     user.password = newPassword
     user.resetPasswordCode = undefined
     user.resetPasswordExpires = undefined
+    user.resetPasswordAttempts = 0
     await user.save()
 
     const token = signToken(user._id)
@@ -499,32 +935,41 @@ export const changePassword = async (req, res) => {
   }
 }
 
+// Same public OAuth client ID the frontend falls back to (client IDs are not secrets).
+const GOOGLE_CLIENT_ID =
+  process.env.GOOGLE_CLIENT_ID ||
+  process.env.VITE_GOOGLE_CLIENT_ID ||
+  '366677857468-va47f432ro1haif68t6glvdpp895tq36.apps.googleusercontent.com'
+
+// Asks Google who owns this access token; rejects tokens issued to other apps or unverified emails.
+async function verifyGoogleAccessToken(accessToken) {
+  const response = await fetch(
+    `https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`,
+  )
+  if (!response.ok) return null
+  const info = await response.json()
+  if (info.aud !== GOOGLE_CLIENT_ID && info.azp !== GOOGLE_CLIENT_ID) return null
+  if (!info.email || String(info.email_verified) !== 'true') return null
+  return { email: info.email, sub: info.sub }
+}
+
 export const googleAuth = async (req, res) => {
   try {
-    const { credential, role = 'user', email, name, googleId, picture } = req.body
+    const { accessToken, name, picture } = req.body || {}
 
-    let userEmail = email
-    let userName = name
-    let userGoogleId = googleId
-
-    if (credential) {
-      try {
-        const decoded = jwt.decode(credential)
-        if (decoded?.email) {
-          userEmail = decoded.email
-          userName = decoded.name || decoded.given_name || userEmail.split('@')[0]
-          userGoogleId = decoded.sub
-        }
-      } catch (e) {
-        console.error('Google token decode error:', e)
-      }
+    if (!accessToken) {
+      return res.status(400).json({ message: 'Google sign-in token is missing. Please try again.' })
     }
 
-    if (!userEmail) {
-      return res.status(400).json({ message: 'Could not obtain email address from Google.' })
+    const verified = await verifyGoogleAccessToken(String(accessToken))
+    if (!verified) {
+      return res.status(401).json({ message: 'Google sign-in could not be verified. Please try again.' })
     }
 
-    userEmail = userEmail.toLowerCase().trim()
+    // Identity comes only from Google's answer; the body name is used just to prefill registration.
+    const userEmail = verified.email.toLowerCase().trim()
+    const userName = name
+    const userGoogleId = verified.sub
     let user = await User.findOne({ email: userEmail })
 
     if (user) {
@@ -540,42 +985,34 @@ export const googleAuth = async (req, res) => {
       if (user.status === 'rejected') {
         return res.status(403).json({ message: 'Your account application was rejected.' })
       }
-      if (!user.googleId && userGoogleId) {
-        user.googleId = userGoogleId
+      if ((!user.googleId && userGoogleId) || (picture && !user.avatar)) {
+        if (!user.googleId && userGoogleId) user.googleId = userGoogleId
+        if (picture && !user.avatar) user.avatar = picture
         await user.save()
       }
-    } else {
-      const selectedRole = ['supplier', 'user'].includes(role) ? role : 'user'
-      const status = selectedRole === 'supplier' ? 'pending_details' : 'approved'
 
-      const randomPassword = 'G_' + Math.random().toString(36).slice(2) + '!9X'
-      user = await User.create({
-        fullName: userName || userEmail.split('@')[0],
-        email: userEmail,
-        password: randomPassword,
-        role: selectedRole,
-        status,
-        googleId: userGoogleId || undefined,
-      })
+      const token = signToken(user._id)
+      setAuthCookie(res, token)
+      const safeUser = await buildSafeUser(user)
 
-      await BusinessProfile.create({
-        user: user._id,
-        profileType: selectedRole,
-        businessName: user.fullName,
-        businessEmail: userEmail,
-        status: status === 'approved' ? 'approved' : 'pending',
+      return res.json({
+        message: 'Logged in with Google successfully.',
+        token,
+        user: safeUser,
+        redirectTo: getHomePath(safeUser),
       })
     }
 
-    const token = signToken(user._id)
-    setAuthCookie(res, token)
-    const safeUser = await buildSafeUser(user)
-
+    // If account does not exist yet, return Google profile so client can complete business registration
     return res.json({
-      message: 'Logged in with Google successfully.',
-      token,
-      user: safeUser,
-      redirectTo: getHomePath(safeUser),
+      isNewUser: true,
+      message: 'Google account verified. Please complete your registration details.',
+      googleUser: {
+        email: userEmail,
+        name: userName || userEmail.split('@')[0],
+        googleId: userGoogleId || '',
+        picture: picture || '',
+      },
     })
   } catch (error) {
     console.error('Google auth error:', error)

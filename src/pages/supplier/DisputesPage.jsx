@@ -39,12 +39,10 @@ import {
 import { formatPartySummary } from '../../lib/disputeHelpers.js'
 
 import { disputeApi, getErrorMessage } from '../../lib/api.js'
-
 import { useDisputeList } from '../../hooks/useDisputeList.js'
+import { formatDisputeId } from '../../lib/idFormatters.js'
 
-
-
-const TABLE_HEAD = ['Raised By', 'Against', 'Order', 'Product', 'Latest reply', 'Status', 'Date', 'Actions']
+const TABLE_HEAD = ['Dispute ID', 'Raised By', 'Against', 'Order', 'Product', 'Latest reply', 'Status', 'Date', 'Actions']
 
 
 
@@ -96,7 +94,7 @@ function SupplierDisputesPage() {
 
     try {
 
-      await disputeApi.create({ ...payload, type: 'supplier_dispute' })
+      await disputeApi.create({ ...payload, type: payload.type || 'supplier_dispute' })
 
       setShowCreate(false)
 
@@ -217,13 +215,15 @@ function SupplierDisputesPage() {
                     key={dispute.id}
 
                     className={`border-b border-slate-50 last:border-0 ${dispute.hasUnread ? 'bg-primary-50/40' : ''}`}
-
                   >
+                    <td className="whitespace-nowrap px-5 py-4">
+                      <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                        {formatDisputeId(dispute)}
+                      </span>
+                    </td>
 
                     <td className="whitespace-nowrap px-5 py-4">
-
                       <DisputeRaisedByCell dispute={dispute} />
-
                     </td>
 
                     <td className="whitespace-nowrap px-5 py-4">

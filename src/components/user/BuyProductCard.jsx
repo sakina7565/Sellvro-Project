@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { ShoppingCart, Eye, Tag, CheckCircle2, Store } from 'lucide-react'
+import { ShoppingCart, Eye, Tag, CheckCircle2, Store, Sparkles } from 'lucide-react'
 import { mediaUrl } from '../../lib/api.js'
+import { useAuth } from '../../context/AuthContext.jsx'
 
 /**
  * Product card on User Panel "Buy Products" grid.
@@ -10,11 +11,14 @@ import { mediaUrl } from '../../lib/api.js'
  * - "Buy now" button directly opens checkout.
  */
 function BuyProductCard({ product }) {
+  const { isAuthenticated } = useAuth()
   const navigate = useNavigate()
   const productId = product.id || product._id
   const isActive = product.status === 'active' || !product.status
   const isOutOfStock = typeof product.quantity === 'number' && product.quantity <= 0
-  const isWms = Boolean(product.inWarehouse || product.fulfillBy === 'warehouse')
+  const isWms = Boolean(
+    product.isWmsVerified || product.inWarehouse || product.fulfillBy === 'warehouse',
+  )
 
   const imageSrc =
     mediaUrl(product.image) ||
@@ -24,6 +28,15 @@ function BuyProductCard({ product }) {
   const handleBuy = (e) => {
     e.stopPropagation()
     e.preventDefault()
+    if (!isAuthenticated) {
+      navigate('/login', {
+        state: {
+          from: `/user/checkout/${productId}`,
+          message: 'Please sign in to your account before placing an order.',
+        },
+      })
+      return
+    }
     navigate(`/user/checkout/${productId}`, { state: { product } })
   }
 
@@ -39,11 +52,11 @@ function BuyProductCard({ product }) {
       <div>
         {/* Image & Badges */}
         <div className="relative bg-slate-50/50 p-4 pt-5">
-          {/* Fulfillment Badge: WMS only if in inventory; if kept with supplier, show Supplier Direct (NO WMS) */}
+          {/* Fulfillment Badge: WMS Verified if in inventory; if kept with supplier, show Supplier Direct */}
           {isWms ? (
-            <div className="absolute left-3 top-3 z-10 flex items-center gap-1.5 rounded-md bg-slate-900/95 px-2.5 py-1 text-[11px] font-black tracking-wider text-amber-400 shadow-md backdrop-blur-xs border border-amber-400/20">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
-              WMS
+            <div className="absolute left-3 top-3 z-10 flex items-center gap-1.5 rounded-md bg-slate-900/95 px-2.5 py-1 text-[11px] font-black tracking-wider text-emerald-400 shadow-md backdrop-blur-xs border border-emerald-400/20">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              WMS Verified
             </div>
           ) : (
             <div className="absolute left-3 top-3 z-10 flex items-center gap-1.5 rounded-md bg-white/95 px-2 py-0.5 text-[10px] font-bold text-slate-700 shadow-xs border border-slate-200">
@@ -58,6 +71,14 @@ function BuyProductCard({ product }) {
                 <Tag className="h-2.5 w-2.5 text-slate-400" />
                 {product.category}
               </span>
+            </div>
+          )}
+
+          {/* Customization Available Badge */}
+          {Boolean(product.customizationAvailable) && (
+            <div className="absolute left-3 bottom-3 z-10 flex items-center gap-1 rounded-md bg-indigo-600/95 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs backdrop-blur-xs">
+              <Sparkles className="h-3 w-3 text-amber-300" />
+              Customization Available
             </div>
           )}
 
@@ -76,6 +97,15 @@ function BuyProductCard({ product }) {
 
         {/* Info */}
         <div className="px-4 pt-3.5 pb-2">
+          <div className="flex items-center justify-between gap-1 mb-1">
+            <span className="font-mono text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/80 rounded px-1.5 py-0.2 shrink-0">
+              PID: {product.productId || product.sku}
+            </span>
+            <span className="text-[10px] font-mono text-slate-400 truncate">
+              {product.sku}
+            </span>
+          </div>
+
           <h3 className="line-clamp-2 text-sm font-semibold text-slate-900 transition-colors group-hover:text-primary-600">
             {product.name}
           </h3>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { CheckCircle2, Eye, XCircle } from 'lucide-react'
+import { CheckCircle2, Eye, Pencil } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import FilterBar from '../../components/admin/FilterBar.jsx'
@@ -9,10 +9,11 @@ import DetailRow from '../../components/admin/DetailRow.jsx'
 import EmptyState from '../../components/admin/EmptyState.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Badge from '../../components/ui/Badge.jsx'
-import Button from '../../components/ui/Button.jsx'
 import IconAction from '../../components/ui/IconAction.jsx'
 import PendingAccountDetailsModal from '../../components/admin/PendingAccountDetailsModal.jsx'
+import EditAccountModal from '../../components/admin/EditAccountModal.jsx'
 import { adminApi } from '../../lib/api.js'
+import { formatSupplierId } from '../../lib/idFormatters.js'
 
 const FILTERS = [{ label: 'All', options: ['Pending', 'Approved', 'Rejected'] }]
 
@@ -24,6 +25,8 @@ function PendingSuppliersPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [selectedSupplier, setSelectedSupplier] = useState(null)
+  const [editingSupplier, setEditingSupplier] = useState(null)
+  const [editModalOpen, setEditModalOpen] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
 
   const load = useCallback(async () => {
@@ -129,15 +132,27 @@ function PendingSuppliersPage() {
                 suppliers.map((supplier) => (
                   <tr key={supplier.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="whitespace-nowrap px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-700 font-bold text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSupplier(supplier)}
+                        className="group flex items-center gap-3 text-left transition-colors cursor-pointer focus:outline-hidden"
+                        title="Click to view complete supplier verification & details"
+                      >
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-50 text-teal-700 font-bold text-xs ring-2 ring-teal-100 group-hover:bg-teal-600 group-hover:text-white transition-all shadow-2xs">
                           {(supplier.supplier || supplier.fullName || 'S').slice(0, 2).toUpperCase()}
                         </div>
                         <div>
-                          <p className="font-semibold text-slate-800">{supplier.supplier || supplier.fullName}</p>
-                          <p className="text-xs text-slate-400">{supplier.email}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-slate-800 group-hover:text-teal-600 transition-colors">
+                              {supplier.supplier || supplier.fullName}
+                            </p>
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-600 font-medium group-hover:bg-teal-50 group-hover:text-teal-700 transition-colors">
+                              {supplier.supplierCode || formatSupplierId(supplier)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 group-hover:text-slate-600 transition-colors">{supplier.email}</p>
                         </div>
-                      </div>
+                      </button>
                     </td>
                     <td className="whitespace-nowrap px-5 py-4 text-slate-600 font-medium">{supplier.location}</td>
                     <td className="whitespace-nowrap px-5 py-4 text-slate-600">
@@ -154,12 +169,27 @@ function PendingSuppliersPage() {
                       <div className="flex items-center gap-2">
                         {/* View Details Button */}
                         <button
+                          type="button"
                           onClick={() => setSelectedSupplier(supplier)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-teal-600 hover:border-teal-200 transition-all shadow-2xs"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-teal-600 hover:border-teal-200 transition-all shadow-2xs cursor-pointer"
                           title="View complete supplier background and details"
                         >
                           <Eye className="h-3.5 w-3.5 text-slate-500" />
                           View Details
+                        </button>
+
+                        {/* Edit Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingSupplier(supplier)
+                            setEditModalOpen(true)
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 transition-all shadow-2xs cursor-pointer"
+                          title="Edit supplier details before approval"
+                        >
+                          <Pencil className="h-3.5 w-3.5 text-slate-500 hover:text-amber-600" />
+                          Edit
                         </button>
 
                         {/* Quick Approve Icon */}
@@ -186,17 +216,40 @@ function PendingSuppliersPage() {
           {suppliers.map((supplier) => (
             <MobileCard
               key={supplier.id}
-              title={supplier.supplier || supplier.fullName}
+              title={
+                <button
+                  type="button"
+                  onClick={() => setSelectedSupplier(supplier)}
+                  className="text-left font-semibold text-slate-800 hover:text-teal-600 transition-colors"
+                >
+                  {supplier.supplier || supplier.fullName}
+                  <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">
+                    {supplier.supplierCode || formatSupplierId(supplier)}
+                  </span>
+                </button>
+              }
               subtitle={supplier.email}
               badge={<Badge tone="warning">Pending Review</Badge>}
               actions={
                 <div className="flex items-center gap-2">
                   <button
+                    type="button"
                     onClick={() => setSelectedSupplier(supplier)}
                     className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                   >
                     <Eye className="h-3.5 w-3.5" />
                     Details
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingSupplier(supplier)
+                      setEditModalOpen(true)
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-amber-50 hover:text-amber-700"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit
                   </button>
                   <IconAction
                     icon={CheckCircle2}
@@ -230,7 +283,26 @@ function PendingSuppliersPage() {
         account={selectedSupplier}
         onApprove={handleApprove}
         onReject={handleReject}
+        onEdit={(accountToEdit) => {
+          setSelectedSupplier(null)
+          setEditingSupplier(accountToEdit)
+          setEditModalOpen(true)
+        }}
         actionLoading={actionLoading}
+      />
+
+      {/* Edit Account Modal Before Approval */}
+      <EditAccountModal
+        isOpen={editModalOpen}
+        account={editingSupplier}
+        onClose={() => {
+          setEditModalOpen(false)
+          setEditingSupplier(null)
+        }}
+        onSuccess={() => {
+          setSuccess('Supplier details updated successfully!')
+          load()
+        }}
       />
     </AdminLayout>
   )

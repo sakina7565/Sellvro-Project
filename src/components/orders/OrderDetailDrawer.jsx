@@ -1,9 +1,19 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Building2, ExternalLink, Printer, Tag, Warehouse, X } from 'lucide-react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
+import { Ban, Building2, Check, Clock, ExternalLink, Plus, Printer, RefreshCw, ShieldAlert, ShieldCheck, Star, Tag, Truck, Warehouse, X } from 'lucide-react'
 import Badge from '../ui/Badge.jsx'
 import Button from '../ui/Button.jsx'
+import TrackingModal from './TrackingModal.jsx'
+import CourierHandoverModal from './CourierHandoverModal.jsx'
+import OrderReviewModal from './OrderReviewModal.jsx'
+import UserCancelOrderModal from './UserCancelOrderModal.jsx'
+import UserUpdateTrackingModal from './UserUpdateTrackingModal.jsx'
+import ShippingAirwayBillModal from './ShippingAirwayBillModal.jsx'
+import SupplierOrderReviewModal from './SupplierOrderReviewModal.jsx'
 import { getErrorMessage, orderApi, mediaUrl } from '../../lib/api.js'
+import { formatSupplierId, formatUserId } from '../../lib/idFormatters.js'
+import { getCourierExternalTrackingUrl } from '../../lib/courierHelpers.js'
 import { formatShippingAddress, hasShippingAddress, ORDER_STATUS_OPTIONS } from '../../lib/orderHelpers.js'
+import { useAuth } from '../../context/AuthContext.jsx'
 
 function statusTone(status) {
   const value = String(status || '').toLowerCase()
@@ -13,14 +23,6 @@ function statusTone(status) {
   return 'neutral'
 }
 
-function Field({ label, children }) {
-  return (
-    <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</dt>
-      <dd className="mt-1 whitespace-pre-line text-sm font-medium text-slate-700">{children}</dd>
-    </div>
-  )
-}
 
 /**
  * Side drawer showing full order details for admin / user / supplier.
@@ -41,6 +43,87 @@ function OrderDetailDrawer({
   const [warehouseLoc, setWarehouseLoc] = useState('')
   const [showThermalLabel, setShowThermalLabel] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [trackingLive, setTrackingLive] = useState(false)
+  const [liveTrackSuccess, setLiveTrackSuccess] = useState('')
+  const [trackingModalOpen, setTrackingModalOpen] = useState(false)
+  const [courierModalOpen, setCourierModalOpen] = useState(false)
+  const [reviewModalOpen, setReviewModalOpen] = useState(false)
+  const [cancelModalOpen, setCancelModalOpen] = useState(false)
+  const [updateTrackingOpen, setUpdateTrackingOpen] = useState(false)
+  const [showLabelModal, setShowLabelModal] = useState(false)
+  const [cancellingBusy, setCancellingBusy] = useState(false)
+  const [actionSuccess, setActionSuccess] = useState('')
+
+  const { user: authUser } = useAuth()
+  const isAdmin = authUser?.role === 'admin'
+  const isSupplier = authUser?.role === 'supplier'
+  const [supplierReviewModalOpen, setSupplierReviewModalOpen] = useState(false)
+
+  const { isExpired, hoursElapsed, hoursRemaining, minutesRemaining } = useMemo(() => {
+    if (!order?.createdAt) return { isExpired: false, hoursElapsed: 0, hoursRemaining: 12, minutesRemaining: 0 }
+    const orderTime = new Date(order.createdAt).getTime()
+    const diffMs = Date.now() - orderTime
+    const totalMinutesElapsed = Math.floor(diffMs / (1000 * 60))
+    const totalMinutesLimit = 12 * 60
+    const isPast12h = totalMinutesElapsed >= totalMinutesLimit
+    const remainingMins = Math.max(0, totalMinutesLimit - totalMinutesElapsed)
+    return {
+      isExpired: isPast12h,
+      hoursElapsed: (diffMs / (1000 * 60 * 60)).toFixed(1),
+      hoursRemaining: Math.floor(remainingMins / 60),
+      minutesRemaining: remainingMins % 60,
+    }
+  }, [order?.createdAt])
+
+  const handleAdminApproveCancel = async () => {
+    if (!order?.id) return
+    if (isExpired) {
+      alert('Action Blocked: More than 12 hours have passed since order placement. Under strict policy, orders cannot be cancelled after 12 hours.')
+      return
+    }
+    if (!window.confirm(`Are you sure you want to approve cancellation for Order #${order.orderNo}? Full $${Number(order.total || 0).toFixed(2)} will be refunded to customer wallet.`)) return
+    setCancellingBusy(true)
+    setError('')
+    try {
+      const res = await orderApi.approveCancel(order.id)
+      setActionSuccess('Cancellation approved successfully. Order is cancelled and refunded.')
+      if (res?.order) {
+        setOrder(res.order)
+        onUpdated?.(res.order)
+      } else {
+        loadOrder()
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to approve cancellation.'))
+    } finally {
+      setCancellingBusy(false)
+    }
+  }
+
+  const handleAdminRejectCancel = async () => {
+    if (!order?.id) return
+    const reason = window.prompt('Enter reason for rejecting cancellation (minimum 5 characters):')
+    if (!reason || reason.trim().length < 5) {
+      if (reason !== null) alert('Please enter a valid rejection reason with at least 5 characters.')
+      return
+    }
+    setCancellingBusy(true)
+    setError('')
+    try {
+      const res = await orderApi.rejectCancel(order.id, reason.trim())
+      setActionSuccess('Cancellation request rejected. Order restored to active status.')
+      if (res?.order) {
+        setOrder(res.order)
+        onUpdated?.(res.order)
+      } else {
+        loadOrder()
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to reject cancellation.'))
+    } finally {
+      setCancellingBusy(false)
+    }
+  }
 
   const loadOrder = useCallback(async () => {
     if (!orderId) return
@@ -110,6 +193,47 @@ function OrderDetailDrawer({
     }
   }
 
+  const [pushingWms, setPushingWms] = useState(false)
+
+  const handlePushWms = async () => {
+    if (!order?.id) return
+    setPushingWms(true)
+    setError('')
+    try {
+      const res = await orderApi.pushWms(order.id)
+      if (res?.order) {
+        setOrder(res.order)
+        onUpdated?.(res.order)
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to push order to WMS.'))
+    } finally {
+      setPushingWms(false)
+    }
+  }
+
+  const handleLiveTrack = async () => {
+    if (!order?.id) return
+    setTrackingLive(true)
+    setError('')
+    setLiveTrackSuccess('')
+    try {
+      const res = await orderApi.trackWms(order.id)
+      if (res?.order) {
+        setOrder(res.order)
+        setStatus(res.order.status || status)
+        setWarehouseLoc(res.order.warehouseLocation || warehouseLoc)
+        onUpdated?.(res.order)
+        setLiveTrackSuccess('Live WMS Tracking synced successfully!')
+        setTimeout(() => setLiveTrackSuccess(''), 4500)
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to sync live tracking from WMS.'))
+    } finally {
+      setTrackingLive(false)
+    }
+  }
+
   if (!open) return null
 
   const shipping = order?.shippingAddress
@@ -162,6 +286,157 @@ function OrderDetailDrawer({
                 )}
               </div>
 
+              {actionSuccess && (
+                <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800">
+                  <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>{actionSuccess}</span>
+                </div>
+              )}
+
+              {/* Order Cancellation Request & 12-Hour Review Section */}
+              {(order.status === 'cancellation_pending' || order.cancellationRequest?.status === 'pending') && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-4 shadow-sm space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0" />
+                      <div>
+                        <h4 className="text-sm font-bold text-amber-950">Cancellation Request Pending Review</h4>
+                        <p className="text-xs text-amber-700">
+                          Requested by: <strong className="capitalize">{order.cancellationRequest?.requestedBy === 'supplier' ? 'Supplier' : 'Customer'}</strong>
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`inline-flex items-center gap-1 font-mono text-[11px] px-2 py-0.5 rounded font-bold ${isExpired ? 'bg-rose-200 text-rose-800' : 'bg-amber-200 text-amber-800'}`}>
+                      <Clock className="h-3 w-3" />
+                      {isExpired ? '12h Limit Expired' : `${hoursRemaining}h ${minutesRemaining}m left`}
+                    </span>
+                  </div>
+
+                  <div className="rounded-lg bg-white/80 border border-amber-200 p-3 text-xs text-slate-800">
+                    <span className="block text-[11px] font-bold text-slate-500 uppercase tracking-wide">Cancellation Reason</span>
+                    <p className="mt-1 font-medium italic">&quot;{order.cancellationRequest?.reason || 'No detailed reason provided'}&quot;</p>
+                    <span className="mt-2 block text-[10px] text-slate-400">Order placed {hoursElapsed} hours ago. Strict policy allows cancellation only within 12 hours.</span>
+                  </div>
+
+                  {isAdmin && (
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleAdminApproveCancel}
+                        disabled={isExpired || cancellingBusy}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed shadow-2xs"
+                        title={isExpired ? 'Cannot approve: 12-hour limit has expired' : 'Approve cancellation and refund customer'}
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        {cancellingBusy ? 'Processing...' : 'Approve Cancellation (100% Refund)'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAdminRejectCancel}
+                        disabled={cancellingBusy}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50 cursor-pointer shadow-2xs"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        Reject Request
+                      </button>
+                    </div>
+                  )}
+
+                  {isExpired && (
+                    <p className="text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded px-2.5 py-1">
+                      Policy Warning: More than 12 hours have passed since order placement. Under strict platform policy, this order cannot be cancelled.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Delivery Rating & Feedback Prompt Banner (If Delivered) */}
+              {(() => {
+                const isDelivered =
+                  (order.trackingStatus || order.status || order.warehouseLocation || '').toLowerCase() === 'delivered'
+                if (!isDelivered) return null
+
+                if (order.isReviewed) {
+                  return (
+                    <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+                      <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <span>
+                        <strong>Reviewed:</strong> You have submitted ratings &amp; review for this supplier and product.
+                      </span>
+                    </div>
+                  )
+                }
+
+                return (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-linear-to-r from-amber-50 to-orange-50 p-3 shadow-2xs">
+                    <div className="flex items-center gap-2.5">
+                      <Star className="h-5 w-5 fill-amber-500 text-amber-500 shrink-0" />
+                      <div>
+                        <h5 className="text-xs font-bold text-amber-900">Rate Supplier &amp; Product</h5>
+                        <p className="text-[11px] text-amber-700">Order delivered! Please share your feedback on delivery speed and product quality.</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReviewModalOpen(true)}
+                      className="inline-flex items-center gap-1 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-amber-600 transition cursor-pointer"
+                    >
+                      <Star className="h-3.5 w-3.5 fill-white" /> Rate Now
+                    </button>
+                  </div>
+                )
+              })()}
+
+              {/* Supplier Review & Terms Agreement Section */}
+              <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <ShieldCheck className="h-4 w-4 text-indigo-600 shrink-0" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                      Supplier Review &amp; Fulfillment Terms
+                    </span>
+                  </div>
+                  {order.supplierReviewStatus === 'accepted' ? (
+                    <Badge tone="success" className="bg-emerald-100 text-emerald-900 border-emerald-300">
+                      ✓ Accepted
+                    </Badge>
+                  ) : order.supplierReviewStatus === 'rejected' ? (
+                    <Badge tone="danger" className="bg-rose-100 text-rose-900 border-rose-300">
+                      ✕ Rejected
+                    </Badge>
+                  ) : (
+                    <Badge tone="warning" className="bg-amber-100 text-amber-900 border-amber-300 animate-pulse">
+                      Pending Review
+                    </Badge>
+                  )}
+                </div>
+
+                {order.supplierReviewStatus === 'accepted' ? (
+                  <p className="text-xs text-emerald-800 bg-emerald-50/80 p-2.5 rounded-lg border border-emerald-200 font-medium">
+                    Order fulfillment terms accepted by supplier on {order.supplierReviewedAt ? new Date(order.supplierReviewedAt).toLocaleString() : 'N/A'}. Preparing for dispatch within promised SLA.
+                  </p>
+                ) : order.supplierReviewStatus === 'rejected' ? (
+                  <p className="text-xs text-rose-800 bg-rose-50/80 p-2.5 rounded-lg border border-rose-200 font-medium">
+                    Order declined by supplier: <em>"{order.supplierRejectionReason || 'Fulfillment unavailable'}"</em>. 100% refund was issued to customer wallet.
+                  </p>
+                ) : (
+                  <div className="flex items-center justify-between gap-3 pt-1">
+                    <p className="text-xs text-slate-500">
+                      Supplier has not reviewed fulfillment details &amp; terms for this order yet.
+                    </p>
+                    {(isSupplier || isAdmin) && order.status !== 'cancelled' && order.status !== 'delivered' && (
+                      <button
+                        type="button"
+                        onClick={() => setSupplierReviewModalOpen(true)}
+                        className="rounded-lg bg-amber-500 hover:bg-amber-600 px-3 py-1.5 text-xs font-bold text-white shadow-2xs transition shrink-0 cursor-pointer"
+                      >
+                        Review Order
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Warehouse Custody Banner */}
               <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="flex items-center gap-2.5">
@@ -187,11 +462,10 @@ function OrderDetailDrawer({
                   </div>
                 </div>
                 <span
-                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold shadow-xs ${
-                    order.warehouseLocation === 'wms_hub'
-                      ? 'border border-amber-200 bg-amber-50 text-amber-800'
-                      : 'border border-blue-200 bg-blue-50 text-blue-800'
-                  }`}
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold shadow-xs ${order.warehouseLocation === 'wms_hub'
+                    ? 'border border-amber-200 bg-amber-50 text-amber-800'
+                    : 'border border-blue-200 bg-blue-50 text-blue-800'
+                    }`}
                 >
                   {order.warehouseLocation === 'wms_hub' ? 'WMS Fulfilled' : 'Supplier Direct'}
                 </span>
@@ -203,7 +477,7 @@ function OrderDetailDrawer({
                   <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">User / Buyer</dt>
                   <dd className="mt-1">
                     <span className="inline-block rounded bg-indigo-50 px-1.5 py-0.5 font-mono text-xs font-bold text-indigo-700">
-                      {order.userDisplayId || (order.userId ? `USR-${order.userId.slice(-6).toUpperCase()}` : '—')}
+                      {formatUserId(order.userDisplayId || order.userId)}
                     </span>
                     <p className="mt-1 text-sm font-semibold text-slate-800">{order.user}</p>
                     {order.userEmail ? <p className="text-xs text-slate-500">{order.userEmail}</p> : null}
@@ -214,7 +488,7 @@ function OrderDetailDrawer({
                   <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Supplier / Vendor</dt>
                   <dd className="mt-1">
                     <span className="inline-block rounded bg-amber-50 px-1.5 py-0.5 font-mono text-xs font-bold text-amber-800">
-                      {order.supplierDisplayId || (order.supplierId ? `SUP-${order.supplierId.slice(-6).toUpperCase()}` : '—')}
+                      {formatSupplierId(order.supplierDisplayId || order.supplierId)}
                     </span>
                     <p className="mt-1 text-sm font-semibold text-slate-800">{order.supplier}</p>
                     {order.supplierEmail ? <p className="text-xs text-slate-500">{order.supplierEmail}</p> : null}
@@ -243,15 +517,27 @@ function OrderDetailDrawer({
                     <p className="font-medium text-slate-700">${Number(order.total || 0).toFixed(2)}</p>
                   </div>
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                <div className="mt-3 grid grid-cols-3 gap-3 text-sm pt-2 border-t border-slate-200/60">
                   <div>
-                    <p className="text-xs text-slate-400">Commission</p>
-                    <p className="font-medium text-slate-700">${Number(order.commission || 0).toFixed(2)}</p>
+                    <p className="text-[11px] font-semibold text-slate-400">Gross Total</p>
+                    <p className="font-bold text-slate-900">${Number(order.total || 0).toFixed(2)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400">Payout</p>
-                    <p className="font-medium capitalize text-slate-700">{order.payoutStatus || '—'}</p>
+                    <p className="text-[11px] font-semibold text-rose-500">
+                      Platform Fee ({order.commissionPercent || Math.round((Number(order.commission || 0) / (Number(order.total) || 1)) * 100)}%)
+                    </p>
+                    <p className="font-bold text-rose-600">-${Number(order.commission || 0).toFixed(2)}</p>
                   </div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-emerald-600">Supplier Net</p>
+                    <p className="font-bold text-emerald-700">
+                      ${Number((Number(order.total || 0) - Number(order.commission || 0)).toFixed(2))}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-2.5 flex items-center justify-between text-xs text-slate-500 pt-1.5 border-t border-slate-100">
+                  <span>Payout Settlement Status:</span>
+                  <span className="font-bold uppercase tracking-wider text-indigo-700">{order.payoutStatus || 'pending'}</span>
                 </div>
               </div>
 
@@ -295,24 +581,22 @@ function OrderDetailDrawer({
                     </div>
                   ) : null}
 
-                  <div className="col-span-2 border-t border-indigo-100/60 pt-2.5 flex items-center justify-between">
+                  <div className="col-span-2 border-t border-indigo-100/60 pt-2.5 flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowLabelModal(true)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-indigo-700 cursor-pointer"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                      View & Print 4x6 Airway Bill Label
+                    </button>
                     <button
                       type="button"
                       onClick={() => setShowThermalLabel((prev) => !prev)}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-indigo-700"
+                      className="text-xs font-semibold text-indigo-700 hover:underline cursor-pointer"
                     >
-                      <Printer className="h-3.5 w-3.5" />
-                      {showThermalLabel ? 'Hide Thermal Label' : 'View & Print Thermal Label'}
+                      {showThermalLabel ? 'Hide Quick Preview' : 'Quick Preview'}
                     </button>
-                    {showThermalLabel && (
-                      <button
-                        type="button"
-                        onClick={() => window.print()}
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-indigo-600"
-                      >
-                        Print 4x6 Label
-                      </button>
-                    )}
                   </div>
 
                   {showThermalLabel && (
@@ -337,7 +621,7 @@ function OrderDetailDrawer({
                             {order.warehouseLocation === 'wms_hub' ? 'Sellvro WMS Central Hub' : 'Supplier Facility Direct'}
                           </p>
                           <p className="text-[9px] text-slate-500">
-                            Supplier: {order.supplierDisplayId || (order.supplierId ? `SUP-${order.supplierId.slice(-6).toUpperCase()}` : '—')}
+                            Supplier: {formatSupplierId(order.supplierDisplayId || order.supplierId)}
                           </p>
                         </div>
                         <div>
@@ -392,13 +676,148 @@ function OrderDetailDrawer({
                           <span className="h-full w-1.5 bg-black"></span>
                         </div>
                         <p className="mt-0.5 text-[8px] tracking-widest text-slate-600">
-                          *{order.trackingNumber || `SLV-${order.orderNo}`}*
+                          *{order.trackingNumber || order.orderNo}*
                         </p>
                       </div>
                     </div>
                   )}
                 </div>
               </div>
+
+              {/* Dynamic Fulfillment Mode Card (WMS Warehouse vs Self-Fulfillment) */}
+              {order.isWmsOrder ? (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Warehouse className="h-4 w-4 text-emerald-700" />
+                      <p className="text-xs font-bold uppercase tracking-wide text-emerald-950">
+                        Sellvro WMS Warehouse Fulfillment
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-800">
+                      ⚡ WMS Order
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2.5 text-xs">
+                    <div>
+                      <span className="block text-[11px] text-slate-500">WMS Batch Number:</span>
+                      <strong className="font-mono text-emerald-900">
+                        {order.wmsBatchNumber || 'CBF-PENDING'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] text-slate-500">WMS Request #:</span>
+                      <strong className="font-mono text-emerald-900">
+                        {order.wmsRequestNumber || order.wmsFulfillmentId || '1-CBF-PENDING'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] text-slate-500">Warehouse Dispatch:</span>
+                      <span className="inline-flex items-center gap-1 font-bold capitalize text-emerald-800">
+                        <span className={`h-2 w-2 rounded-full ${order.isDispatched ? 'bg-emerald-600' : 'bg-amber-500 animate-pulse'}`} />
+                        {order.isDispatched ? 'Dispatched' : (order.wmsStatus === 'pushed' ? 'Queued in Warehouse' : (order.wmsStatus || 'Pending'))}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] text-slate-500">Tracking Status:</span>
+                      <strong className="font-semibold capitalize text-indigo-800">
+                        {order.wmsTrackingStatus ? order.wmsTrackingStatus.replace(/_/g, ' ') : (order.trackingStatus || 'Awaiting Pickup')}
+                      </strong>
+                    </div>
+                    {order.wmsTrackingStatusDetail && (
+                      <div className="col-span-2 rounded bg-white/70 p-2 border border-emerald-100 text-[11px]">
+                        <span className="text-slate-500 font-medium">Status Detail: </span>
+                        <span className="text-slate-800 font-semibold">{order.wmsTrackingStatusDetail}</span>
+                      </div>
+                    )}
+                    {order.wmsDispatchProofUrl && (
+                      <div className="col-span-2">
+                        <a
+                          href={order.wmsDispatchProofUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900 underline"
+                        >
+                          <ExternalLink className="h-3 w-3" /> View Warehouse Dispatch Proof
+                        </a>
+                      </div>
+                    )}
+                    {order.dispatchedAt && (
+                      <div className="col-span-2 text-[11px] text-slate-500">
+                        Dispatched At: <strong className="text-slate-800">{new Date(order.dispatchedAt).toLocaleString()}</strong>
+                      </div>
+                    )}
+                    {order.wmsPushedAt && (
+                      <div className="col-span-2 border-t border-emerald-100/60 pt-1 text-[11px] text-slate-500">
+                        Registered in WMS at:{' '}
+                        <strong className="text-slate-800">
+                          {new Date(order.wmsPushedAt).toLocaleString()}
+                        </strong>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 pt-2.5 border-t border-emerald-100 flex items-center justify-between">
+                    <span className="text-[11px] text-emerald-800 font-medium">
+                      {liveTrackSuccess || 'Inventory deducted live from WMS'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleLiveTrack}
+                      disabled={trackingLive}
+                      className="inline-flex items-center gap-1 rounded-md bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-800 transition disabled:opacity-60 shadow-2xs cursor-pointer"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${trackingLive ? 'animate-spin' : ''}`} />
+                      {trackingLive ? 'Syncing...' : 'Live WMS Tracking'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Building2 className="h-4 w-4 text-blue-700" />
+                      <p className="text-xs font-bold uppercase tracking-wide text-blue-950">
+                        Self-Fulfillment (Supplier Facility Direct)
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-blue-100 border border-blue-300 px-2.5 py-0.5 text-[11px] font-bold text-blue-800">
+                      🏭 Self-Fulfilled
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2.5 text-xs">
+                    <div>
+                      <span className="block text-[11px] text-slate-500">Physical Stock Location:</span>
+                      <strong className="text-slate-900">Supplier Private Facility</strong>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] text-slate-500">Fulfillment Mode:</span>
+                      <strong className="text-blue-900">Direct Courier Handover</strong>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] text-slate-500">Custody Status:</span>
+                      <span className="inline-flex items-center gap-1 font-bold text-slate-800">
+                        <span className="h-2 w-2 rounded-full bg-blue-600" />
+                        {order.warehouseLocation === 'in_transit'
+                          ? 'In Courier Transit'
+                          : order.warehouseLocation === 'delivered'
+                            ? 'Delivered to Customer'
+                            : 'In Supplier Warehouse'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] text-slate-500">Promised Handling Time:</span>
+                      <strong className="text-emerald-700">{order.promisedHandlingTime || 'Within 24 Hours'}</strong>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-2.5 border-t border-blue-200/70 text-[11px] text-blue-950 font-medium">
+                    📦 Product is stored at your own facility. Pack the items, attach shipping label, and hand over to courier partner.
+                  </div>
+                </div>
+              )}
 
               {/* Live Parcel Tracking */}
               <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-4">
@@ -407,7 +826,7 @@ function OrderDetailDrawer({
                     Live Parcel Tracking
                   </p>
                   <span className="rounded border border-indigo-200 bg-white px-2 py-0.5 font-mono text-xs font-bold text-indigo-700">
-                    {order.trackingNumber || `SLV-${order.orderNo?.replace('ORD-', '')}`}
+                    {order.trackingNumber && !order.trackingNumber.startsWith('SLV-') ? order.trackingNumber : 'Awaiting Tracking ID'}
                   </span>
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-700">
@@ -422,6 +841,75 @@ function OrderDetailDrawer({
                   <div className="col-span-2 border-t border-indigo-100/50 pt-1">
                     <span className="block text-[11px] text-slate-400">Est. Delivery:</span>
                     <span className="font-medium text-slate-800">{order.estimatedDelivery || '3 - 5 Business Days'}</span>
+                  </div>
+                  <div className="col-span-2 pt-2 border-t border-indigo-100/60 flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setTrackingModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 transition shadow-2xs"
+                    >
+                      <Truck className="h-3.5 w-3.5" />
+                      Shipment Timeline
+                    </button>
+
+                    {order.status !== 'cancelled' && (
+                      <button
+                        type="button"
+                        onClick={() => setUpdateTrackingOpen(true)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        {order.trackingNumber ? 'Update Tracking ID' : 'Add Tracking ID'}
+                      </button>
+                    )}
+
+                    {order.status !== 'cancelled' &&
+                      order.status !== 'cancellation_pending' &&
+                      order.cancellationRequest?.status !== 'pending' &&
+                      !['in_transit', 'out_for_delivery', 'delivered'].includes((order.trackingStatus || '').toLowerCase()) &&
+                      !order.isDispatched &&
+                      order.warehouseLocation !== 'in_transit' &&
+                      order.warehouseLocation !== 'delivered' && (
+                        isExpired ? (
+                          <span
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 border border-slate-200 bg-slate-50 px-2.5 py-1.5 rounded-lg"
+                            title="12-hour cancellation window has expired"
+                          >
+                            <Clock className="h-3 w-3" /> Cancellation closed (&gt;12h)
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setCancelModalOpen(true)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 transition shadow-2xs"
+                          >
+                            <Ban className="h-3.5 w-3.5" />
+                            Cancel Order
+                          </button>
+                        )
+                      )}
+
+                    {getCourierExternalTrackingUrl(order.carrier, order.trackingNumber) && (
+                      <a
+                        href={getCourierExternalTrackingUrl(order.carrier, order.trackingNumber)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-blue-600 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition shadow-2xs"
+                      >
+                        <span>Track on {order.carrier || 'Courier'}</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+
+                    {showStatusUpdate && (
+                      <button
+                        type="button"
+                        onClick={() => setCourierModalOpen(true)}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 hover:text-blue-900 underline ml-auto"
+                      >
+                        Handover Courier
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -439,10 +927,28 @@ function OrderDetailDrawer({
               {/* Admin / Supplier Status & Custody Location Updater */}
               {showStatusUpdate && (
                 <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Update Status & Warehouse Custody
-                  </p>
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Dispatch & Courier Management
+                    </p>
+                    <span className="text-[10px] font-bold text-indigo-700 uppercase">
+                      {order.warehouseLocation === 'wms_hub' ? 'WMS Fulfilled' : 'Supplier Fulfilled'}
+                    </span>
+                  </div>
+
+                  {/* Primary Handover to Courier Button */}
+                  <Button
+                    type="button"
+                    size="sm"
+                    fullWidth
+                    onClick={() => setCourierModalOpen(true)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-md shadow-blue-500/20 py-2.5"
+                  >
+                    <Truck className="h-4 w-4 mr-1.5" />
+                    Handover to Courier / Dispatch Parcel
+                  </Button>
+
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 pt-2 border-t border-slate-200/80">
                     <div>
                       <label className="mb-1 block text-[11px] font-medium text-slate-600">Order Status</label>
                       <select
@@ -465,21 +971,39 @@ function OrderDetailDrawer({
                         className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-primary-300 focus:outline-none focus:ring-2 focus:ring-primary-100"
                       >
                         <option value="supplier_warehouse">🏭 At Supplier Warehouse</option>
-                        <option value="wms_hub">🏢 At WMS Central Hub</option>
+                        {order.isWmsOrder && <option value="wms_hub">🏢 At WMS Central Hub</option>}
                         <option value="in_transit">🚚 In Courier Transit</option>
                         <option value="delivered">✅ Delivered to Customer</option>
                       </select>
                     </div>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    fullWidth
-                    disabled={saving || (status === order.status && warehouseLoc === order.warehouseLocation)}
-                    onClick={handleStatusUpdate}
-                  >
-                    {saving ? 'Updating…' : 'Save Status & Custody Location'}
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      fullWidth
+                      disabled={saving || (status === order.status && warehouseLoc === order.warehouseLocation)}
+                      onClick={handleStatusUpdate}
+                    >
+                      {saving ? 'Updating…' : 'Save Status & Custody Location'}
+                    </Button>
+                    {order.isWmsOrder && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        fullWidth
+                        disabled={pushingWms}
+                        onClick={handlePushWms}
+                        className="border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+                      >
+                        <Warehouse className="h-3.5 w-3.5 mr-1 text-emerald-600" />
+                        {pushingWms
+                          ? 'Pushing to WMS…'
+                          : 'Re-Sync with WMS Warehouse'}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -488,6 +1012,94 @@ function OrderDetailDrawer({
           )}
         </div>
       </aside>
+
+      {/* Interactive Tracking Modal */}
+      {order && (
+        <TrackingModal
+          order={order}
+          open={trackingModalOpen}
+          onClose={() => setTrackingModalOpen(false)}
+        />
+      )}
+
+      {/* Courier Handover Modal */}
+      {order && (
+        <CourierHandoverModal
+          order={order}
+          open={courierModalOpen}
+          onClose={() => setCourierModalOpen(false)}
+          onSuccess={(next) => {
+            setOrder(next)
+            setStatus(next.status || status)
+            setWarehouseLoc(next.warehouseLocation || warehouseLoc)
+            onUpdated?.(next)
+          }}
+        />
+      )}
+
+      {/* Order Review Modal */}
+      {reviewModalOpen && order && (
+        <OrderReviewModal
+          order={order}
+          open={reviewModalOpen}
+          onClose={() => setReviewModalOpen(false)}
+          onSuccess={() => {
+            loadOrder()
+            onUpdated?.()
+          }}
+        />
+      )}
+
+      {/* Customer Order Cancellation Modal */}
+      {cancelModalOpen && order && (
+        <UserCancelOrderModal
+          order={order}
+          open={cancelModalOpen}
+          onClose={() => setCancelModalOpen(false)}
+          onSuccess={() => {
+            loadOrder()
+            onUpdated?.()
+          }}
+        />
+      )}
+
+      {/* Enter Real Courier Tracking Modal */}
+      {updateTrackingOpen && order && (
+        <UserUpdateTrackingModal
+          order={order}
+          open={updateTrackingOpen}
+          onClose={() => setUpdateTrackingOpen(false)}
+          onSuccess={() => {
+            loadOrder()
+            onUpdated?.()
+          }}
+        />
+      )}
+      {/* Official 4x6 Courier Shipping Airway Bill Modal */}
+      {showLabelModal && order && (
+        <ShippingAirwayBillModal
+          order={order}
+          open={showLabelModal}
+          onClose={() => setShowLabelModal(false)}
+        />
+      )}
+
+      {/* Supplier Order Fulfillment Review Modal */}
+      {supplierReviewModalOpen && order && (
+        <SupplierOrderReviewModal
+          order={order}
+          open={supplierReviewModalOpen}
+          onClose={() => setSupplierReviewModalOpen(false)}
+          onSuccess={(next) => {
+            setOrder(next)
+            setStatus(next.status || status)
+            setWarehouseLoc(next.warehouseLocation || warehouseLoc)
+            setActionSuccess(`Order #${next.orderNo || next.id} review recorded (${next.supplierReviewStatus?.toUpperCase()}).`)
+            setTimeout(() => setActionSuccess(''), 5000)
+            onUpdated?.(next)
+          }}
+        />
+      )}
     </div>
   )
 }

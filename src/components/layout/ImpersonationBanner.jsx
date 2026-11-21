@@ -14,10 +14,10 @@ function ImpersonationBanner() {
     try {
       const res = await authApi.switchBack()
       // Full redirect to guarantee fresh admin state and layout
-      window.location.href = res.redirectTo || '/admin/accounts'
+      window.location.href = res.redirectTo || '/admin/suppliers'
     } catch {
       // Fallback
-      window.location.href = '/admin/accounts'
+      window.location.href = '/admin/suppliers'
     }
   }
 

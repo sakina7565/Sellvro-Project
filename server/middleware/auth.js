@@ -38,6 +38,21 @@ export const protect = async (req, res, next) => {
   }
 }
 
+export const optionalProtect = async (req, _res, next) => {
+  try {
+    const token = readAuthToken(req)
+    if (!token) return next()
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
+    const user = await User.findById(decoded.id)
+    if (user && user.status !== 'suspended') {
+      req.user = user
+    }
+    return next()
+  } catch {
+    return next()
+  }
+}
+
 export const authorize =
   (...roles) =>
   (req, res, next) => {
@@ -48,10 +63,21 @@ export const authorize =
   }
 
 export const requireApproved = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Not authorized. Please log in.' })
+  }
   if (req.user.role !== 'admin' && req.user.status !== 'approved') {
+    const isSuspended = req.user.status === 'suspended'
+    const isRejected = req.user.status === 'rejected'
+    const roleLabel = req.user.role === 'supplier' ? 'Supplier' : 'User'
     return res.status(403).json({
-      message: 'Your account is not approved yet.',
+      message: isSuspended
+        ? `Your ${roleLabel} account has been suspended: ${req.user.suspensionReason || 'Performance policy violation'}. Restricted activities are blocked.`
+        : isRejected
+        ? `Your ${roleLabel} account application was rejected. Please review your submitted details or contact support.`
+        : `Your ${roleLabel} account is pending admin approval. You cannot perform restricted activities (orders, wallet, products) until your account has been approved by the Admin.`,
       status: req.user.status,
+      suspensionReason: req.user.suspensionReason || null,
     })
   }
   return next()

@@ -14,14 +14,28 @@ import {
   googleAuth,
   changePassword,
 } from '../controllers/authController.js'
-import { protect } from '../middleware/auth.js'
+import { protect, optionalProtect } from '../middleware/auth.js'
 import { authLimiter } from '../middleware/authLimiter.js'
+import { productUpload } from '../middleware/upload.js'
+
+const uploadIdCard = (req, res, next) => {
+  const contentType = req.headers['content-type'] || ''
+  if (contentType.includes('multipart/form-data')) {
+    return productUpload.single('idCard')(req, res, (err) => {
+      if (err) {
+        return res.status(400).json({ message: err.message || 'File upload failed.' })
+      }
+      next()
+    })
+  }
+  next()
+}
 
 const router = Router()
 
-router.post('/register', authLimiter, register)
+router.post('/register', authLimiter, uploadIdCard, register)
 router.post('/login', authLimiter, login)
-router.post('/admin/register', authLimiter, adminRegister)
+router.post('/admin/register', authLimiter, optionalProtect, adminRegister)
 router.post('/admin/login', authLimiter, adminLogin)
 router.get('/roles', getPublicRoles)
 router.post('/logout', logout)

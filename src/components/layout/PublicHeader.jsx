@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { LogOut, User, LayoutDashboard } from 'lucide-react'
+import { LogOut, LayoutDashboard } from 'lucide-react'
 import Logo from '../ui/Logo.jsx'
 import Button from '../ui/Button.jsx'
+import UserAvatar from '../ui/UserAvatar.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { getRedirectForUser } from '../../lib/authRedirect.js'
+import { getDashboardPathForUser } from '../../lib/authRedirect.js'
 
 /**
  * Top navigation bar shown on the public landing page.
@@ -17,7 +18,7 @@ function PublicHeader() {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
 
-  const homePath = getRedirectForUser(user) || '/login'
+  const homePath = getDashboardPathForUser(user) || '/user/dashboard'
   const displayName = user?.fullName || 'Account'
 
   const handleLogout = async () => {
@@ -51,29 +52,32 @@ function PublicHeader() {
               <button
                 type="button"
                 onClick={() => setMenuOpen((o) => !o)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-500 text-white shadow-sm transition-colors hover:bg-orange-600 focus:outline-none"
+                className="flex items-center justify-center rounded-full transition-transform hover:scale-105 focus:outline-none"
                 aria-label="Profile menu"
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
                 title={displayName}
               >
-                <User className="h-5 w-5" fill="currentColor" strokeWidth={0} />
+                <UserAvatar name={displayName} email={user?.email} src={user?.avatar} size="sm" />
               </button>
 
               {menuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-xl border border-slate-100 bg-white py-1 shadow-lg"
+                  className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-slate-100 bg-white py-1 shadow-lg"
                 >
                   {/* User info */}
-                  <div className="border-b border-slate-100 px-3 py-2.5">
-                    <p className="truncate text-sm font-semibold text-slate-800">{displayName}</p>
-                    {user?.email && (
-                      <p className="truncate text-xs text-slate-400">{user.email}</p>
-                    )}
-                    <span className="mt-1.5 inline-block rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold capitalize text-slate-600">
-                      {user?.role || 'User'}
-                    </span>
+                  <div className="flex items-center gap-2.5 border-b border-slate-100 px-3.5 py-3">
+                    <UserAvatar name={displayName} email={user?.email} src={user?.avatar} size="md" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-slate-800">{displayName}</p>
+                      {user?.email && (
+                        <p className="truncate text-xs text-slate-400">{user.email}</p>
+                      )}
+                      <span className="mt-1 inline-block rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold capitalize text-slate-600">
+                        {user?.role || 'User'}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Dashboard link */}

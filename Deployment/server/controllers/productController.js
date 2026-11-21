@@ -48,16 +48,56 @@ function readProductFields(body) {
     (fulfillBy === '' &&
       (body.inWarehouse === true || body.inWarehouse === 'true' || body.inWarehouse === '1'))
 
+  let itemSpecifics = {}
+  if (body.itemSpecifics) {
+    try {
+      itemSpecifics =
+        typeof body.itemSpecifics === 'string'
+          ? JSON.parse(body.itemSpecifics)
+          : body.itemSpecifics
+    } catch {
+      itemSpecifics = {}
+    }
+  }
+
+  let variations = []
+  if (body.variations) {
+    try {
+      variations =
+        typeof body.variations === 'string'
+          ? JSON.parse(body.variations)
+          : body.variations
+    } catch {
+      variations = []
+    }
+  }
+
+  const deliveryTime =
+    fulfillBy === 'warehouse' || inWarehouse
+      ? '1 Day (WMS Express Delivery)'
+      : String(body.deliveryTime || '2-3 Days').trim()
+
   return {
     name: String(body.name || '').trim(),
     sku: body.sku,
     category: String(body.category || '').trim(),
+    subcategory: String(body.subcategory || '').trim(),
     brand: String(body.brand || '').trim(),
     description: String(body.description || '').trim(),
     price: Number(body.price),
     quantity: Number(body.quantity || 0),
     fulfillBy,
     inWarehouse,
+    handlingTime: String(body.handlingTime || '1 business day').trim(),
+    deliveryTime,
+    condition: String(body.condition || 'Brand New').trim(),
+    color: String(body.color || '').trim(),
+    material: String(body.material || '').trim(),
+    mpn: String(body.mpn || '').trim(),
+    itemType: String(body.itemType || '').trim(),
+    numItemsInSet: String(body.numItemsInSet || '1').trim(),
+    itemSpecifics,
+    variations,
     location: String(body.location || '').trim(),
     country: String(body.country || '').trim(),
     barcode: String(body.barcode || '').trim(),
@@ -79,6 +119,10 @@ export const createProduct = async (req, res) => {
 
     if (!fields.name || !fields.category) {
       return res.status(400).json({ message: 'Product name and category are required.' })
+    }
+
+    if (!asDraft && !fields.subcategory) {
+      return res.status(400).json({ message: 'Subcategory is required. Please select a subcategory.' })
     }
 
     if (!asDraft && (!fields.fulfillBy || !['warehouse', 'self'].includes(fields.fulfillBy))) {
@@ -110,13 +154,13 @@ export const createProduct = async (req, res) => {
       : []
     const images = uploaded.length > 0 ? uploaded : fields.image ? [fields.image] : []
 
-    // Supplier restriction: Must upload at least 2 images
-    if (images.length < 2) {
+    // 6 images mandatory out of 10 (unless draft)
+    if (!asDraft && images.length < 6) {
       return res.status(400).json({
         message:
           images.length === 0
-            ? 'Please upload at least 2 images for the product. Multiple images are required.'
-            : 'Please upload at least 2 images. Products cannot be submitted with only 1 image.',
+            ? 'Please upload at least 6 images/videos for the product. Minimum 6 images are mandatory out of 10.'
+            : `Please upload at least 6 images/videos. Currently uploaded: ${images.length} of 6 mandatory.`,
       })
     }
 

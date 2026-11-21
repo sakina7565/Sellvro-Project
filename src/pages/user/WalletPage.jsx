@@ -3,19 +3,15 @@ import {
   User,
   Briefcase,
   HandCoins,
-  ArrowRightLeft,
-  DollarSign,
   ShieldCheck,
   Building,
   Smartphone,
-  CreditCard,
   Copy,
   Check,
   AlertCircle,
-  HelpCircle,
   QrCode,
   FileText,
-  Upload,
+  RotateCcw,
 } from 'lucide-react'
 import UserLayout from '../../components/layout/UserLayout.jsx'
 import StatCard from '../../components/dashboard/StatCard.jsx'
@@ -24,12 +20,13 @@ import Button from '../../components/ui/Button.jsx'
 import Badge from '../../components/ui/Badge.jsx'
 import Input from '../../components/ui/Input.jsx'
 import { walletApi, getErrorMessage, mediaUrl } from '../../lib/api.js'
+import { formatWalletTxId } from '../../lib/idFormatters.js'
 
 const TABLE_HEAD = [
   'TID / NO',
-  'SCREENSHOT',
-  'DEPOSIT AMOUNT',
-  'FINAL WALLET CREDIT',
+  'TYPE / METHOD',
+  'AMOUNT',
+  'WALLET CREDIT',
   'STATUS',
   'DATE',
 ]
@@ -108,7 +105,7 @@ const DEFAULT_USD_ACCOUNTS = [
 export default function UserWalletPage() {
   const [balance, setBalance] = useState(0)
   const [requests, setRequests] = useState([])
-  const [currencies, setCurrencies] = useState(DEFAULT_CURRENCIES)
+  const [, setCurrencies] = useState(DEFAULT_CURRENCIES)
   const [pkrAccounts, setPkrAccounts] = useState(DEFAULT_PKR_ACCOUNTS)
   const [usdAccounts, setUsdAccounts] = useState(DEFAULT_USD_ACCOUNTS)
   const [usdRatePerPkr, setUsdRatePerPkr] = useState(280)
@@ -254,11 +251,12 @@ export default function UserWalletPage() {
           depositCurrency: selectedCurrency.code,
           depositAmount: numAmount,
           bankTid: bankTid.trim(),
+          paymentMethod: selectedMethodId,
         },
         receipt,
       )
       setSuccess(
-        `Deposit request for ${numAmount.toLocaleString()} ${selectedCurrency.code} (~$${creditedUsd.toFixed(2)} USD net credit) submitted successfully! Admin will verify and approve your wallet credit.`,
+        `Wallet request for ${numAmount.toLocaleString()} ${selectedCurrency.code} (~$${creditedUsd.toFixed(2)} USD) submitted successfully! Admin will verify and credit your wallet.`,
       )
       setDepositAmount('')
       setBankTid('')
@@ -472,7 +470,8 @@ export default function UserWalletPage() {
           </div>
 
           {/* DEPOSIT FORM */}
-          <form className="space-y-5" onSubmit={handleSubmit}>
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            {/* 3. DEPOSIT AMOUNT & PROOF */}
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               {/* Amount Input */}
               <div>
@@ -579,11 +578,11 @@ export default function UserWalletPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[750px] text-left text-sm">
+          <table className="w-full min-w-[900px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-400 bg-slate-50/70">
                 {TABLE_HEAD.map((head) => (
-                  <th key={head} className="whitespace-nowrap px-5 py-3">
+                  <th key={head} className="whitespace-nowrap px-4 py-3">
                     {head}
                   </th>
                 ))}
@@ -593,64 +592,133 @@ export default function UserWalletPage() {
               {isEmpty && (
                 <tr>
                   <td colSpan={TABLE_HEAD.length} className="px-5 py-16 text-center text-sm text-slate-500">
-                    No transaction history found. Click "+ Deposit / Add Funds" to submit your first deposit.
+                    No transaction history found. Click &quot;+ Deposit / Add Funds&quot; to submit your first deposit.
                   </td>
                 </tr>
               )}
-              {requests.map((request) => (
-                <tr key={request.id} className="hover:bg-slate-50/50 transition">
-                  <td className="whitespace-nowrap px-5 py-4 font-mono font-medium text-slate-800">
-                    {request.bankTid}
-                  </td>
-                  <td className="whitespace-nowrap px-5 py-4 text-slate-500">
-                    {request.receiptImage ? (
-                      <a
-                        href={mediaUrl(request.receiptImage)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
-                      >
-                        View Slip
-                      </a>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-5 py-4">
-                    <span className="font-semibold text-slate-800">
-                      {request.depositAmount != null
-                        ? `${Number(request.depositAmount).toLocaleString()} ${request.depositCurrency || 'USD'}`
-                        : `$${Number(request.amount).toFixed(2)}`}
-                    </span>
-                    {request.depositCurrency && request.depositCurrency !== 'USD' && (
-                      <span className="block text-xs text-slate-400">
-                        Rate: 1 USD = {request.exchangeRate} {request.depositCurrency}
+              {requests.map((request) => {
+                const isRefund = Boolean(
+                  request.isRefund ||
+                  request.paymentMethod === 'wallet_refund' ||
+                  (request.refundType && request.refundType !== 'none') ||
+                  String(request.bankTid || '').toUpperCase().startsWith('REFUND-')
+                )
+
+                return (
+                  <tr
+                    key={request.id}
+                    className={`hover:bg-slate-50/50 transition ${isRefund ? 'bg-purple-50/25' : ''}`}
+                  >
+                    {/* 1. TID / NO */}
+                    <td className="whitespace-nowrap px-4 py-4">
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 font-mono text-xs font-bold text-indigo-700 ring-1 ring-inset ring-indigo-200">
+                          {formatWalletTxId(request)}
+                        </span>
+                        {isRefund && (
+                          <span className="inline-flex items-center gap-1 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-bold text-purple-700">
+                            <RotateCcw className="h-2.5 w-2.5" /> Refund
+                          </span>
+                        )}
+                      </div>
+                      <div className="font-mono text-xs text-slate-500 mt-1">{request.bankTid}</div>
+                      {request.receiptImage && !isRefund && (
+                        <a
+                          href={mediaUrl(request.receiptImage)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                        >
+                          <FileText className="h-3 w-3" /> View Slip
+                        </a>
+                      )}
+                    </td>
+
+                    {/* 2. TYPE / METHOD */}
+                    <td className="whitespace-nowrap px-4 py-4">
+                      {isRefund ? (
+                        <div>
+                          <span className="font-bold text-xs text-purple-900 block">
+                            Order Cancellation Refund
+                          </span>
+                          <span className="text-[11px] text-indigo-700 font-mono font-semibold">
+                            Order #{request.orderNo || request.bankTid.replace(/^REFUND-/, '')}
+                          </span>
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="font-semibold text-xs text-slate-800 uppercase tracking-wide block">
+                            {request.depositCurrency || 'USD'} Deposit
+                          </span>
+                          <span className="text-[11px] text-slate-500">
+                            {request.paymentMethod ? request.paymentMethod.replace(/_/g, ' ').toUpperCase() : 'OFFICIAL ACCOUNT'}
+                          </span>
+                        </div>
+                      )}
+                    </td>
+
+                    {/* 3. AMOUNT */}
+                    <td className="whitespace-nowrap px-4 py-4">
+                      {isRefund ? (
+                        <div>
+                          <span className="font-semibold text-slate-800">
+                            ${Number(request.amount).toFixed(2)} USD
+                          </span>
+                          <span className="block text-[11px] text-emerald-600 font-medium">
+                            100% Full Refund
+                          </span>
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="font-semibold text-slate-800">
+                            {request.depositAmount != null
+                              ? `${Number(request.depositAmount).toLocaleString()} ${request.depositCurrency || 'USD'}`
+                              : `$${Number(request.amount).toFixed(2)}`}
+                          </span>
+                          {request.depositCurrency && request.depositCurrency !== 'USD' && (
+                            <span className="block text-xs text-slate-400">
+                              Rate: 1 USD = {request.exchangeRate} {request.depositCurrency}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* 4. WALLET CREDIT */}
+                    <td className="whitespace-nowrap px-4 py-4">
+                      <span className="font-bold text-emerald-600 text-sm">
+                        +${Number(request.amount).toFixed(2)} USD
                       </span>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-5 py-4">
-                    <span className="font-bold text-emerald-600 text-sm">
-                      ${Number(request.amount).toFixed(2)} USD
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-5 py-4">
-                    <Badge
-                      tone={
-                        request.status === 'approved'
-                          ? 'success'
-                          : request.status === 'rejected'
-                          ? 'danger'
-                          : 'warning'
-                      }
-                    >
-                      {request.statusLabel || request.status}
-                    </Badge>
-                  </td>
-                  <td className="whitespace-nowrap px-5 py-4 text-xs text-slate-500">
-                    {request.date}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+
+                    {/* 5. STATUS */}
+                    <td className="whitespace-nowrap px-4 py-4">
+                      {isRefund ? (
+                        <Badge tone="success">
+                          Refunded
+                        </Badge>
+                      ) : (
+                        <Badge
+                          tone={
+                            request.status === 'approved'
+                              ? 'success'
+                              : request.status === 'rejected'
+                              ? 'danger'
+                              : 'warning'
+                          }
+                        >
+                          {request.statusLabel || request.status}
+                        </Badge>
+                      )}
+                    </td>
+
+                    {/* 6. DATE */}
+                    <td className="whitespace-nowrap px-4 py-4 text-xs text-slate-500">
+                      {request.date}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

@@ -25,6 +25,8 @@ function fileFilter(_req, file, cb) {
   const allowed = [
     'image/jpeg',
     'image/jpg',
+    'image/jfif',
+    'image/pjpeg',
     'image/png',
     'image/webp',
     'image/gif',
@@ -35,8 +37,11 @@ function fileFilter(_req, file, cb) {
     'video/ogg',
     'video/x-matroska',
   ]
-  if (!allowed.includes(file.mimetype)) {
-    return cb(new Error('Only PDF documents, JPG, PNG, WEBP, GIF images and MP4, WEBM videos are allowed.'))
+  const ext = path.extname(file.originalname || '').toLowerCase()
+  const isAllowedExt = /\.(jpe?g|jfif|pjpeg|pjp|png|webp|gif|pdf|mp4|webm|mov|ogg|mkv)$/i.test(ext)
+
+  if (!allowed.includes(file.mimetype) && !isAllowedExt) {
+    return cb(new Error('Only PDF documents, JPG, JPEG, JFIF, PNG, WEBP, GIF images and MP4, WEBM videos are allowed.'))
   }
   return cb(null, true)
 }
@@ -44,5 +49,5 @@ function fileFilter(_req, file, cb) {
 export const productUpload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 100 * 1024 * 1024, files: 10 },
+  limits: { fileSize: 25 * 1024 * 1024, files: 10 },
 })

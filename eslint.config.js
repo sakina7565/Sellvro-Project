@@ -45,4 +45,14 @@ export default [
     },
     settings: { react: { version: 'detect' } },
   },
+  {
+    // Root Passenger/aaPanel entry points are CommonJS Node scripts, not browser code
+    files: ['app.js', 'index.js'],
+    languageOptions: { ecmaVersion: 2022, sourceType: 'commonjs', globals: globals.node },
+  },
+  {
+    // Build tool configs run in Node
+    files: ['vite.config.js'],
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
+  },
 ]

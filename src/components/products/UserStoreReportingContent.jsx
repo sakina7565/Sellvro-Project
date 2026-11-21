@@ -1,37 +1,24 @@
 import {
-  AlertTriangle,
-  ArrowDownRight,
-  ArrowUpRight,
-  BarChart3,
   Box,
   Building2,
   Calendar,
-  CheckCircle2,
   Clock,
-  Coins,
   DollarSign,
   Download,
   Eye,
-  Filter,
-  HelpCircle,
   Layers,
   MapPin,
   Package,
   PackageCheck,
   PackageOpen,
-  Phone,
   RefreshCw,
   Search,
   ShieldCheck,
   ShoppingBag,
-  ShoppingCart,
   Store,
   Tag,
   TrendingUp,
   Truck,
-  User,
-  Users,
-  Wallet,
   X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -94,7 +81,7 @@ export default function UserStoreReportingContent() {
   const [walletBalance, setWalletBalance] = useState(0)
   const [storeProfile, setStoreProfile] = useState(null)
   const [userProfile, setUserProfile] = useState(null)
-  const [disputes, setDisputes] = useState([])
+  const [, setDisputes] = useState([])
 
   // Filters
   const [dateRange, setDateRange] = useState('all')

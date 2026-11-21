@@ -49,6 +49,7 @@ export function getErrorMessage(err, fallback = 'Something went wrong. Please tr
 }
 
 export async function apiRequest(path, { method = 'GET', body, formData } = {}) {
+  const isFormData = formData || (typeof FormData !== 'undefined' && body instanceof FormData)
   const headers = {}
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('sellvro_token') : null
@@ -56,7 +57,7 @@ export async function apiRequest(path, { method = 'GET', body, formData } = {}) 
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  if (body !== undefined && !formData) {
+  if (body !== undefined && !isFormData) {
     headers['Content-Type'] = 'application/json'
   }
 
@@ -66,7 +67,7 @@ export async function apiRequest(path, { method = 'GET', body, formData } = {}) 
       method,
       headers,
       credentials: 'include',
-      body: formData || (body ? JSON.stringify(body) : undefined),
+      body: isFormData ? (formData || body) : (body ? JSON.stringify(body) : undefined),
     })
   } catch {
     throw new ApiError(fallbackMessage(0), 0, null)
@@ -124,8 +125,27 @@ export const searchApi = {
 }
 
 export const businessApi = {
-  getMine: () => apiRequest('/business/me'),
-  submit: (payload) => apiRequest('/business/submit', { method: 'POST', body: payload }),
+  getMine: (params = {}) => {
+    const query = new URLSearchParams(params).toString()
+    return apiRequest(`/business/me${query ? `?${query}` : ''}`)
+  },
+  submit: (payload, file = null) => {
+    if (file || (typeof FormData !== 'undefined' && payload instanceof FormData)) {
+      const fd = payload instanceof FormData ? payload : new FormData()
+      if (!(payload instanceof FormData)) {
+        Object.entries(payload).forEach(([k, v]) => {
+          if (v !== undefined && v !== null) fd.append(k, String(v))
+        })
+      }
+      if (file && !(payload instanceof FormData && payload.has('idCard'))) {
+        fd.append('idCard', file)
+      }
+      return apiRequest('/business/submit', { method: 'POST', formData: fd })
+    }
+    return apiRequest('/business/submit', { method: 'POST', body: payload })
+  },
+  verifyCnic: (idCardNumber) =>
+    apiRequest('/business/verify-cnic', { method: 'POST', body: { idCardNumber } }),
 }
 
 export function mediaUrl(path) {
@@ -176,10 +196,21 @@ export const productApi = {
     })
     return apiRequest(`/products/wms/attach-media/${id}`, { method: 'POST', formData })
   },
+  verifyWms: (id) => apiRequest(`/products/${id}/verify-wms`, { method: 'POST' }),
+  syncWmsStock: (id) => apiRequest(`/products/${id}/sync-wms-stock`, { method: 'POST' }),
+  activate: (id) => apiRequest(`/products/${id}/activate`, { method: 'PATCH' }),
+  deactivate: (id) => apiRequest(`/products/${id}/deactivate`, { method: 'PATCH' }),
+  watch: (id) => apiRequest(`/products/${id}/watch`, { method: 'POST' }),
+  store: (supplierId) => apiRequest(`/products/store/${supplierId}`),
+  reviews: (id) => apiRequest(`/products/${id}/reviews`),
 }
 
 export const categoryApi = {
   list: () => apiRequest('/categories'),
+  businessCategories: (params = {}) => {
+    const query = new URLSearchParams(params).toString()
+    return apiRequest(`/categories/business${query ? `?${query}` : ''}`)
+  },
   create: (payload) => apiRequest('/categories', { method: 'POST', body: payload }),
   update: (id, payload) => apiRequest(`/categories/${id}`, { method: 'PATCH', body: payload }),
   remove: (id) => apiRequest(`/categories/${id}`, { method: 'DELETE' }),
@@ -210,8 +241,37 @@ export const orderApi = {
     apiRequest(`/orders/${id}/status`, { method: 'PATCH', body: { status } }),
   updateTracking: (id, payload) =>
     apiRequest(`/orders/${id}/tracking`, { method: 'PATCH', body: payload }),
+  updateUserTracking: (id, payload) =>
+    apiRequest(`/orders/${id}/user-tracking`, { method: 'PATCH', body: payload }),
+  cancel: (id, reason = '') =>
+    apiRequest(`/orders/${id}/cancel`, { method: 'POST', body: { reason } }),
+  requestCancel: (id, reason = '') =>
+    apiRequest(`/orders/${id}/request-cancel`, { method: 'POST', body: { reason } }),
+  approveCancel: (id, adminNote = '') =>
+    apiRequest(`/orders/${id}/approve-cancel`, { method: 'POST', body: { adminNote } }),
+  rejectCancel: (id, rejectionReason = '') =>
+    apiRequest(`/orders/${id}/reject-cancel`, { method: 'POST', body: { rejectionReason } }),
+  supplierReview: (id, payload) =>
+    apiRequest(`/orders/${id}/supplier-review`, { method: 'POST', body: payload }),
+  pushWms: (id) => apiRequest(`/orders/${id}/push-wms`, { method: 'POST' }),
+  trackWms: (id) => apiRequest(`/orders/${id}/track-wms`),
+  liveWmsOrders: (params = {}) => {
+    const query = new URLSearchParams(params).toString()
+    return apiRequest(`/orders/wms/live-list${query ? `?${query}` : ''}`)
+  },
+  publicTrack: (ref) => apiRequest(`/orders/public-track/${encodeURIComponent(ref)}`),
   dashboardStats: (period = 'all') =>
     apiRequest(`/orders/dashboard/stats?period=${encodeURIComponent(period)}`),
+  submitReview: (id, payload) =>
+    apiRequest(`/orders/${id}/review`, { method: 'POST', body: payload }),
+  pendingReviews: () => apiRequest('/orders/pending-review'),
+  parseLabel: (file, productId = '', text = '') => {
+    const formData = new FormData()
+    if (file) formData.append('labelFile', file)
+    if (productId) formData.append('productId', productId)
+    if (text) formData.append('text', text)
+    return apiRequest('/orders/parse-label', { method: 'POST', formData })
+  },
 }
 
 export const walletApi = {
@@ -270,6 +330,8 @@ export const adminApi = {
   },
   updateProductCommission: (id, commission) =>
     apiRequest(`/admin/products/${id}/commission`, { method: 'PATCH', body: { commission } }),
+  updateProductResearch: (id, payload) =>
+    apiRequest(`/admin/products/${id}/research`, { method: 'PATCH', body: payload }),
   createProduct: (payload, files = []) => {
     const formData = new FormData()
     Object.entries(payload).forEach(([key, value]) => {
@@ -290,6 +352,16 @@ export const adminApi = {
   updateCategory: (id, payload) =>
     apiRequest(`/admin/categories/${id}`, { method: 'PATCH', body: payload }),
   deleteCategory: (id) => apiRequest(`/admin/categories/${id}`, { method: 'DELETE' }),
+  businessCategories: (params = {}) => {
+    const query = new URLSearchParams(params).toString()
+    return apiRequest(`/admin/categories/business${query ? `?${query}` : ''}`)
+  },
+  createBusinessCategory: (payload) =>
+    apiRequest('/admin/categories/business', { method: 'POST', body: payload }),
+  updateBusinessCategory: (id, payload) =>
+    apiRequest(`/admin/categories/business/${id}`, { method: 'PATCH', body: payload }),
+  deleteBusinessCategory: (id) =>
+    apiRequest(`/admin/categories/business/${id}`, { method: 'DELETE' }),
   orders: () => apiRequest('/admin/orders'),
   updateOrderTracking: (id, payload) =>
     apiRequest(`/admin/orders/${id}/tracking`, { method: 'PATCH', body: payload }),
@@ -304,13 +376,33 @@ export const adminApi = {
   payouts: () => apiRequest('/admin/payouts'),
   processPayout: (supplierId) =>
     apiRequest(`/admin/payouts/${supplierId}/process`, { method: 'PATCH' }),
+  pendingWeeklyPayouts: () => apiRequest('/admin/finances/pending-weeks'),
   supplierFinances: () => apiRequest('/admin/finances/suppliers'),
   supplierMonthlyHistory: (supplierId) =>
     apiRequest(`/admin/finances/suppliers/${supplierId}/monthly`),
-  supplierMonthOrders: (supplierId, monthKey) =>
-    apiRequest(`/admin/finances/suppliers/${supplierId}/monthly/${monthKey}/orders`),
-  executeSupplierPayout: (supplierId, payload) =>
-    apiRequest(`/admin/finances/suppliers/${supplierId}/payout`, { method: 'POST', body: payload }),
+  supplierMonthOrders: (supplierId, monthKey, weekKey) => {
+    const q = weekKey ? `?weekKey=${encodeURIComponent(weekKey)}` : ''
+    return apiRequest(`/admin/finances/suppliers/${supplierId}/monthly/${monthKey}/orders${q}`)
+  },
+  executeSupplierPayout: (supplierId, payload, receiptFile) => {
+    if (receiptFile) {
+      const fd = new FormData()
+      Object.entries(payload || {}).forEach(([k, v]) => {
+        if (v !== undefined && v !== null) {
+          fd.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v))
+        }
+      })
+      fd.append('receipt', receiptFile)
+      return apiRequest(`/admin/finances/suppliers/${supplierId}/payout`, {
+        method: 'POST',
+        formData: fd,
+      })
+    }
+    return apiRequest(`/admin/finances/suppliers/${supplierId}/payout`, {
+      method: 'POST',
+      body: payload,
+    })
+  },
   supplierDisputes: () => apiRequest('/admin/disputes/supplier'),
   userComplaints: () => apiRequest('/admin/disputes/user'),
   disputeUnreadCount: () => apiRequest('/admin/disputes/unread-count'),
@@ -356,5 +448,17 @@ export const adminApi = {
   locations: () => apiRequest('/admin/locations'),
   createLocation: (payload) => apiRequest('/admin/locations', { method: 'POST', body: payload }),
   deleteLocation: (id) => apiRequest(`/admin/locations/${id}`, { method: 'DELETE' }),
+  warnSupplier: (id, payload) =>
+    apiRequest(`/admin/suppliers/${id}/warn`, { method: 'POST', body: payload }),
+  penalizeSupplier: (id, payload) =>
+    apiRequest(`/admin/suppliers/${id}/penalty`, { method: 'POST', body: payload }),
+  suspendSupplier: (id, payload) =>
+    apiRequest(`/admin/suppliers/${id}/suspend`, { method: 'POST', body: payload }),
+  reinstateSupplier: (id) =>
+    apiRequest(`/admin/suppliers/${id}/reinstate`, { method: 'POST' }),
+  supplierPerformanceReport: (id) =>
+    apiRequest(`/admin/suppliers/${id}/performance-report`),
+  sendMessageToSupplier: (id, payload) =>
+    apiRequest(`/admin/suppliers/${id}/send-message`, { method: 'POST', body: payload }),
 }
 

@@ -27,12 +27,19 @@ import {
   updateAccount,
   deleteAccount,
   impersonateAccount,
+  warnSupplierAccount,
+  suspendSupplierAccount,
+  reinstateSupplierAccount,
+  getSupplierPerformanceReport,
+  penalizeSupplierAccount,
+  sendSupplierMessage,
   listCountries,
   createCountry,
   deleteCountry,
   listLocations,
   createLocation,
   deleteLocation,
+  listAuditLogs,
 } from '../controllers/adminController.js'
 
 import {
@@ -45,18 +52,19 @@ import {
   deactivateProduct,
   createAdminProduct,
   updateAdminProduct,
+  updateProductResearch,
 } from '../controllers/productController.js'
 
 import {
 
   createCategory,
-
   updateCategory,
-
   deleteCategory,
-
   listCategories,
-
+  listBusinessCategories,
+  createBusinessCategory,
+  updateBusinessCategory,
+  deleteBusinessCategory,
 } from '../controllers/categoryController.js'
 
 import { listAllOrders, updateOrderTracking } from '../controllers/orderController.js'
@@ -72,6 +80,7 @@ import {
 import {
   listAdminPayouts,
   processSupplierPayout,
+  getPendingWeeklyPayouts,
   getSuppliersFinancialOverview,
   getSupplierMonthlyHistory,
   getSupplierMonthOrders,
@@ -126,6 +135,15 @@ function handleProductPhotos(req, res, next) {
   productUpload.array('photos', 10)(req, res, (err) => {
     if (err) {
       return res.status(400).json({ message: err.message || 'Photo upload failed.' })
+    }
+    return next()
+  })
+}
+
+function handleReceiptUpload(req, res, next) {
+  productUpload.single('receipt')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ message: err.message || 'Receipt upload failed.' })
     }
     return next()
   })
@@ -213,6 +231,7 @@ router.get(
 )
 
 router.patch('/products/:id/commission', requirePermission('admin.products.approve'), updateProductCommission)
+router.patch('/products/:id/research', requirePermission('admin.products.approve', 'admin.products.create'), updateProductResearch)
 router.patch('/products/:id', requirePermission('admin.products.approve', 'admin.products.create'), handleProductPhotos, updateAdminProduct)
 
 router.post(
@@ -231,6 +250,11 @@ router.patch('/products/:id/activate', requirePermission('admin.products.approve
 router.patch('/products/:id/deactivate', requirePermission('admin.products.approve'), deactivateProduct)
 
 
+
+router.get('/categories/business', requirePermission('admin.categories.view'), listBusinessCategories)
+router.post('/categories/business', requirePermission('admin.categories.manage'), createBusinessCategory)
+router.patch('/categories/business/:id', requirePermission('admin.categories.manage'), updateBusinessCategory)
+router.delete('/categories/business/:id', requirePermission('admin.categories.manage'), deleteBusinessCategory)
 
 router.get('/categories', requirePermission('admin.categories.view'), listCategories)
 router.post('/categories', requirePermission('admin.categories.manage'), createCategory)
@@ -281,10 +305,11 @@ router.get('/payouts', requirePermission('admin.payouts.view'), listAdminPayouts
 router.patch('/payouts/:supplierId/process', requirePermission('admin.payouts.process'), processSupplierPayout)
 
 // Detailed Supplier Finances, Monthly Breakdowns & Payout Processing
+router.get('/finances/pending-weeks', requirePermission('admin.payouts.view'), getPendingWeeklyPayouts)
 router.get('/finances/suppliers', requirePermission('admin.payouts.view'), getSuppliersFinancialOverview)
 router.get('/finances/suppliers/:supplierId/monthly', requirePermission('admin.payouts.view'), getSupplierMonthlyHistory)
 router.get('/finances/suppliers/:supplierId/monthly/:monthKey/orders', requirePermission('admin.payouts.view'), getSupplierMonthOrders)
-router.post('/finances/suppliers/:supplierId/payout', requirePermission('admin.payouts.process'), executeSupplierPayout)
+router.post('/finances/suppliers/:supplierId/payout', requirePermission('admin.payouts.process'), handleReceiptUpload, executeSupplierPayout)
 
 
 
@@ -371,6 +396,44 @@ router.post(
   '/impersonate/:id',
   requireSuperAdmin,
   impersonateAccount,
+)
+
+router.get(
+  '/audit-logs',
+  requireSuperAdmin,
+  listAuditLogs,
+)
+
+// Supplier Performance Warning, Suspension, Penalty & SLA Routes
+router.get(
+  '/suppliers/:id/performance-report',
+  requirePermission('admin.suppliers.view'),
+  getSupplierPerformanceReport,
+)
+router.post(
+  '/suppliers/:id/warn',
+  requirePermission('admin.suppliers.approve'),
+  warnSupplierAccount,
+)
+router.post(
+  '/suppliers/:id/penalty',
+  requirePermission('admin.suppliers.approve'),
+  penalizeSupplierAccount,
+)
+router.post(
+  '/suppliers/:id/suspend',
+  requirePermission('admin.suppliers.approve'),
+  suspendSupplierAccount,
+)
+router.post(
+  '/suppliers/:id/reinstate',
+  requirePermission('admin.suppliers.approve'),
+  reinstateSupplierAccount,
+)
+router.post(
+  '/suppliers/:id/send-message',
+  requirePermission('admin.suppliers.approve'),
+  sendSupplierMessage,
 )
 
 export default router

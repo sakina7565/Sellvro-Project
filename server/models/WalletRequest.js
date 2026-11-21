@@ -2,6 +2,11 @@ import mongoose from 'mongoose'
 
 const walletRequestSchema = new mongoose.Schema(
   {
+    transactionId: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -56,6 +61,58 @@ const walletRequestSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    // Shipping Courier Option selected by client (USPS, UPS, FedEx)
+    // courier: {
+    //   type: String,
+    //   enum: ['USPS', 'UPS', 'FedEx', 'None'],
+    //   default: 'None',
+    // },
+    // courierService: {
+    //   type: String,
+    //   trim: true,
+    //   default: '',
+    // },
+    // Payment Method & Client Account Details for International Real Transfer
+    paymentMethod: {
+      type: String,
+      trim: true,
+      default: 'bank_wire', // 'wise', 'payoneer', 'stripe', 'bank_wire', 'usdt', 'pkr_ibft'
+    },
+    clientAccountNumber: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    clientIban: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    clientBankName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    // Real Payment Transfer Execution Status & Tracking Reference
+    realTransferStatus: {
+      type: String,
+      enum: ['pending', 'processing', 'completed', 'failed'],
+      default: 'pending',
+    },
+    realTransferRef: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    realTransferProvider: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    realTransferDate: {
+      type: Date,
+      default: null,
+    },
     status: {
       type: String,
       enum: ['pending', 'approved', 'rejected'],
@@ -66,9 +123,47 @@ const walletRequestSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    // Associated Order & Refund Details for Cancelled Orders
+    order: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Order',
+      default: null,
+    },
+    orderNo: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    refundType: {
+      type: String,
+      enum: ['order_cancellation', 'dispute_refund', 'none'],
+      default: 'none',
+    },
+    supplierAmount: {
+      type: Number,
+      default: 0,
+    },
+    commissionRefunded: {
+      type: Number,
+      default: 0,
+    },
   },
   { timestamps: true },
 )
+
+walletRequestSchema.pre('save', async function setTransactionId(next) {
+  if (!this.transactionId) {
+    try {
+      const { getNextWalletTxId } = await import('../services/sequenceService.js')
+      this.transactionId = await getNextWalletTxId()
+    } catch {
+      const yy = new Date().getFullYear().toString().slice(-2)
+      const num = 10001 + (parseInt(this._id ? this._id.toString().slice(-4) : '10001', 16) % 89999)
+      this.transactionId = `${yy}-W-${String(num).slice(-5)}`
+    }
+  }
+  next()
+})
 
 walletRequestSchema.methods.toSafeObject = function toSafeObject(businessName = 'No Business', profile = null) {
   const userDoc = this.user
@@ -79,8 +174,17 @@ walletRequestSchema.methods.toSafeObject = function toSafeObject(businessName = 
   const walletBalance = userDoc && typeof userDoc === 'object' ? userDoc.walletBalance ?? 0 : 0
   const userStatus = userDoc && typeof userDoc === 'object' ? userDoc.status || 'approved' : 'approved'
 
+  const yy = this.createdAt
+    ? new Date(this.createdAt).getFullYear().toString().slice(-2)
+    : new Date().getFullYear().toString().slice(-2)
+  const hex = this._id ? this._id.toString() : ''
+  const fallbackNum = String(10001 + (parseInt(hex.slice(-4) || '10001', 16) % 89999)).slice(-5)
+  const transactionId = this.transactionId || `${yy}-W-${fallbackNum}`
+
   return {
     id: this._id.toString(),
+    transactionId,
+    transactionDisplayId: transactionId,
     userId: userDoc?._id?.toString?.() || userDoc?.toString?.() || '',
     user: userName,
     business: businessName || 'No Business',
@@ -101,18 +205,35 @@ walletRequestSchema.methods.toSafeObject = function toSafeObject(businessName = 
     conversionFee: this.conversionFee || 0,
     bankTid: this.bankTid,
     receiptImage: this.receiptImage,
+    courier: this.courier || 'None',
+    courierService: this.courierService || '',
+    paymentMethod: this.paymentMethod || 'bank_wire',
+    clientAccountNumber: this.clientAccountNumber || '',
+    clientIban: this.clientIban || '',
+    clientBankName: this.clientBankName || '',
+    realTransferStatus: this.realTransferStatus || 'pending',
+    realTransferRef: this.realTransferRef || '',
+    realTransferProvider: this.realTransferProvider || '',
+    realTransferDate: this.realTransferDate,
     status: this.status,
     statusLabel:
       this.status === 'pending'
         ? 'New Request'
         : this.status.charAt(0).toUpperCase() + this.status.slice(1),
     adminNote: this.adminNote,
+    // Order Refund Properties
+    order: this.order ? (this.order._id || this.order).toString() : null,
+    orderNo: this.orderNo || '',
+    refundType: this.refundType || (this.paymentMethod === 'wallet_refund' ? 'order_cancellation' : 'none'),
+    supplierAmount: Number(this.supplierAmount || 0),
+    commissionRefunded: Number(this.commissionRefunded || 0),
+    isRefund: this.paymentMethod === 'wallet_refund' || (Boolean(this.refundType) && this.refundType !== 'none'),
     date: this.createdAt
       ? new Date(this.createdAt).toLocaleDateString('en-US', {
-          month: 'short',
-          day: '2-digit',
-          year: 'numeric',
-        })
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+      })
       : '—',
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,

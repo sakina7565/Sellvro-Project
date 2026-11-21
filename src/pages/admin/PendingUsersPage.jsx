@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { CheckCircle2, Eye, XCircle } from 'lucide-react'
+import { CheckCircle2, Eye, Pencil } from 'lucide-react'
 import AdminLayout from '../../components/layout/AdminLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import FilterBar from '../../components/admin/FilterBar.jsx'
@@ -10,8 +10,11 @@ import DetailRow from '../../components/admin/DetailRow.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Badge from '../../components/ui/Badge.jsx'
 import IconAction from '../../components/ui/IconAction.jsx'
+import UserAvatar from '../../components/ui/UserAvatar.jsx'
 import PendingAccountDetailsModal from '../../components/admin/PendingAccountDetailsModal.jsx'
+import EditAccountModal from '../../components/admin/EditAccountModal.jsx'
 import { adminApi } from '../../lib/api.js'
+import { formatUserId } from '../../lib/idFormatters.js'
 
 const FILTERS = [{ label: 'All Status', options: ['Pending', 'approved', 'suspended'] }]
 
@@ -23,6 +26,8 @@ function PendingUsersPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [selectedUser, setSelectedUser] = useState(null)
+  const [editingUser, setEditingUser] = useState(null)
+  const [editModalOpen, setEditModalOpen] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
 
   const load = useCallback(async () => {
@@ -133,15 +138,25 @@ function PendingUsersPage() {
                 users.map((user) => (
                   <tr key={user.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="whitespace-nowrap px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-700 font-bold text-xs">
-                          {(user.fullName || 'U').slice(0, 2).toUpperCase()}
-                        </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedUser(user)}
+                        className="group flex items-center gap-3 text-left transition-colors cursor-pointer focus:outline-hidden"
+                        title="Click to view complete pending profile & verification details"
+                      >
+                        <UserAvatar name={user.fullName} email={user.email} src={user.avatar} size="md" />
                         <div>
-                          <p className="font-semibold text-slate-800">{user.fullName}</p>
-                          <p className="text-xs text-slate-400">{user.email}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-slate-800 group-hover:text-teal-600 transition-colors">
+                              {user.fullName}
+                            </p>
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-600 font-medium group-hover:bg-teal-50 group-hover:text-teal-700 transition-colors">
+                              {user.userCode || formatUserId(user)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 group-hover:text-slate-600 transition-colors">{user.email}</p>
                         </div>
-                      </div>
+                      </button>
                     </td>
                     <td className="whitespace-nowrap px-5 py-4 font-semibold text-slate-700">{user.wallet}</td>
                     <td className="whitespace-nowrap px-5 py-4 text-slate-600 font-medium">{user.location}</td>
@@ -153,12 +168,27 @@ function PendingUsersPage() {
                       <div className="flex items-center gap-2">
                         {/* View Details Button */}
                         <button
+                          type="button"
                           onClick={() => setSelectedUser(user)}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-teal-600 hover:border-teal-200 transition-all shadow-2xs"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-teal-600 hover:border-teal-200 transition-all shadow-2xs cursor-pointer"
                           title="View complete user details and registration profile"
                         >
                           <Eye className="h-3.5 w-3.5 text-slate-500" />
                           View Details
+                        </button>
+
+                        {/* Edit Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingUser(user)
+                            setEditModalOpen(true)
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 transition-all shadow-2xs cursor-pointer"
+                          title="Edit user details before approval"
+                        >
+                          <Pencil className="h-3.5 w-3.5 text-slate-500 hover:text-amber-600" />
+                          Edit
                         </button>
 
                         {/* Quick Approve Icon */}
@@ -186,17 +216,40 @@ function PendingUsersPage() {
             {users.map((user) => (
               <MobileCard
                 key={user.id}
-                title={user.fullName}
+                title={
+                  <button
+                    type="button"
+                    onClick={() => setSelectedUser(user)}
+                    className="text-left font-semibold text-slate-800 hover:text-teal-600 transition-colors"
+                  >
+                    {user.fullName}
+                    <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">
+                      {user.userCode || formatUserId(user)}
+                    </span>
+                  </button>
+                }
                 subtitle={user.email}
                 badge={<Badge tone="warning">Pending Review</Badge>}
                 actions={
                   <div className="flex items-center gap-2">
                     <button
+                      type="button"
                       onClick={() => setSelectedUser(user)}
                       className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                     >
                       <Eye className="h-3.5 w-3.5" />
                       Details
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingUser(user)
+                        setEditModalOpen(true)
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-amber-50 hover:text-amber-700"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Edit
                     </button>
                     <IconAction
                       icon={CheckCircle2}
@@ -225,7 +278,26 @@ function PendingUsersPage() {
         account={selectedUser}
         onApprove={handleApprove}
         onReject={handleReject}
+        onEdit={(accountToEdit) => {
+          setSelectedUser(null)
+          setEditingUser(accountToEdit)
+          setEditModalOpen(true)
+        }}
         actionLoading={actionLoading}
+      />
+
+      {/* Edit Account Modal Before Approval */}
+      <EditAccountModal
+        isOpen={editModalOpen}
+        account={editingUser}
+        onClose={() => {
+          setEditModalOpen(false)
+          setEditingUser(null)
+        }}
+        onSuccess={() => {
+          setSuccess('User details updated successfully!')
+          load()
+        }}
       />
     </AdminLayout>
   )

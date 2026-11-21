@@ -1,24 +1,40 @@
-import { useState } from 'react'
-import { X, UserPlus, Building2, User, Lock, Mail, Phone, MapPin, DollarSign, Sparkles } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X, UserPlus, Building2, User, Lock, Mail, Phone, MapPin, DollarSign, Sparkles, Warehouse } from 'lucide-react'
 import Button from '../ui/Button.jsx'
 import Input from '../ui/Input.jsx'
 import Select from '../ui/Select.jsx'
 import { adminApi, getErrorMessage } from '../../lib/api.js'
 
 function AddAccountModal({ isOpen, onClose, onSuccess, initialRole = 'user' }) {
+  const isStaff = initialRole === 'admin'
   const [role, setRole] = useState(initialRole)
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [status, setStatus] = useState('approved')
+  const [adminRoleId, setAdminRoleId] = useState('super_admin')
+  const [availableRoles, setAvailableRoles] = useState([])
   const [phone, setPhone] = useState('')
   const [businessName, setBusinessName] = useState('')
   const [businessCategory, setBusinessCategory] = useState('')
   const [city, setCity] = useState('')
   const [country, setCountry] = useState('')
   const [walletBalance, setWalletBalance] = useState('0')
+  const [isWmsRegistered, setIsWmsRegistered] = useState(false)
+  const [wmsClientId, setWmsClientId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (isOpen) {
+      setRole(initialRole)
+      if (initialRole === 'admin') {
+        adminApi.roles()
+          .then((res) => setAvailableRoles(res.data || []))
+          .catch(() => setAvailableRoles([]))
+      }
+    }
+  }, [isOpen, initialRole])
 
   if (!isOpen) return null
 
@@ -27,6 +43,7 @@ function AddAccountModal({ isOpen, onClose, onSuccess, initialRole = 'user' }) {
     setFullName('')
     setEmail('')
     setPassword('')
+    setAdminRoleId('super_admin')
     setPhone('')
     setBusinessName('')
     setBusinessCategory('')
@@ -34,6 +51,8 @@ function AddAccountModal({ isOpen, onClose, onSuccess, initialRole = 'user' }) {
     setCountry('')
     setWalletBalance('0')
     setStatus('approved')
+    setIsWmsRegistered(false)
+    setWmsClientId('')
     onClose()
   }
 
@@ -60,26 +79,39 @@ function AddAccountModal({ isOpen, onClose, onSuccess, initialRole = 'user' }) {
       return
     }
 
-    if (walletBalance !== '' && parseFloat(walletBalance) < 0) {
+    if (!isStaff && walletBalance !== '' && parseFloat(walletBalance) < 0) {
       setError('Wallet balance cannot be negative.')
       return
     }
 
     setLoading(true)
     try {
-      await adminApi.createAccount({
-        fullName: fullName.trim(),
-        email: email.trim(),
-        password,
-        role,
-        status,
-        businessPhone: phone.trim(),
-        businessName: role === 'supplier' ? (businessName.trim() || fullName.trim()) : undefined,
-        businessCategory: role === 'supplier' ? businessCategory.trim() : undefined,
-        city: city.trim(),
-        country: country.trim(),
-        walletBalance: parseFloat(walletBalance) || 0,
-      })
+      if (isStaff) {
+        await adminApi.createAccount({
+          fullName: fullName.trim(),
+          email: email.trim(),
+          password,
+          role: 'admin',
+          adminRoleId: adminRoleId !== 'super_admin' ? adminRoleId : undefined,
+          status,
+        })
+      } else {
+        await adminApi.createAccount({
+          fullName: fullName.trim(),
+          email: email.trim(),
+          password,
+          role,
+          status,
+          businessPhone: phone.trim(),
+          businessName: role === 'supplier' ? (businessName.trim() || fullName.trim()) : undefined,
+          businessCategory: role === 'supplier' ? businessCategory.trim() : undefined,
+          city: city.trim(),
+          country: country.trim(),
+          walletBalance: parseFloat(walletBalance) || 0,
+          isWmsRegistered: role === 'supplier' ? isWmsRegistered : false,
+          wmsClientId: role === 'supplier' && isWmsRegistered ? wmsClientId.trim() : undefined,
+        })
+      }
       handleClose()
       if (onSuccess) onSuccess()
     } catch (err) {
@@ -106,38 +138,46 @@ function AddAccountModal({ isOpen, onClose, onSuccess, initialRole = 'user' }) {
             <UserPlus className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-slate-900">Create New Account</h2>
-            <p className="text-xs text-slate-500">Add a verified supplier or customer user to the platform</p>
+            <h2 className="text-base font-bold text-slate-900">
+              {isStaff ? 'Create Staff / Admin Account' : 'Create New Account'}
+            </h2>
+            <p className="text-xs text-slate-500">
+              {isStaff
+                ? 'Register an internal administrator or manager with assigned privileges'
+                : 'Add a verified supplier or customer user to the platform'}
+            </p>
           </div>
         </div>
 
-        {/* Role Switcher */}
-        <div className="mt-4 flex rounded-xl border border-slate-200 bg-slate-50 p-1">
-          <button
-            type="button"
-            onClick={() => setRole('user')}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition-all ${
-              role === 'user'
-                ? 'bg-white text-primary shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <User className="h-4 w-4" />
-            <span>Customer / User</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setRole('supplier')}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition-all ${
-              role === 'supplier'
-                ? 'bg-white text-primary shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Building2 className="h-4 w-4" />
-            <span>Supplier</span>
-          </button>
-        </div>
+        {/* Role Switcher for Customer/Supplier only */}
+        {!isStaff && (
+          <div className="mt-4 flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+            <button
+              type="button"
+              onClick={() => setRole('user')}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition-all ${
+                role === 'user'
+                  ? 'bg-white text-primary shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <User className="h-4 w-4" />
+              <span>Customer / User</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setRole('supplier')}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition-all ${
+                role === 'supplier'
+                  ? 'bg-white text-primary shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Building2 className="h-4 w-4" />
+              <span>Supplier</span>
+            </button>
+          </div>
+        )}
 
         {error && (
           <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
@@ -200,72 +240,140 @@ function AddAccountModal({ isOpen, onClose, onSuccess, initialRole = 'user' }) {
               onChange={(e) => setStatus(e.target.value)}
               options={[
                 { value: 'approved', label: 'Approved (Active)' },
-                { value: 'pending_approval', label: 'Pending Approval' },
                 { value: 'suspended', label: 'Suspended' },
+                ...(!isStaff ? [{ value: 'pending_approval', label: 'Pending Approval' }] : []),
               ]}
             />
           </div>
 
-          {role === 'supplier' && (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-xl border border-slate-100 bg-slate-50/50 p-3">
-              <Input
-                id="businessName"
-                label="Business Name"
-                icon={Building2}
-                placeholder="e.g. Acme Supplies Ltd"
-                value={businessName}
-                onChange={(e) => setBusinessName(e.target.value)}
-              />
-              <Input
-                id="businessCategory"
-                label="Business Category"
-                placeholder="e.g. Electronics, Clothing"
-                value={businessCategory}
-                onChange={(e) => setBusinessCategory(e.target.value)}
-              />
+          {isStaff ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+              <Select
+                id="staffRoleSelect"
+                label="Assigned Staff Role &amp; Permissions *"
+                value={adminRoleId}
+                onChange={(e) => setAdminRoleId(e.target.value)}
+                required
+              >
+                <option value="super_admin">Super Admin (Full Root Privileges)</option>
+                {availableRoles.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    Sub-Admin: {r.name} ({r.permissions?.length || 0} permissions)
+                  </option>
+                ))}
+              </Select>
+              <p className="mt-2 text-[11px] text-slate-500">
+                Staff members will log in at <code className="font-semibold text-slate-700">/admin/login</code> with this email and password.
+              </p>
             </div>
-          )}
+          ) : (
+            <>
+              {role === 'supplier' && (
+                <>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+                    <Input
+                      id="businessName"
+                      label="Business Name"
+                      icon={Building2}
+                      placeholder="e.g. Acme Supplies Ltd"
+                      value={businessName}
+                      onChange={(e) => setBusinessName(e.target.value)}
+                    />
+                    <Input
+                      id="businessCategory"
+                      label="Business Category"
+                      placeholder="e.g. Electronics, Clothing"
+                      value={businessCategory}
+                      onChange={(e) => setBusinessCategory(e.target.value)}
+                    />
+                  </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Input
-              id="accountPhone"
-              label="Phone Number"
-              icon={Phone}
-              placeholder="+1 (555) 000-0000"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-            <Input
-              id="accountCity"
-              label="City"
-              icon={MapPin}
-              placeholder="e.g. New York"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-            />
-            <Input
-              id="accountCountry"
-              label="Country"
-              placeholder="e.g. United States"
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-            />
-          </div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Warehouse className="h-4 w-4 text-emerald-700" />
+                        <span className="text-xs font-bold text-emerald-950 uppercase tracking-wider">
+                          Supplier Origin / Channel
+                        </span>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isWmsRegistered}
+                          onChange={(e) => setIsWmsRegistered(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span className="text-xs font-bold text-slate-800">
+                          WMS Warehouse Integrated
+                        </span>
+                      </label>
+                    </div>
 
-          {role === 'user' && (
-            <div className="sm:w-1/2">
-              <Input
-                id="walletBalance"
-                label="Initial Wallet Balance ($)"
-                type="number"
-                min="0"
-                step="any"
-                icon={DollarSign}
-                placeholder="0.00"
-                value={walletBalance}
-                onChange={(e) => setWalletBalance(e.target.value)}
-              />
-            </div>
+                    {isWmsRegistered ? (
+                      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 pt-1 border-t border-emerald-200/60">
+                        <Input
+                          id="createWmsClientId"
+                          label="WMS Client ID"
+                          placeholder="e.g. WMS-PAK1035"
+                          value={wmsClientId}
+                          onChange={(e) => setWmsClientId(e.target.value)}
+                        />
+                        <div className="flex flex-col justify-end text-[11px] text-emerald-800 pb-2">
+                          <p className="font-semibold">✓ Connected with 3PL Central Hub</p>
+                          <p className="text-slate-500">Orders auto-routed to WMS warehouse list.</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-500 italic">
+                        Will be registered as <strong>Marketplace Only</strong> vendor. Check above if supplier comes from Sellvro WMS.
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Input
+                  id="accountPhone"
+                  label="Phone Number"
+                  icon={Phone}
+                  placeholder="+1 (555) 000-0000"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+                <Input
+                  id="accountCity"
+                  label="City"
+                  icon={MapPin}
+                  placeholder="e.g. New York"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                />
+                <Input
+                  id="accountCountry"
+                  label="Country"
+                  placeholder="e.g. United States"
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                />
+              </div>
+
+              {role === 'user' && (
+                <div className="sm:w-1/2">
+                  <Input
+                    id="walletBalance"
+                    label="Initial Wallet Balance ($)"
+                    type="number"
+                    min="0"
+                    step="any"
+                    icon={DollarSign}
+                    placeholder="0.00"
+                    value={walletBalance}
+                    onChange={(e) => setWalletBalance(e.target.value)}
+                  />
+                </div>
+              )}
+            </>
           )}
 
           <div className="mt-6 flex justify-end gap-2 border-t border-slate-100 pt-4">
@@ -273,7 +381,11 @@ function AddAccountModal({ isOpen, onClose, onSuccess, initialRole = 'user' }) {
               Cancel
             </Button>
             <Button type="submit" size="sm" disabled={loading}>
-              {loading ? 'Creating…' : `Create ${role === 'supplier' ? 'Supplier' : 'Customer'}`}
+              {loading
+                ? 'Creating…'
+                : isStaff
+                  ? 'Create Staff Member'
+                  : `Create ${role === 'supplier' ? 'Supplier' : 'Customer'}`}
             </Button>
           </div>
         </form>

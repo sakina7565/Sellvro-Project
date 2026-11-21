@@ -3,13 +3,9 @@
  */
 export const USER_DASHBOARD_MODULES = [
   {
-    title: 'Store',
-    description: 'Browse available products, manage catalog, and review inventory reporting.',
-    links: [
-      { label: 'Sellvro Products', to: '/user/products' },
-      { label: 'SKU Reporting', to: '/user/inventory/sku-reporting' },
-      { label: 'Store Reporting', to: '/user/inventory/my-reporting' },
-    ],
+    title: 'Orders & Fulfillment',
+    description: 'Track orders, status updates, barcode tracking, and 3PL dispatch history.',
+    links: [{ label: 'View Orders', to: '/user/orders' }],
     featured: true,
   },
   {
@@ -18,9 +14,12 @@ export const USER_DASHBOARD_MODULES = [
     links: [{ label: 'My Wallet', to: '/user/wallet' }],
   },
   {
-    title: 'Orders',
-    description: 'Track orders, status updates, and dispatch history.',
-    links: [{ label: 'View Orders', to: '/user/orders' }],
+    title: 'Reporting',
+    description: 'Monitor SKU movement, sales performance, and export reporting.',
+    links: [
+      { label: 'SKU Reporting', to: '/user/inventory/sku-reporting' },
+      { label: 'Sales Reporting', to: '/user/inventory/my-reporting' },
+    ],
   },
   {
     title: 'Disputes & Support',

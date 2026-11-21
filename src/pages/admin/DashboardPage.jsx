@@ -29,7 +29,7 @@ const EMPTY_PENDING = [
   { label: 'Pending Suppliers', value: '—', icon: Clock, tone: 'yellow', to: '/admin/suppliers/pending' },
   { label: 'Pending Users', value: '—', icon: Users, tone: 'blue', to: '/admin/users/pending' },
   { label: 'Pending Products', value: '—', icon: Package, tone: 'purple', to: '/admin/products' },
-  { label: 'Pending Payout', value: '—', icon: Wallet, tone: 'teal', to: '/admin/supplier/payouts' },
+  { label: 'Pending Payout', value: '—', icon: Wallet, tone: 'teal', to: '/admin/supplier/payouts?filter=mature' },
 ]
 
 function DashboardPage() {
@@ -114,7 +114,7 @@ function DashboardPage() {
           value: pending.pendingPayoutLabel ?? `$${Number(pending.pendingPayout || 0).toFixed(2)}`,
           icon: Wallet,
           tone: 'teal',
-          to: '/admin/supplier/payouts',
+          to: '/admin/supplier/payouts?filter=mature',
         },
       ])
 

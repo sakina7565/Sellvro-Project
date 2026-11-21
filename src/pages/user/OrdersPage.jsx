@@ -1,36 +1,73 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Building2, Eye, Search, Truck, Warehouse } from 'lucide-react'
+import { Ban, Building2, Check, CheckCircle2, Copy, Eye, Plus, Printer, Search, Star, Truck, Warehouse } from 'lucide-react'
 import UserLayout from '../../components/layout/UserLayout.jsx'
 import PageHeader from '../../components/admin/PageHeader.jsx'
 import OrderDetailDrawer from '../../components/orders/OrderDetailDrawer.jsx'
+import TrackingModal from '../../components/orders/TrackingModal.jsx'
+import OrderReviewModal from '../../components/orders/OrderReviewModal.jsx'
+import UserCancelOrderModal from '../../components/orders/UserCancelOrderModal.jsx'
+import UserUpdateTrackingModal from '../../components/orders/UserUpdateTrackingModal.jsx'
+import ShippingAirwayBillModal from '../../components/orders/ShippingAirwayBillModal.jsx'
 import Card from '../../components/ui/Card.jsx'
 import Button from '../../components/ui/Button.jsx'
 import Badge from '../../components/ui/Badge.jsx'
 import IconAction from '../../components/ui/IconAction.jsx'
 import { orderApi, getErrorMessage } from '../../lib/api.js'
+import { formatSupplierId } from '../../lib/idFormatters.js'
 
 const TABLE_HEAD = [
   'Order # & Label',
   'Supplier ID & Vendor',
   'Product & SKU',
   'Warehouse Custody',
-  'Price',
-  'Quantity',
+  'Courier & Tracking ID',
   'Total',
   'Tracking Status',
   'Date',
   'Action',
 ]
 
+function getOrderCategorizedStatus(order) {
+  if (!order) return 'awaiting_dispatch'
+  const normStatus = (order.status || '').toLowerCase()
+  const normTrack = (order.trackingStatus || '').toLowerCase()
+  if (normStatus === 'cancelled' || normTrack === 'cancelled' || order.isRefunded) return 'cancelled'
+  if (normStatus === 'cancellation_pending' || order.cancellationRequest?.status === 'pending') return 'cancellation_pending'
+  if (normStatus === 'returned' || normTrack === 'returned') return 'returned'
+  if (normStatus === 'delivered' || normTrack === 'delivered' || order.warehouseLocation === 'delivered') return 'delivered'
+  if (normStatus === 'order_due' || normTrack === 'order_due') return 'order_due'
+
+  // Check if order is due for dispatch (promised handling time expired or flagged late)
+  if (!order.isDispatched && !['in_transit', 'out_for_delivery', 'delivered', 'returned'].includes(normTrack)) {
+    if (order.isOnTimeDispatch === false) return 'order_due'
+    if (order.createdAt) {
+      const hoursPassed = (Date.now() - new Date(order.createdAt).getTime()) / (1000 * 60 * 60)
+      const promised = order.handlingHoursPromised || 24
+      if (hoursPassed > promised) return 'order_due'
+    }
+  }
+
+  if (normTrack === 'in_process' || normTrack === 'processing' || normTrack === 'in_transit' || normTrack === 'out_for_delivery' || order.isDispatched) {
+    return 'in_process'
+  }
+  return 'awaiting_dispatch'
+}
+
 function TrackingStatusBadge({ status, trackingStatus }) {
-  const st = (trackingStatus || status || '').toLowerCase()
-  if (st === 'cancelled') return <Badge tone="danger">Cancelled</Badge>
-  if (st === 'delivered') return <Badge tone="success">Delivered</Badge>
-  if (st === 'out_for_delivery') return <Badge tone="warning">Out for Delivery</Badge>
-  if (st === 'in_transit') return <Badge tone="info">Shipped (In Transit)</Badge>
-  if (st === 'processing') return <Badge tone="warning">Processing</Badge>
-  return <Badge tone="neutral">Placed / Pending</Badge>
+  const normStatus = (status || '').toLowerCase()
+  const normTrack = (trackingStatus || '').toLowerCase()
+  if (normStatus === 'cancellation_pending') return <Badge tone="warning" className="bg-amber-100 text-amber-900 border-amber-300">Cancel Pending</Badge>
+  if (normStatus === 'cancelled' || normTrack === 'cancelled') return <Badge tone="danger">Cancelled</Badge>
+  if (normStatus === 'returned' || normTrack === 'returned') return <Badge tone="danger" className="bg-rose-100 text-rose-800 border-rose-300">Returned</Badge>
+  if (normStatus === 'delivered' || normTrack === 'delivered') return <Badge tone="success">Delivered</Badge>
+  if (normStatus === 'order_due' || normTrack === 'order_due') return <Badge tone="warning" className="bg-amber-100 text-amber-900 border-amber-300">Order Due</Badge>
+  const st = normTrack || normStatus
+  if (st === 'awaiting_dispatch' || st === 'placed' || st === 'pending') return <Badge tone="neutral" className="bg-sky-50 text-sky-800 border-sky-200">Awaiting Dispatch</Badge>
+  if (st === 'in_process' || st === 'processing' || st === 'in_transit' || st === 'out_for_delivery') {
+    return <Badge tone="info">In Process</Badge>
+  }
+  return <Badge tone="neutral">{st.replace(/_/g, ' ')}</Badge>
 }
 
 function UserOrdersPage() {
@@ -39,52 +76,70 @@ function UserOrdersPage() {
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [trackingModalOrder, setTrackingModalOrder] = useState(null)
+  const [copiedId, setCopiedId] = useState('')
+  const [reviewModalOrder, setReviewModalOrder] = useState(null)
+  const [reviewSuccessMessage, setReviewSuccessMessage] = useState('')
+  const [cancelModalOrder, setCancelModalOrder] = useState(null)
+  const [updateTrackingModalOrder, setUpdateTrackingModalOrder] = useState(null)
+  const [airwayBillModalOrder, setAirwayBillModalOrder] = useState(null)
+  const [actionSuccessMessage, setActionSuccessMessage] = useState('')
 
   // Filter states
   const [activeTab, setActiveTab] = useState('all')
   const [custodyFilter, setCustodyFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
 
-  useEffect(() => {
-    let active = true
+  const fetchOrders = () => {
+    setLoading(true)
     orderApi
       .mine()
       .then((data) => {
-        if (active) setOrders(data.data || [])
+        setOrders(data.data || [])
       })
       .catch((err) => {
-        if (active) setError(getErrorMessage(err, 'Failed to load orders.'))
+        setError(getErrorMessage(err, 'Failed to load orders.'))
       })
       .finally(() => {
-        if (active) setLoading(false)
+        setLoading(false)
       })
-    return () => {
-      active = false
-    }
+  }
+
+  useEffect(() => {
+    fetchOrders()
   }, [])
+
+  const deliveredPendingReview = useMemo(() => {
+    return orders.filter((o) => {
+      const isDelivered =
+        (o.status || '').toLowerCase() === 'delivered' ||
+        (o.trackingStatus || '').toLowerCase() === 'delivered' ||
+        o.warehouseLocation === 'delivered'
+      return isDelivered && !o.isReviewed
+    })
+  }, [orders])
 
   const openOrder = (order) => {
     setSelectedId(order.id)
     setDrawerOpen(true)
   }
 
-  // Status counts
+  // 7 Required Status counts
   const counts = useMemo(() => {
     const res = {
       all: orders.length,
-      pending: 0,
-      shipped: 0,
-      out_for_delivery: 0,
+      awaiting_dispatch: 0,
+      order_due: 0,
+      in_process: 0,
       delivered: 0,
       cancelled: 0,
+      returned: 0,
     }
     orders.forEach((o) => {
-      const track = (o.trackingStatus || o.status || '').toLowerCase()
-      if (track === 'cancelled') res.cancelled += 1
-      else if (track === 'delivered') res.delivered += 1
-      else if (track === 'out_for_delivery') res.out_for_delivery += 1
-      else if (track === 'in_transit') res.shipped += 1
-      else res.pending += 1
+      const cat = getOrderCategorizedStatus(o)
+      if (res[cat] !== undefined) {
+        res[cat] += 1
+      }
     })
     return res
   }, [orders])
@@ -92,18 +147,10 @@ function UserOrdersPage() {
   // Filtered orders
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
-      const track = (order.trackingStatus || order.status || '').toLowerCase()
+      const cat = getOrderCategorizedStatus(order)
 
-      if (activeTab === 'pending') {
-        if (track !== 'placed' && track !== 'pending' && track !== 'processing') return false
-      } else if (activeTab === 'shipped') {
-        if (track !== 'in_transit') return false
-      } else if (activeTab === 'out_for_delivery') {
-        if (track !== 'out_for_delivery') return false
-      } else if (activeTab === 'delivered') {
-        if (track !== 'delivered') return false
-      } else if (activeTab === 'cancelled') {
-        if (track !== 'cancelled') return false
+      if (activeTab !== 'all' && cat !== activeTab) {
+        return false
       }
 
       if (custodyFilter !== 'all') {
@@ -132,21 +179,88 @@ function UserOrdersPage() {
         eyebrow="User Panel"
         title="My Orders"
         action={
-          <Button as={Link} to="/user/products" size="sm">
+          <Button as={Link} to="/" size="sm">
             Shop now
           </Button>
         }
       />
 
-      {/* Status Counters / Tabs */}
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      {/* Action / Cancellation Success Toast */}
+      {actionSuccessMessage && (
+        <div className="mb-5 flex items-center justify-between rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-xs font-semibold text-emerald-900 shadow-xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+            <span>{actionSuccessMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionSuccessMessage('')}
+            className="text-emerald-700 hover:text-emerald-900 font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Review Success Toast */}
+      {reviewSuccessMessage && (
+        <div className="mb-5 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-semibold text-emerald-800 shadow-xs">
+          <div className="flex items-center gap-2">
+            <Check className="h-4 w-4 text-emerald-600" />
+            <span>{reviewSuccessMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReviewSuccessMessage('')}
+            className="text-emerald-700 hover:text-emerald-900 font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Delivered Order Review Prompt Banner */}
+      {deliveredPendingReview.length > 0 && (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-300 bg-linear-to-r from-amber-50 via-orange-50 to-amber-50 p-4 sm:p-5 shadow-xs">
+          <div className="flex items-start gap-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-md">
+              <Star className="h-5 w-5 fill-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-amber-200/80 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-amber-900">
+                  Feedback Requested
+                </span>
+                <span className="text-xs font-bold text-amber-900">
+                  {deliveredPendingReview.length} Delivered Order{deliveredPendingReview.length > 1 ? 's' : ''} Ready for Rating
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-amber-800 leading-snug">
+                Apka order deliver ho chuka hai! Baraye meherbani supplier ki delivery speed aur product quality par apna feedback dein taake product page par live ratings show ho sakein.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReviewModalOrder(deliveredPendingReview[0])}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-amber-600 active:scale-95 transition cursor-pointer"
+          >
+            <Star className="h-4 w-4 fill-white" />
+            Rate Supplier &amp; Product
+          </button>
+        </div>
+      )}
+
+      {/* Status Counters / Tabs (7 Required Statuses) */}
+      <div className="mb-5 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-7">
         {[
           { key: 'all', label: 'All Orders', count: counts.all, color: 'text-slate-800 bg-slate-100' },
-          { key: 'pending', label: 'Pending / Placed', count: counts.pending, color: 'text-amber-800 bg-amber-50' },
-          { key: 'shipped', label: 'Shipped (Transit)', count: counts.shipped, color: 'text-blue-800 bg-blue-50' },
-          { key: 'out_for_delivery', label: 'Out of Delivery', count: counts.out_for_delivery, color: 'text-purple-800 bg-purple-50' },
+          { key: 'awaiting_dispatch', label: 'Awaiting Dispatch', count: counts.awaiting_dispatch, color: 'text-sky-800 bg-sky-50' },
+          { key: 'order_due', label: 'Order Due', count: counts.order_due, color: 'text-amber-800 bg-amber-50' },
+          { key: 'in_process', label: 'In Process', count: counts.in_process, color: 'text-indigo-800 bg-indigo-50' },
           { key: 'delivered', label: 'Delivered', count: counts.delivered, color: 'text-emerald-800 bg-emerald-50' },
           { key: 'cancelled', label: 'Cancelled', count: counts.cancelled, color: 'text-rose-800 bg-rose-50' },
+          { key: 'returned', label: 'Returned', count: counts.returned, color: 'text-orange-800 bg-orange-50' },
         ].map((tab) => {
           const isActive = activeTab === tab.key
           return (
@@ -229,9 +343,7 @@ function UserOrdersPage() {
                 </tr>
               )}
               {filteredOrders.map((order) => {
-                const supplierDisplay =
-                  order.supplierDisplayId ||
-                  (order.supplierId ? `SUP-${order.supplierId.slice(-6).toUpperCase()}` : '—')
+                const supplierDisplay = formatSupplierId(order.supplierDisplayId || order.supplierId)
 
                 return (
                   <tr key={order.id} className="border-b border-slate-50 hover:bg-slate-50/50 last:border-0">
@@ -258,13 +370,23 @@ function UserOrdersPage() {
                           SKU: {order.productSku}
                         </span>
                       ) : null}
+                      {order.customizationDetails && (
+                        <p className="mt-1 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-900 border border-indigo-200 truncate" title={order.customizationDetails}>
+                          ✨ Custom: {order.customizationDetails}
+                        </p>
+                      )}
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3.5">
-                      {order.warehouseLocation === 'wms_hub' ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 border border-amber-200">
-                          <Warehouse className="h-3 w-3" /> WMS Hub
-                        </span>
+                      {order.warehouseLocation === 'wms_hub' || order.isWmsOrder ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-200">
+                            <Warehouse className="h-3 w-3 text-emerald-600" /> WMS Hub
+                          </span>
+                          <span className="text-[10px] font-mono font-medium text-emerald-700" title={order.wmsBatchNumber || order.wmsRequestNumber || ''}>
+                            {order.wmsBatchNumber ? `Batch: ${order.wmsBatchNumber}` : order.wmsRequestNumber ? `Req: ${order.wmsRequestNumber}` : (order.isDispatched ? 'Dispatched' : 'Queued')}
+                          </span>
+                        </div>
                       ) : order.warehouseLocation === 'in_transit' ? (
                         <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-800 border border-blue-200">
                           <Truck className="h-3 w-3" /> In Transit
@@ -276,32 +398,173 @@ function UserOrdersPage() {
                       )}
                     </td>
 
-                    <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">
-                      ${Number(order.unitPrice || 0).toFixed(2)}
-                    </td>
-
-                    <td className="whitespace-nowrap px-4 py-3.5 text-slate-600">
-                      {order.quantity || order.items || 1}
+                    <td className="whitespace-nowrap px-4 py-3.5">
+                      <div className="flex flex-col gap-1">
+                        {order.trackingNumber && !order.trackingNumber.startsWith('SLV-') ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-xs font-bold text-slate-900">
+                              {order.trackingNumber}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                navigator.clipboard?.writeText(order.trackingNumber)
+                                setCopiedId(order.id)
+                                setTimeout(() => setCopiedId(''), 2000)
+                              }}
+                              className="rounded p-0.5 text-slate-400 hover:text-slate-700 transition"
+                              title="Copy Tracking ID"
+                            >
+                              {copiedId === order.id ? (
+                                <Check className="h-3 w-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="h-3 w-3" />
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex items-center rounded bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200">
+                              Awaiting Tracking
+                            </span>
+                            {order.status !== 'cancelled' && (
+                              <button
+                                type="button"
+                                onClick={() => setUpdateTrackingModalOrder(order)}
+                                className="inline-flex items-center gap-0.5 rounded bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200 hover:bg-blue-100 transition shadow-2xs cursor-pointer"
+                                title="Enter Real Courier Tracking ID"
+                              >
+                                <Plus className="h-3 w-3" /> Add
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        <span className="text-[11px] font-semibold text-indigo-700">
+                          🚚 {order.carrier || 'Pending Carrier'}
+                        </span>
+                      </div>
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3.5 font-semibold text-slate-900">
                       ${Number(order.total || 0).toFixed(2)}
+                      <span className="block text-[11px] font-normal text-slate-400">
+                        Qty: {order.quantity || order.items || 1}
+                      </span>
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3.5">
-                      <TrackingStatusBadge status={order.status} trackingStatus={order.trackingStatus} />
+                      <div className="flex items-center gap-2">
+                        <TrackingStatusBadge status={order.status} trackingStatus={order.trackingStatus} />
+                        <button
+                          type="button"
+                          onClick={() => setTrackingModalOrder(order)}
+                          className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700 border border-blue-200 hover:bg-blue-100 transition shadow-2xs"
+                          title="Track live shipment timeline & progress"
+                        >
+                          <Truck className="h-3 w-3" />
+                          Track
+                        </button>
+                      </div>
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-3.5 text-xs text-slate-500">{order.date}</td>
 
                     <td className="whitespace-nowrap px-4 py-3.5">
-                      <IconAction
-                        icon={Eye}
-                        tone="success"
-                        aria-label="View order"
-                        title="View order details, packaging label & live tracking"
-                        onClick={() => openOrder(order)}
-                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setAirwayBillModalOrder(order)}
+                          className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-xs font-bold text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition shadow-2xs cursor-pointer"
+                          title="View & Print Customer Shipping Airway Bill Label"
+                        >
+                          <Printer className="h-3 w-3" /> Label
+                        </button>
+                        {(() => {
+                          const isDelivered =
+                            (order.status || '').toLowerCase() === 'delivered' ||
+                            (order.trackingStatus || '').toLowerCase() === 'delivered' ||
+                            order.warehouseLocation === 'delivered'
+                          if (isDelivered) {
+                            if (order.isReviewed) {
+                              return (
+                                <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700 border border-emerald-200">
+                                  <Check className="h-3 w-3" /> Reviewed
+                                </span>
+                              )
+                            }
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setReviewModalOrder(order)}
+                                className="inline-flex items-center gap-1 rounded-md bg-amber-500 px-2.5 py-1 text-xs font-bold text-white hover:bg-amber-600 transition shadow-2xs cursor-pointer"
+                                title="Rate supplier delivery speed and product quality"
+                              >
+                                <Star className="h-3 w-3 fill-white" />
+                                Rate &amp; Review
+                              </button>
+                            )
+                          }
+
+                          const isCancellationPending =
+                            order.cancellationRequest?.status === 'pending' || order.status === 'cancellation_pending'
+
+                          if (isCancellationPending) {
+                            return (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700 border border-amber-200">
+                                Cancellation Pending
+                              </span>
+                            )
+                          }
+
+                          // 12-Hour Cancellation Policy Guard
+                          const orderAgeMs = order.createdAt ? Date.now() - new Date(order.createdAt).getTime() : 0
+                          const isWithin12h = orderAgeMs <= 12 * 60 * 60 * 1000
+
+                          // Check if order can still be cancelled before warehouse dispatch
+                          const isCancellable =
+                            order.status !== 'cancelled' &&
+                            !order.isRefunded &&
+                            !['in_transit', 'out_for_delivery', 'delivered', 'returned'].includes((order.trackingStatus || '').toLowerCase()) &&
+                            !order.isDispatched &&
+                            order.warehouseLocation !== 'in_transit' &&
+                            order.warehouseLocation !== 'delivered' &&
+                            order.status !== 'delivered'
+
+                          if (isCancellable && isWithin12h) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setCancelModalOrder(order)}
+                                className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-xs font-bold text-rose-700 border border-rose-200 hover:bg-rose-100 transition shadow-2xs cursor-pointer"
+                                title="Request order cancellation within 12 hours of placement"
+                              >
+                                <Ban className="h-3 w-3" /> Cancel
+                              </button>
+                            )
+                          }
+
+                          if (isCancellable && !isWithin12h) {
+                            return (
+                              <span
+                                className="text-[10px] text-slate-400 font-medium italic"
+                                title="12-hour cancellation window has expired"
+                              >
+                                Cancel closed (&gt;12h)
+                              </span>
+                            )
+                          }
+
+                          return null
+                        })()}
+                        <IconAction
+                          icon={Eye}
+                          tone="success"
+                          aria-label="View order"
+                          title="View order details, packaging label & live tracking"
+                          onClick={() => openOrder(order)}
+                        />
+                      </div>
                     </td>
                   </tr>
                 )
@@ -312,32 +575,72 @@ function UserOrdersPage() {
 
         <div className="divide-y divide-slate-100 md:hidden">
           {filteredOrders.map((order) => {
-            const supplierDisplay =
-              order.supplierDisplayId ||
-              (order.supplierId ? `SUP-${order.supplierId.slice(-6).toUpperCase()}` : '—')
+            const supplierDisplay = formatSupplierId(order.supplierDisplayId || order.supplierId)
 
             return (
-              <button
+              <div
                 key={order.id}
-                type="button"
-                onClick={() => openOrder(order)}
-                className="block w-full p-4 text-left hover:bg-slate-50"
+                className="block w-full p-4 text-left hover:bg-slate-50 space-y-2"
               >
                 <div className="flex items-center justify-between">
                   <p className="font-semibold text-slate-800">{order.orderNo}</p>
                   <TrackingStatusBadge status={order.status} trackingStatus={order.trackingStatus} />
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5">Supplier: {supplierDisplay}</p>
-                <p className="mt-1 text-sm text-slate-700">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-mono text-indigo-700 font-bold">
+                    TRK: {order.trackingNumber || `SLV-${order.orderNo?.replace('ORD-', '')}`}
+                  </span>
+                  <span className="font-semibold text-slate-600">🚚 {order.carrier || 'Sellvro Express'}</span>
+                </div>
+                <p className="text-xs text-slate-500">Supplier: {supplierDisplay}</p>
+                <p className="text-sm text-slate-700">
                   {order.product} · SKU: {order.productSku || '—'}
                 </p>
-                <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                  <span>${Number(order.total).toFixed(2)}</span>
-                  <span>
-                    {order.warehouseLocation === 'wms_hub' ? '🏢 WMS Hub' : '🏭 Supplier Whse'}
-                  </span>
+                <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                  <span className="font-bold text-slate-900">${Number(order.total).toFixed(2)}</span>
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const isDelivered =
+                        (order.status || '').toLowerCase() === 'delivered' ||
+                        (order.trackingStatus || '').toLowerCase() === 'delivered' ||
+                        order.warehouseLocation === 'delivered'
+                      if (isDelivered) {
+                        if (order.isReviewed) {
+                          return (
+                            <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700 border border-emerald-200">
+                              <Check className="h-3 w-3" /> Reviewed
+                            </span>
+                          )
+                        }
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setReviewModalOrder(order)}
+                            className="inline-flex items-center gap-1 rounded-md bg-amber-500 px-2.5 py-1 text-xs font-bold text-white hover:bg-amber-600 transition shadow-2xs"
+                          >
+                            <Star className="h-3 w-3 fill-white" /> Rate &amp; Review
+                          </button>
+                        )
+                      }
+                      return null
+                    })()}
+                    <button
+                      type="button"
+                      onClick={() => setTrackingModalOrder(order)}
+                      className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-xs font-bold text-white shadow-2xs hover:bg-blue-700"
+                    >
+                      <Truck className="h-3 w-3" /> Track
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openOrder(order)}
+                      className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Details
+                    </button>
+                  </div>
                 </div>
-              </button>
+              </div>
             )
           })}
         </div>
@@ -349,6 +652,63 @@ function UserOrdersPage() {
         onClose={() => setDrawerOpen(false)}
         title="My Order Details & Label"
       />
+
+      {/* Live Parcel Tracking Modal */}
+      {trackingModalOrder && (
+        <TrackingModal
+          order={trackingModalOrder}
+          open={Boolean(trackingModalOrder)}
+          onClose={() => setTrackingModalOrder(null)}
+        />
+      )}
+
+      {/* Order Review Modal */}
+      {reviewModalOrder && (
+        <OrderReviewModal
+          order={reviewModalOrder}
+          open={Boolean(reviewModalOrder)}
+          onClose={() => setReviewModalOrder(null)}
+          onSuccess={() => {
+            setReviewSuccessMessage('Shukriya! Apki rating aur review supplier ke product page par publish ho gayi hai.')
+            fetchOrders()
+          }}
+        />
+      )}
+
+      {/* Customer Order Cancellation Modal (Before Dispatch) */}
+      {cancelModalOrder && (
+        <UserCancelOrderModal
+          order={cancelModalOrder}
+          open={Boolean(cancelModalOrder)}
+          onClose={() => setCancelModalOrder(null)}
+          onSuccess={(msg) => {
+            setActionSuccessMessage(msg)
+            fetchOrders()
+          }}
+        />
+      )}
+
+      {/* Enter Real Courier Tracking Modal */}
+      {updateTrackingModalOrder && (
+        <UserUpdateTrackingModal
+          order={updateTrackingModalOrder}
+          open={Boolean(updateTrackingModalOrder)}
+          onClose={() => setUpdateTrackingModalOrder(null)}
+          onSuccess={(msg) => {
+            setActionSuccessMessage(msg)
+            fetchOrders()
+          }}
+        />
+      )}
+
+      {/* Official 4x6 Courier Shipping Airway Bill Modal */}
+      {airwayBillModalOrder && (
+        <ShippingAirwayBillModal
+          order={airwayBillModalOrder}
+          open={Boolean(airwayBillModalOrder)}
+          onClose={() => setAirwayBillModalOrder(null)}
+        />
+      )}
     </UserLayout>
   )
 }

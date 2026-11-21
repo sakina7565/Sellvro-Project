@@ -37,14 +37,12 @@ import {
 import { formatPartySummary, getDisputeStatusMeta } from '../../lib/disputeHelpers.js'
 
 import { adminApi, getErrorMessage } from '../../lib/api.js'
-
 import { useDisputeList } from '../../hooks/useDisputeList.js'
-
-
+import { formatDisputeId } from '../../lib/idFormatters.js'
 
 const FILTERS = [{ label: 'All Status', options: ['Open', 'Resolved'] }]
 
-const TABLE_HEAD = ['Raised By', 'Against', 'Order', 'Product', 'Latest reply', 'Date', 'Status', 'Actions']
+const TABLE_HEAD = ['Dispute ID', 'Raised By', 'Against', 'Order', 'Product', 'Latest reply', 'Date', 'Status', 'Actions']
 
 
 
@@ -155,7 +153,7 @@ function SupplierDisputesPage() {
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 text-primary shrink-0" />
             <span>
-              Showing disputes for <strong className="font-semibold text-primary-950">"{searchQuery}"</strong> ({filteredDisputes.length} found)
+              Showing disputes for <strong className="font-semibold text-primary-950">&quot;{searchQuery}&quot;</strong> ({filteredDisputes.length} found)
             </span>
           </div>
           <button
@@ -200,13 +198,15 @@ function SupplierDisputesPage() {
                     key={dispute.id}
 
                     className={`border-b border-slate-50 last:border-0 ${dispute.hasUnread ? 'bg-primary-50/40' : ''}`}
-
                   >
+                    <td className="whitespace-nowrap px-5 py-4">
+                      <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                        {formatDisputeId(dispute)}
+                      </span>
+                    </td>
 
                     <td className="whitespace-nowrap px-5 py-4">
-
                       <DisputeRaisedByCell dispute={dispute} />
-
                     </td>
 
                     <td className="whitespace-nowrap px-5 py-4">

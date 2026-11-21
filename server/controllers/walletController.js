@@ -2,6 +2,8 @@ import WalletRequest from '../models/WalletRequest.js'
 import BusinessProfile from '../models/BusinessProfile.js'
 import User from '../models/User.js'
 import WalletSetting from '../models/WalletSetting.js'
+import { getNextWalletTxId } from '../services/sequenceService.js'
+import { logAdminAction } from '../utils/auditLogger.js'
 
 async function withBusinessName(requests) {
   const userIds = [
@@ -35,14 +37,32 @@ export const getCurrencies = async (_req, res) => {
       { code: 'PKR', name: 'Pakistani Rupee', symbol: '₨', ratePerUsd: rate, feePercent: 0 },
     ]
     return res.json({ currencies, settings: setting })
-  } catch (_err) {
+  } catch {
     return res.json({ currencies: SUPPORTED_CURRENCIES })
   }
 }
 
-export const getWalletSettings = async (_req, res) => {
+const SECRET_SETTING_KEYS = new Set(['apiKey', 'clientSecret', 'secretKey'])
+
+// Deep-copies a plain object without payment-provider credentials (ObjectIds/Dates pass through).
+export function stripSettingSecrets(value) {
+  if (Array.isArray(value)) return value.map(stripSettingSecrets)
+  if (value && typeof value === 'object' && !(value instanceof Date) && !value._bsontype) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key]) => !SECRET_SETTING_KEYS.has(key))
+        .map(([key, v]) => [key, stripSettingSecrets(v)]),
+    )
+  }
+  return value
+}
+
+export const getWalletSettings = async (req, res) => {
   try {
     const setting = await WalletSetting.getOrCreate()
+    if (req.user?.role !== 'admin') {
+      return res.json({ data: stripSettingSecrets(setting.toObject()) })
+    }
     return res.json({ data: setting })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to load wallet settings.' })
@@ -70,12 +90,36 @@ export const updateWalletSettings = async (req, res) => {
       setting.marketplaceFeePercent = fee
     }
 
+    if (req.body.wmsFeePercent !== undefined) {
+      const wmsFee = Number(req.body.wmsFeePercent)
+      if (!Number.isFinite(wmsFee) || wmsFee < 0 || wmsFee > 100) {
+        return res.status(400).json({ message: 'WMS fulfillment fee must be a valid percentage between 0 and 100.' })
+      }
+      setting.wmsFeePercent = wmsFee
+    }
+
     if (Array.isArray(pkrAccounts)) {
       setting.pkrAccounts = pkrAccounts
     }
 
     if (Array.isArray(usdAccounts)) {
       setting.usdAccounts = usdAccounts
+    }
+
+    if (req.body.internationalPaymentMethods) {
+      setting.internationalPaymentMethods = {
+        ...(setting.internationalPaymentMethods?.toObject?.() || setting.internationalPaymentMethods || {}),
+        ...req.body.internationalPaymentMethods,
+      }
+      setting.markModified('internationalPaymentMethods')
+    }
+
+    if (req.body.courierIntegrations) {
+      setting.courierIntegrations = {
+        ...(setting.courierIntegrations?.toObject?.() || setting.courierIntegrations || {}),
+        ...req.body.courierIntegrations,
+      }
+      setting.markModified('courierIntegrations')
     }
 
     await setting.save()
@@ -94,14 +138,21 @@ export const getMarketplaceFee = async (_req, res) => {
     return res.json({
       success: true,
       marketplaceFeePercent: Number(setting.marketplaceFeePercent ?? 8),
+      wmsFeePercent: Number(setting.wmsFeePercent ?? 0),
     })
-  } catch (error) {
-    return res.json({ success: true, marketplaceFeePercent: 8 })
+  } catch {
+    return res.json({ success: true, marketplaceFeePercent: 8, wmsFeePercent: 0 })
   }
 }
 
 export const getBalance = async (req, res) => {
   try {
+    if (req.user?.role !== 'admin' && req.user?.status !== 'approved') {
+      return res.status(403).json({
+        message: 'Your account is pending admin approval. You cannot access or use wallet balance until approved.',
+        status: req.user?.status,
+      })
+    }
     const user = await User.findById(req.user._id)
     return res.json({
       balance: user?.walletBalance || 0,
@@ -114,6 +165,12 @@ export const getBalance = async (req, res) => {
 
 export const createWalletRequest = async (req, res) => {
   try {
+    if (req.user?.role !== 'admin' && req.user?.status !== 'approved') {
+      return res.status(403).json({
+        message: 'Your account is pending admin approval. You cannot submit wallet deposit or withdrawal requests until approved.',
+        status: req.user?.status,
+      })
+    }
     const rawCurrency = String(req.body.depositCurrency || req.body.currency || 'USD').trim().toUpperCase()
     const setting = await WalletSetting.getOrCreate()
     const rate = rawCurrency === 'PKR' ? (setting.usdRatePerPkr || 280) : 1
@@ -158,7 +215,20 @@ export const createWalletRequest = async (req, res) => {
     const feeUsd = 0
     const netUsd = Number(Math.max(0.01, grossUsd).toFixed(2))
 
+    const rawCourier = String(req.body.courier || '').toUpperCase()
+    const courier = ['USPS', 'UPS', 'FEDEX'].includes(rawCourier)
+      ? (rawCourier === 'FEDEX' ? 'FedEx' : rawCourier)
+      : 'None'
+    const courierService = String(req.body.courierService || '').trim()
+    const paymentMethod = String(req.body.paymentMethod || 'bank_wire').trim()
+    const clientAccountNumber = String(req.body.clientAccountNumber || '').trim()
+    const clientIban = String(req.body.clientIban || '').trim()
+    const clientBankName = String(req.body.clientBankName || '').trim()
+
+    const transactionId = await getNextWalletTxId()
+
     const request = await WalletRequest.create({
+      transactionId,
       user: req.user._id,
       amount: netUsd, // Net amount in USD credited to wallet
       depositCurrency: foundCurrency.code,
@@ -169,6 +239,12 @@ export const createWalletRequest = async (req, res) => {
       conversionFee: feeUsd,
       bankTid,
       receiptImage,
+      courier,
+      courierService,
+      paymentMethod,
+      clientAccountNumber,
+      clientIban,
+      clientBankName,
       status: 'pending',
     })
 
@@ -191,6 +267,12 @@ export const createWalletRequest = async (req, res) => {
 
 export const listMyWalletRequests = async (req, res) => {
   try {
+    if (req.user?.role !== 'admin' && req.user?.status !== 'approved') {
+      return res.status(403).json({
+        message: 'Your account is pending admin approval. You cannot access wallet requests until approved.',
+        status: req.user?.status,
+      })
+    }
     const requests = await WalletRequest.find({ user: req.user._id })
       .populate('user', 'fullName email role walletBalance status')
       .sort({ createdAt: -1 })
@@ -201,13 +283,37 @@ export const listMyWalletRequests = async (req, res) => {
   }
 }
 
-export const listAllWalletRequests = async (_req, res) => {
+export const listAllWalletRequests = async (req, res) => {
   try {
-    const requests = await WalletRequest.find()
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1)
+    const limit = req.query.limit ? Math.min(200, Math.max(1, parseInt(req.query.limit, 10))) : 0
+    const filter = {}
+    if (req.query.status && req.query.status !== 'all') {
+      filter.status = req.query.status
+    }
+
+    let query = WalletRequest.find(filter)
       .populate('user', 'fullName email role walletBalance status')
       .sort({ createdAt: -1 })
 
-    return res.json({ data: await withBusinessName(requests) })
+    if (limit > 0) {
+      query = query.skip((page - 1) * limit).limit(limit)
+    }
+
+    const [requests, total] = await Promise.all([
+      query,
+      WalletRequest.countDocuments(filter),
+    ])
+
+    return res.json({
+      data: await withBusinessName(requests),
+      pagination: {
+        total,
+        page,
+        limit: limit || total,
+        pages: limit > 0 ? Math.ceil(total / limit) || 1 : 1,
+      },
+    })
   } catch (error) {
     return res.status(500).json({ message: error.message || 'Failed to load wallet requests.' })
   }
@@ -248,6 +354,16 @@ export const approveWalletRequest = async (req, res) => {
     }
 
     const [safe] = await withBusinessName([request])
+
+    await logAdminAction({
+      adminId: req.user?._id,
+      action: 'approve_wallet_request',
+      targetType: 'wallet_request',
+      targetId: request._id,
+      details: { amount: request.amount, userId },
+      ip: req.ip,
+    })
+
     return res.json({
       message: 'Wallet request approved. Balance updated.',
       request: safe,
@@ -280,6 +396,16 @@ export const rejectWalletRequest = async (req, res) => {
     }
 
     const [safe] = await withBusinessName([request])
+
+    await logAdminAction({
+      adminId: req.user?._id,
+      action: 'reject_wallet_request',
+      targetType: 'wallet_request',
+      targetId: request._id,
+      details: { adminNote },
+      ip: req.ip,
+    })
+
     return res.json({
       message: 'Wallet request rejected.',
       request: safe,
