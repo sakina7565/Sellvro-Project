@@ -596,22 +596,6 @@ export let createOrder = async (req, res) => {
         message: 'Guest checkout is disabled. Customers must log in to their account before placing an order.',
       })
     }
-    debitedBuyer = true
-
-    // 2. Atomic decrement of product inventory
-    const updatedProduct = await Product.findOneAndUpdate(
-      { _id: productId, quantity: { $gte: quantity }, status: 'active' },
-      { $inc: { quantity: -quantity } },
-      { new: true },
-    )
-
-    if (!updatedProduct) {
-      // Revert buyer wallet balance
-      await User.findByIdAndUpdate(req.user._id, { $inc: { walletBalance: total } })
-      debitedBuyer = false
-      return res.status(409).json({ message: 'Insufficient stock or product unavailable.' })
-    }
-    decrementedStock = true
 
     if (buyer.role === 'supplier') {
       return res.status(403).json({
@@ -707,10 +691,10 @@ export let createOrder = async (req, res) => {
 
     const order = await Order.create({
       orderNo,
-      user: updatedBuyer._id,
-      supplier: updatedProduct.supplier,
-      product: updatedProduct._id,
-      productName: updatedProduct.name,
+      user: buyer._id,
+      supplier: product.supplier,
+      product: product._id,
+      productName: product.name,
       quantity,
       unitPrice,
       total,
@@ -859,16 +843,10 @@ export let createOrder = async (req, res) => {
     return res.status(201).json({
       message: successMsg,
       order: populated.toSafeObject(),
-      walletBalance: updatedBuyer.walletBalance,
+      walletBalance: buyer.walletBalance,
     })
   } catch (error) {
     console.error('Create order error:', error)
-    if (decrementedStock && targetProductId) {
-      await Product.findByIdAndUpdate(targetProductId, { $inc: { quantity: orderQuantity } }).catch(() => {})
-    }
-    if (debitedBuyer && buyerTotal > 0) {
-      await User.findByIdAndUpdate(req.user._id, { $inc: { walletBalance: buyerTotal } }).catch(() => {})
-    }
     return res.status(500).json({ message: error.message || 'Failed to create order.' })
   }
 }
