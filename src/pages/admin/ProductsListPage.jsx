@@ -72,12 +72,33 @@ function ProductsListPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [approvingId, setApprovingId] = useState(null)
-  const [statusFilter, setStatusFilter] = useState('All Listings')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const searchQuery = (searchParams.get('q') || '').trim()
+
+  const initialStatus = useMemo(() => {
+    const raw = searchParams.get('status')
+    if (!raw) return 'All Listings'
+    if (raw.toLowerCase() === 'pending_approval' || raw.toLowerCase() === 'pending approval') {
+      return 'Pending Approval'
+    }
+    return raw
+  }, [searchParams])
+
+  const [statusFilter, setStatusFilter] = useState(initialStatus)
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [minPrice, setMinPrice] = useState('')
   const [maxPrice, setMaxPrice] = useState('')
-  const [searchParams, setSearchParams] = useSearchParams()
-  const searchQuery = (searchParams.get('q') || '').trim()
+
+  useEffect(() => {
+    const st = searchParams.get('status')
+    if (st) {
+      if (st.toLowerCase() === 'pending_approval' || st.toLowerCase() === 'pending approval') {
+        setStatusFilter('Pending Approval')
+      } else {
+        setStatusFilter(st)
+      }
+    }
+  }, [searchParams])
 
   // Modal state
   const [barcodeProduct, setBarcodeProduct] = useState(null)
@@ -262,10 +283,20 @@ function ProductsListPage() {
         return true
       })
       .sort((a, b) => {
+        // Pending approval products float to the top for admin review
+        if (a.status === 'pending_approval' && b.status !== 'pending_approval') return -1
+        if (b.status === 'pending_approval' && a.status !== 'pending_approval') return 1
+
+        // Then newest created products first
+        const dateA = new Date(a.createdAt || 0).getTime()
+        const dateB = new Date(b.createdAt || 0).getTime()
+        if (dateA !== dateB) return dateB - dateA
+
+        // Fallback SKU descending
         const numA = parseInt(String(a.sku).replace(/\D+/g, ''), 10) || 0
         const numB = parseInt(String(b.sku).replace(/\D+/g, ''), 10) || 0
-        if (numA !== numB) return numA - numB
-        return String(a.sku).localeCompare(String(b.sku))
+        if (numA !== numB) return numB - numA
+        return String(b.sku).localeCompare(String(a.sku))
       })
   }, [products, statusFilter, searchQuery, selectedCategory, minPrice, maxPrice])
 

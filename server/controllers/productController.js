@@ -430,12 +430,13 @@ export const createProduct = async (req, res) => {
     }
 
     if (!asDraft) {
-      createNotification({
+      await createNotification({
         targetRole: 'admin',
         type: 'product',
         title: 'New Product Submitted',
         message: `${req.user.fullName || 'A supplier'} submitted product "${product.name}" for review.`,
-        link: '/admin/products',
+        link: `/admin/products?status=Pending+Approval`,
+        metadata: { productId: product._id, sku: product.sku },
       })
     }
 
@@ -606,13 +607,14 @@ export const updateMyProduct = async (req, res) => {
     }
     await product.populate('supplier', 'fullName email')
 
-    if (wasActive && isMaterialChange) {
-      createNotification({
+    if ((wasActive && isMaterialChange) || resubmit || product.status === 'pending_approval') {
+      await createNotification({
         targetRole: 'admin',
         type: 'product',
-        title: 'Product Edited — Re-approval Required',
-        message: `${req.user.fullName || 'A supplier'} edited active product "${product.name}". It has been submitted for re-moderation.`,
-        link: '/admin/products',
+        title: wasActive ? 'Product Edited — Re-approval Required' : 'Product Submitted for Approval',
+        message: `${req.user.fullName || 'A supplier'} submitted product "${product.name}" for review.`,
+        link: `/admin/products?status=Pending+Approval`,
+        metadata: { productId: product._id, sku: product.sku },
       })
     }
 
@@ -815,7 +817,7 @@ export const listAllProducts = async (req, res) => {
 
     let query = Product.find(filter)
       .populate('supplier', 'fullName email phone clientId')
-      .sort({ sku: 1, createdAt: -1 })
+      .sort({ createdAt: -1, sku: -1 })
 
     if (limit > 0) {
       query = query.skip((page - 1) * limit).limit(limit)

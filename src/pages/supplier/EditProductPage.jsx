@@ -341,7 +341,7 @@ export default function SupplierEditProductPage() {
   const feePerUnit = (numericPrice * feeRate) / 100
   const estimatedNetEarn = numericPrice - feePerUnit
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e, targetStatus = null) => {
     e.preventDefault()
     setError('')
     setSuccess('')
@@ -375,6 +375,8 @@ export default function SupplierEditProductPage() {
         .filter((slot) => slot && slot.isNew && slot.file)
         .map((slot) => slot.file)
 
+      const nextStatus = targetStatus || form.status
+
       const payload = {
         name: form.name.trim(),
         category: form.category,
@@ -391,7 +393,8 @@ export default function SupplierEditProductPage() {
         stockAlert: Number(form.stockAlert || 10),
         stockExpiry: form.stockExpiry,
         location: form.location,
-        status: form.status,
+        status: nextStatus,
+        resubmit: targetStatus === 'pending_approval' ? 'true' : 'false',
         weight: form.weight,
         weightUnit: form.weightUnit,
         length: form.length,
@@ -414,7 +417,11 @@ export default function SupplierEditProductPage() {
       }
 
       await productApi.update(id, payload, newFiles)
-      setSuccess('Product updated successfully! All changes have been saved.')
+      setSuccess(
+        nextStatus === 'pending_approval'
+          ? 'Product submitted for Admin approval successfully!'
+          : 'Product updated successfully! All changes have been saved.'
+      )
       window.scrollTo({ top: 0, behavior: 'smooth' })
       setTimeout(() => {
         navigate('/supplier/products')
@@ -1209,6 +1216,16 @@ export default function SupplierEditProductPage() {
               </Button>
 
               <div className="flex items-center gap-3">
+                {(form.status === 'draft' || form.status === 'rejected') && (
+                  <Button
+                    type="button"
+                    disabled={submitting}
+                    onClick={(e) => handleSubmit(e, 'pending_approval')}
+                    className="bg-amber-600 hover:bg-amber-700 font-extrabold text-white text-xs px-5 h-11 shadow-sm"
+                  >
+                    {submitting ? 'Submitting…' : 'Submit for Admin Approval'}
+                  </Button>
+                )}
                 <Button
                   type="submit"
                   disabled={submitting}

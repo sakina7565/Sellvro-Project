@@ -10,6 +10,7 @@ function SupplierAddProductPage() {
   const { user } = useAuth()
   const isWmsRegistered = Boolean(user?.isWmsRegistered)
   const isSuspended = user?.status === 'suspended'
+  const isPendingApproval = user?.status === 'pending_approval' || (user?.role === 'supplier' && user?.status !== 'approved')
 
   // If WMS registered: default to 'wms'. If not registered on WMS: 'direct' only.
   const [activeChannel, setActiveChannel] = useState(isWmsRegistered ? 'wms' : 'direct')
@@ -45,6 +46,26 @@ function SupplierAddProductPage() {
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 cursor-pointer"
               >
                 Back to Dashboard
+              </Link>
+            </div>
+          </div>
+        ) : isPendingApproval ? (
+          <div className="rounded-2xl border-2 border-amber-200 bg-amber-50/80 p-8 text-center shadow-soft">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-md">
+              <AlertTriangle className="h-7 w-7" />
+            </div>
+            <h2 className="mt-4 text-lg font-black text-amber-950">
+              Supplier Account Pending Admin Approval
+            </h2>
+            <p className="mx-auto mt-2 max-w-lg text-sm text-amber-800 leading-relaxed">
+              Your supplier account application has been submitted and is currently awaiting administrator review. Product creation, inventory publishing, and sales operations will activate immediately as soon as the Admin approves your account.
+            </p>
+            <div className="mt-6 flex justify-center gap-3">
+              <Link
+                to="/supplier/dashboard"
+                className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-amber-700 cursor-pointer"
+              >
+                Go to Dashboard
               </Link>
             </div>
           </div>

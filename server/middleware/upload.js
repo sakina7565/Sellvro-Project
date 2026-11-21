@@ -49,5 +49,5 @@ function fileFilter(_req, file, cb) {
 export const productUpload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 25 * 1024 * 1024, files: 10 },
+  limits: { fileSize: 100 * 1024 * 1024, files: 10 },
 })

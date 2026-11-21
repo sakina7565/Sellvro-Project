@@ -286,10 +286,20 @@ function SupplierProductsPage() {
         return true
       })
       .sort((a, b) => {
+        // Pending approval products float to the top
+        if (a.status === 'pending_approval' && b.status !== 'pending_approval') return -1
+        if (b.status === 'pending_approval' && a.status !== 'pending_approval') return 1
+
+        // Then newest created products first
+        const dateA = new Date(a.createdAt || 0).getTime()
+        const dateB = new Date(b.createdAt || 0).getTime()
+        if (dateA !== dateB) return dateB - dateA
+
+        // Fallback SKU descending
         const numA = parseInt(String(a.sku).replace(/\D+/g, ''), 10) || 0
         const numB = parseInt(String(b.sku).replace(/\D+/g, ''), 10) || 0
-        if (numA !== numB) return numA - numB
-        return String(a.sku).localeCompare(String(b.sku))
+        if (numA !== numB) return numB - numA
+        return String(b.sku).localeCompare(String(a.sku))
       })
   }, [products, statusFilter, searchQuery, selectedCategory, minPrice, maxPrice])
 

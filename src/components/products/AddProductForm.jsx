@@ -657,39 +657,48 @@ function AddProductForm({
     if (panel === 'admin') {
       if (!form.supplierAssign) {
         setError('Please assign a supplier.')
+        window.scrollTo({ top: 0, behavior: 'smooth' })
         return
       }
     } else if (panel !== 'supplier') {
       setError('Unknown panel type.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
 
     if (!form.name.trim() || !form.category) {
       setError('Product name and category are required.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
     if (!form.subcategory) {
       setError('Product subcategory is required. Please select or confirm a subcategory.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
     if (form.price === '' || Number(form.price) <= 0) {
       setError('A valid positive price greater than 0 is required.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
     if (form.quantity !== '' && Number(form.quantity) < 0) {
       setError('Quantity cannot be negative.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
     if (form.commission !== '' && Number(form.commission) < 0) {
       setError('Commission cannot be negative.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
     if (panel === 'supplier' && !form.fulfillBy) {
       setError('Please select whether to store product in Sellvro Inventory (WMS) or keep with supplier.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
     if (form.fulfillBy === 'self' && !form.handlingTime?.trim()) {
       setError('Handling Time / Dispatch Time is strictly mandatory for self-fulfillment products. Please specify how quickly you will hand over packages to courier.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
 
@@ -700,6 +709,7 @@ function AddProductForm({
         setError(
           `At least 6 product photos are mandatory (out of 10) to list this item. You have currently uploaded ${files.length} photo(s).`,
         )
+        window.scrollTo({ top: 0, behavior: 'smooth' })
         return
       }
 
@@ -711,6 +721,7 @@ function AddProductForm({
         setError(
           `Cannot publish listing: Photo "${lowRes.file.name}" is low-resolution (${lowRes.width} × ${lowRes.height} px). Minimum required resolution is 1000 × 1000 pixels. Please upload high-resolution images.`,
         )
+        window.scrollTo({ top: 0, behavior: 'smooth' })
         return
       }
     }
@@ -733,6 +744,7 @@ function AddProductForm({
       }
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to save product.'))
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     } finally {
       setSubmitting(false)
     }
@@ -2230,6 +2242,12 @@ function AddProductForm({
             </div>
           </div>
         </AddProductSection>
+        {error && (
+          <p className="flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-sm font-medium text-rose-700">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+            <span>{error}</span>
+          </p>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           {panel === 'admin' ? (
             <label className="flex items-center gap-2 text-sm text-slate-600">
